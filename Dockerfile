@@ -25,13 +25,22 @@ RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/
 RUN groupadd --system --gid 1001 nodejs
 RUN useradd --system --uid 1001 --gid 1001 nextjs
 
+# Next.js standalone app
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# Prisma schema (needed by CLI commands at runtime)
 COPY --from=builder /app/prisma ./prisma
 
-# Prisma native query engine is not reliably included in Next.js standalone file tracing
+# package.json is required for npm run db:push / db:migrate
+COPY --from=builder /app/package.json ./package.json
+
+# Prisma CLI + client packages (not included in Next.js standalone tracing)
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
 
 USER nextjs
 
