@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum InviteStatus {
+  DRAFT
+  PENDING_PAYMENT
+  PAID
+  PUBLISHED
+  EXPIRED
+  CANCELLED
+}
+
+enum GuestStatus {
+  COMING
+  NOT_COMING
+  MAYBE
+}
+
+enum PaymentProvider {
+  MANUAL_KASPI
+  APIPAY
+  CLOUDPAYMENTS
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  AUDIO
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String?
+  phone        String?
+  passwordHash String?
+  role         UserRole @default(USER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  invites  Invite[]
+  payments Payment[]
+  auditLogs AuditLog[]
+
+  @@index([email])
+}
+
+model Invite {
+  id          String       @id @default(uuid())
+  slug        String       @unique
+  title       String
+  description String?
+  status      InviteStatus @default(DRAFT)
+  data        Json         @default("{}")
+  expiresAt   DateTime?
+  publishedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  guests   Guest[]
+  payments Payment[]
+  media    Media[]
+
+  @@index([userId])
+  @@index([slug])
+  @@index([status])
+}
+
+model Guest {
+  id        String      @id @default(uuid())
+  name      String
+  phone     String?
+  email     String?
+  status      GuestStatus @default(MAYBE)
+  peopleCount Int         @default(1)
+  note        String?
+  createdAt   DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  inviteId String
+  invite   Invite @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+
+  @@index([inviteId])
+  @@index([status])
+}
+
+model Payment {
+  id         String          @id @default(uuid())
+  amount     Decimal         @db.Decimal(10, 2)
+  currency   String          @default("KZT")
+  provider   PaymentProvider
+  status     PaymentStatus   @default(PENDING)
+  externalId String?
+  rawPayload Json?
+  paidAt     DateTime?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  inviteId String
+  invite   Invite @relation(fields: [inviteId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([inviteId])
+  @@index([status])
+  @@index([externalId])
+}
+
+model Media {
+  id        String    @id @default(uuid())
+  type      MediaType
+  url       String
+  key       String
+  mimeType  String
+  size      Int
+  createdAt DateTime  @default(now())
+
+  inviteId String
+  invite   Invite @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+
+  @@index([inviteId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String
+  entity    String
+  entityId  String
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entity, entityId])
+}
