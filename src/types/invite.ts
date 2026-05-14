@@ -1,5 +1,50 @@
 import { z } from "zod";
 
+export const PLANS = [
+  {
+    id: "BASIC" as const,
+    name: "Basic",
+    price: 4990,
+    priceLabel: "4 990 ₸",
+    days: 30,
+    features: [
+      "1 тіл",
+      "30 күн белсенді",
+      "RSVP жинау",
+      "Қарапайым тема",
+    ],
+  },
+  {
+    id: "STANDARD" as const,
+    name: "Standard",
+    price: 9990,
+    priceLabel: "9 990 ₸",
+    days: 90,
+    features: [
+      "90 күн белсенді",
+      "RSVP жинау",
+      "Қонақтар тізімі",
+      "Көп тема",
+    ],
+  },
+  {
+    id: "PREMIUM" as const,
+    name: "Premium",
+    price: 14990,
+    priceLabel: "14 990 ₸",
+    days: 180,
+    features: [
+      "180 күн белсенді",
+      "RSVP жинау",
+      "Қонақтар тізімі",
+      "Premium тема",
+      "Музыка/видео",
+    ],
+  },
+] as const;
+
+export type PlanId = (typeof PLANS)[number]["id"];
+
 export const EVENT_TYPES = [
   { value: "WEDDING" as const, label: "Үйлену той", emoji: "💍", dualName: true },
   { value: "BIRTHDAY" as const, label: "Туылған күн", emoji: "🎂", dualName: false },
@@ -79,6 +124,9 @@ export type EventTypeValue = (typeof EVENT_TYPES)[number]["value"];
 export type ThemeId = (typeof THEMES)[number]["id"];
 
 export const createInviteSchema = z.object({
+  plan: z.enum(["BASIC", "STANDARD", "PREMIUM"], {
+    message: "Жоспарды таңдаңыз",
+  }),
   eventType: z.enum([
     "WEDDING",
     "BIRTHDAY",
@@ -113,16 +161,18 @@ export const createInviteSchema = z.object({
 export type CreateInviteFormData = z.infer<typeof createInviteSchema>;
 
 export const STEP_FIELDS: Record<number, (keyof CreateInviteFormData)[]> = {
-  0: ["eventType"],
-  1: ["person1", "title"],
-  2: ["date", "time"],
-  3: ["locationName"],
-  4: ["theme"],
-  5: [],
+  0: ["plan"],
+  1: ["eventType"],
+  2: ["person1", "title"],
+  3: ["date", "time"],
+  4: ["locationName"],
+  5: ["theme"],
   6: [],
+  7: [],
 };
 
 export const STEPS = [
+  { label: "Жоспар" },
   { label: "Іс-шара" },
   { label: "Есімдер" },
   { label: "Уақыт" },

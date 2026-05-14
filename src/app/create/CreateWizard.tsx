@@ -13,6 +13,7 @@ import Link from "next/link";
 import { createInviteAction } from "@/app/actions/create-invite";
 import { Stepper } from "@/components/ui/Stepper";
 import { Button } from "@/components/ui/Button";
+import { StepPlan } from "./steps/StepPlan";
 import { StepEventType } from "./steps/StepEventType";
 import { StepNames } from "./steps/StepNames";
 import { StepDateTime } from "./steps/StepDateTime";
@@ -22,6 +23,7 @@ import { StepPreview } from "./steps/StepPreview";
 import { StepPayment } from "./steps/StepPayment";
 
 const STEP_COMPONENTS = [
+  StepPlan,
   StepEventType,
   StepNames,
   StepDateTime,
@@ -41,6 +43,7 @@ export function CreateWizard() {
   const methods = useForm<CreateInviteFormData>({
     resolver: zodResolver(createInviteSchema),
     defaultValues: {
+      // plan intentionally omitted — user must select
       eventType: "WEDDING",
       theme: "ROSE_GOLD",
       person1: "",
