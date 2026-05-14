@@ -1,49 +1,5 @@
 import { z } from "zod";
-
-export const PLANS = [
-  {
-    id: "BASIC" as const,
-    name: "Basic",
-    price: 4990,
-    priceLabel: "4 990 ₸",
-    days: 30,
-    features: [
-      "1 тіл",
-      "30 күн белсенді",
-      "RSVP жинау",
-      "Қарапайым тема",
-    ],
-  },
-  {
-    id: "STANDARD" as const,
-    name: "Standard",
-    price: 9990,
-    priceLabel: "9 990 ₸",
-    days: 90,
-    features: [
-      "90 күн белсенді",
-      "RSVP жинау",
-      "Қонақтар тізімі",
-      "Көп тема",
-    ],
-  },
-  {
-    id: "PREMIUM" as const,
-    name: "Premium",
-    price: 14990,
-    priceLabel: "14 990 ₸",
-    days: 180,
-    features: [
-      "180 күн белсенді",
-      "RSVP жинау",
-      "Қонақтар тізімі",
-      "Premium тема",
-      "Музыка/видео",
-    ],
-  },
-] as const;
-
-export type PlanId = (typeof PLANS)[number]["id"];
+export { PLANS, type PlanId } from "@/lib/payment/plans";
 
 export const EVENT_TYPES = [
   { value: "WEDDING" as const, label: "Үйлену той", emoji: "💍", dualName: true },

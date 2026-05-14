@@ -1,14 +1,15 @@
 "use client";
 
 import { useFormContext } from "react-hook-form";
-import { type CreateInviteFormData, PLANS } from "@/types/invite";
+import { PLANS } from "@/lib/payment/plans";
+import { type CreateInviteFormData } from "@/types/invite";
 
 export function StepPayment() {
   const { watch } = useFormContext<CreateInviteFormData>();
   const title = watch("title");
   const planId = watch("plan");
 
-  const plan = PLANS.find((p) => p.id === planId);
+  const plan = planId ? PLANS[planId] : undefined;
 
   return (
     <div className="flex flex-col gap-6">
@@ -31,7 +32,7 @@ export function StepPayment() {
                 <p className="text-sm font-semibold text-zinc-800">
                   {title || "Шақыру"}
                 </p>
-                <p className="text-xs text-zinc-400 mt-0.5">{plan.name} жоспар</p>
+                <p className="text-xs text-zinc-400 mt-0.5">{plan.name} жоспар · {plan.days} күн</p>
               </div>
               <p className="text-lg font-bold text-zinc-900">{plan.priceLabel}</p>
             </div>

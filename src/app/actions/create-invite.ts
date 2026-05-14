@@ -2,15 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { createInviteSchema, type CreateInviteFormData, PLANS } from "@/types/invite";
+import { createInviteSchema, type CreateInviteFormData } from "@/types/invite";
+import { getPlan } from "@/lib/payment/plans";
 import { generateInviteSlug } from "@/lib/slug";
 import { getSession } from "@/lib/auth";
-
-const PLAN_DAYS: Record<string, number> = {
-  BASIC: 30,
-  STANDARD: 90,
-  PREMIUM: 180,
-};
 
 export async function createInviteAction(
   raw: CreateInviteFormData
@@ -23,7 +18,7 @@ export async function createInviteAction(
     return { error: "Деректер дұрыс емес. Барлық өрістерді толтырыңыз." };
 
   const data = parsed.data;
-  const days = PLAN_DAYS[data.plan] ?? 30;
+  const { days } = getPlan(data.plan);
   let inviteId: string;
 
   try {

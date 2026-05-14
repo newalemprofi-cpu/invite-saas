@@ -1,13 +1,10 @@
 "use client";
 
 import { useFormContext } from "react-hook-form";
-import { type CreateInviteFormData, PLANS } from "@/types/invite";
+import { PLANS } from "@/lib/payment/plans";
+import { type CreateInviteFormData } from "@/types/invite";
 
-const PLAN_BADGES = {
-  BASIC: null,
-  STANDARD: "Танымал",
-  PREMIUM: "Максималды",
-} as const;
+const PLAN_LIST = Object.values(PLANS);
 
 export function StepPlan() {
   const {
@@ -28,9 +25,8 @@ export function StepPlan() {
       </div>
 
       <div className="flex flex-col gap-3">
-        {PLANS.map((plan) => {
+        {PLAN_LIST.map((plan) => {
           const isSelected = selected === plan.id;
-          const badge = PLAN_BADGES[plan.id];
 
           return (
             <button
@@ -46,9 +42,9 @@ export function StepPlan() {
                   : "border-zinc-200 bg-white hover:border-zinc-300",
               ].join(" ")}
             >
-              {badge && (
+              {plan.popular && (
                 <span className="absolute top-3 right-3 text-xs font-semibold bg-rose-500 text-white px-2 py-0.5 rounded-full">
-                  {badge}
+                  Танымал
                 </span>
               )}
 
