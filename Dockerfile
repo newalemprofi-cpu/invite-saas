@@ -40,7 +40,12 @@ COPY --from=builder /app/package.json ./package.json
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
+
+# Create a real symlink so __dirname resolves to node_modules/prisma/build/
+# (Docker COPY dereferences symlinks, causing WASM lookups to fail in .bin/)
+RUN mkdir -p ./node_modules/.bin && \
+    ln -sf ../prisma/build/index.js ./node_modules/.bin/prisma && \
+    chmod +x ./node_modules/prisma/build/index.js
 
 USER nextjs
 
