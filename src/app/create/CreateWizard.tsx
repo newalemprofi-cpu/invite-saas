@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -36,6 +37,7 @@ const STEP_COMPONENTS = [
 const LAST = STEPS.length - 1;
 
 export function CreateWizard() {
+  const router = useRouter();
   const [step, setStep] = useState(0);
   const [serverError, setServerError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -73,7 +75,12 @@ export function CreateWizard() {
     setServerError(null);
     startTransition(async () => {
       const result = await createInviteAction(data);
-      if (result?.error) setServerError(result.error);
+      if (!result) return;
+      if ("error" in result && result.error) {
+        setServerError(result.error);
+      } else if ("inviteId" in result && result.inviteId) {
+        router.push(`/dashboard/invites/${result.inviteId}`);
+      }
     });
   });
 
