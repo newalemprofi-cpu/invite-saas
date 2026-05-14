@@ -14,7 +14,11 @@ const schema = z.object({
 });
 type FormData = z.infer<typeof schema>;
 
-export function LoginForm() {
+interface Props {
+  from?: string;
+}
+
+export function LoginForm({ from }: Props) {
   const [serverError, setServerError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -27,7 +31,7 @@ export function LoginForm() {
   const onSubmit = handleSubmit((data) => {
     setServerError(null);
     startTransition(async () => {
-      const result = await loginAction(data);
+      const result = await loginAction(data, from);
       if (result?.error) setServerError(result.error);
     });
   });

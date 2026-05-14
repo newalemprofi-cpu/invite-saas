@@ -6,7 +6,13 @@ export const metadata: Metadata = {
   title: "Кіру — Шақыру",
 };
 
-export default function LoginPage() {
+interface Props {
+  searchParams: Promise<{ from?: string }>;
+}
+
+export default async function LoginPage({ searchParams }: Props) {
+  const { from } = await searchParams;
+
   return (
     <div className="min-h-screen bg-zinc-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
@@ -20,13 +26,13 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-6">
-          <LoginForm />
+          <LoginForm from={from} />
 
           <div className="mt-5 text-center">
             <p className="text-sm text-zinc-500">
               Тіркелмегенсіз бе?{" "}
               <Link
-                href="/auth/register"
+                href={from ? `/auth/register?from=${encodeURIComponent(from)}` : "/auth/register"}
                 className="font-semibold text-rose-500 hover:text-rose-600 transition-colors"
               >
                 Тіркелу

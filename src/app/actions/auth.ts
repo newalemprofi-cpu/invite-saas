@@ -20,8 +20,16 @@ const registerSchema = z.object({
     .min(8, "Пароль кем дегенде 8 таңбадан тұруы керек"),
 });
 
+function safeRedirectTarget(from: unknown): string {
+  if (typeof from === "string" && from.startsWith("/") && !from.startsWith("//")) {
+    return from;
+  }
+  return "/dashboard";
+}
+
 export async function loginAction(
-  raw: unknown
+  raw: unknown,
+  from?: string
 ): Promise<{ error: string } | void> {
   const parsed = loginSchema.safeParse(raw);
   if (!parsed.success)
@@ -44,11 +52,12 @@ export async function loginAction(
     name: user.name,
   });
 
-  redirect("/dashboard");
+  redirect(safeRedirectTarget(from));
 }
 
 export async function registerAction(
-  raw: unknown
+  raw: unknown,
+  from?: string
 ): Promise<{ error: string } | void> {
   const parsed = registerSchema.safeParse(raw);
   if (!parsed.success)
@@ -71,7 +80,7 @@ export async function registerAction(
     name: user.name,
   });
 
-  redirect("/dashboard");
+  redirect(safeRedirectTarget(from));
 }
 
 export async function logoutAction(): Promise<void> {

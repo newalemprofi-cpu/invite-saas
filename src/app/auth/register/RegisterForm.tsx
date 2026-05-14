@@ -18,7 +18,11 @@ const schema = z.object({
 });
 type FormData = z.infer<typeof schema>;
 
-export function RegisterForm() {
+interface Props {
+  from?: string;
+}
+
+export function RegisterForm({ from }: Props) {
   const [serverError, setServerError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -31,7 +35,7 @@ export function RegisterForm() {
   const onSubmit = handleSubmit((data) => {
     setServerError(null);
     startTransition(async () => {
-      const result = await registerAction(data);
+      const result = await registerAction(data, from);
       if (result?.error) setServerError(result.error);
     });
   });
