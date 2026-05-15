@@ -6,6 +6,7 @@ import { getProductSettings } from "@/lib/product";
 import { generateInviteSlug } from "@/lib/slug";
 
 const schema = z.object({
+  template: z.string().min(1),
   eventType: z.enum([
     "WEDDING",
     "BIRTHDAY",
@@ -14,24 +15,16 @@ const schema = z.object({
     "ANNIVERSARY",
     "CORPORATE",
   ]),
-  theme: z.enum([
-    "ROSE_GOLD",
-    "MIDNIGHT",
-    "EMERALD",
-    "IVORY",
-    "KAZAKH",
-    "PINK_UZATU",
-    "KIDS_BIRTHDAY",
-  ]),
-  blocks: z.array(z.string()).default([]),
-  person1: z.string().min(1).max(50),
-  person2: z.string().max(50).optional(),
   title: z.string().max(100).optional(),
+  groomName: z.string().min(1).max(50),
+  brideName: z.string().max(50).optional(),
   date: z.string().min(1),
   time: z.string().min(1),
-  locationName: z.string().min(1).max(200),
-  mapUrl: z.string().url().optional().or(z.literal("")),
-  message: z.string().max(500).optional(),
+  location: z.string().min(1).max(200),
+  mapLink: z.string().url().optional().or(z.literal("")),
+  whatsapp: z.string().max(20).optional(),
+  invitationText: z.string().max(800).optional(),
+  enabledBlocks: z.array(z.string()).default([]),
 });
 
 export async function POST(req: NextRequest) {
@@ -57,7 +50,6 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data;
 
-  // Verify user exists
   const user = await db.user.findUnique({
     where: { id: session.userId },
     select: { id: true },
@@ -66,17 +58,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Пайдаланушы табылмады" }, { status: 404 });
   }
 
-  // Get product settings for expiry
   let activeDays = 30;
+  let price = 4990;
+  let productKey = "INVITE";
   try {
     const product = await getProductSettings();
     activeDays = product.activeDays;
+    price = product.price;
+    productKey = product.productKey;
   } catch {
-    // fallback to 30 days
+    // fallback to defaults
   }
 
-  // Generate unique slug
-  let slug = generateInviteSlug(data.person1, data.person2);
+  let slug = generateInviteSlug(data.groomName, data.brideName);
   for (let i = 0; i < 6; i++) {
     const hit = await db.invite.findUnique({ where: { slug } });
     if (!hit) break;
@@ -86,14 +80,14 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
-    slug = generateInviteSlug(data.person1, data.person2);
+    slug = generateInviteSlug(data.groomName, data.brideName);
   }
 
   const title =
     data.title?.trim() ||
-    (data.person2?.trim()
-      ? `${data.person1.trim()} & ${data.person2.trim()}`
-      : data.person1.trim()) ||
+    (data.brideName?.trim()
+      ? `${data.groomName.trim()} & ${data.brideName.trim()}`
+      : data.groomName.trim()) ||
     "Шақыру";
 
   const expiresAt = new Date(Date.now() + activeDays * 24 * 60 * 60 * 1000);
@@ -107,16 +101,20 @@ export async function POST(req: NextRequest) {
         userId: session.userId,
         expiresAt,
         data: {
+          template: data.template,
           eventType: data.eventType,
-          theme: data.theme,
-          blocks: data.blocks,
-          person1: data.person1.trim(),
-          person2: data.person2?.trim() || null,
+          groomName: data.groomName.trim(),
+          brideName: data.brideName?.trim() || null,
           date: data.date,
           time: data.time,
-          locationName: data.locationName.trim(),
-          mapUrl: data.mapUrl?.trim() || null,
-          message: data.message?.trim() || null,
+          location: data.location.trim(),
+          mapLink: data.mapLink?.trim() || null,
+          whatsapp: data.whatsapp?.trim() || null,
+          invitationText: data.invitationText?.trim() || null,
+          enabledBlocks: data.enabledBlocks,
+          priceSnapshot: price,
+          activeDaysSnapshot: activeDays,
+          productKey,
         },
       },
       select: { id: true, slug: true, title: true },

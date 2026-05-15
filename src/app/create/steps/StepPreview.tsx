@@ -1,30 +1,15 @@
 "use client";
 
 import { useFormContext } from "react-hook-form";
-import { type CreateInviteFormData, THEMES, EVENT_TYPES } from "@/types/invite";
-import { InvitePreview } from "../InvitePreview";
-
-function Row({ label, value }: { label: string; value?: string | null }) {
-  if (!value) return null;
-  return (
-    <div className="flex justify-between items-start gap-3 py-2.5 border-b border-zinc-50 last:border-0">
-      <span className="text-xs text-zinc-400 shrink-0">{label}</span>
-      <span className="text-xs font-medium text-zinc-800 text-right break-words max-w-[60%]">
-        {value}
-      </span>
-    </div>
-  );
-}
+import { type CreateInviteFormData } from "@/types/invite";
+import { InviteRenderer } from "@/components/InviteRenderer";
 
 export function StepPreview() {
   const { watch } = useFormContext<CreateInviteFormData>();
   const data = watch();
 
-  const theme = THEMES.find((t) => t.id === data.theme);
-  const eventType = EVENT_TYPES.find((e) => e.value === data.eventType);
-
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <div>
         <h2 className="text-xl font-bold text-zinc-900">Алдын ала көру</h2>
         <p className="text-sm text-zinc-500 mt-1">
@@ -32,33 +17,47 @@ export function StepPreview() {
         </p>
       </div>
 
-      {/* Live preview card */}
-      <InvitePreview />
+      {/* Phone mockup */}
+      <div className="flex justify-center">
+        <div className="relative w-[280px] rounded-[40px] border-8 border-zinc-900 shadow-2xl overflow-hidden bg-zinc-900">
+          {/* Notch */}
+          <div className="absolute top-0 inset-x-0 z-20 flex justify-center pointer-events-none">
+            <div className="w-24 h-6 bg-zinc-900 rounded-b-2xl" />
+          </div>
 
-      {/* Summary */}
-      <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-4">
-        <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
-          Мәліметтер
-        </p>
-        <Row label="Іс-шара" value={eventType?.label} />
-        <Row label="Тақырып" value={data.title} />
-        <Row
-          label="Күні"
-          value={
-            data.date
-              ? new Date(data.date).toLocaleDateString("kk-KZ", {
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                })
-              : undefined
-          }
-        />
-        <Row label="Уақыты" value={data.time ? `Сағат ${data.time}` : undefined} />
-        <Row label="Орны" value={data.locationName} />
-        <Row label="Тема" value={theme?.name} />
-        {data.message && <Row label="Хабарлама" value={data.message} />}
+          {/* Screen */}
+          <div
+            className="overflow-y-auto overscroll-contain bg-white"
+            style={{ height: 560, marginTop: 24 }}
+          >
+            <InviteRenderer
+              data={{
+                template: data.template,
+                eventType: data.eventType,
+                groomName: data.groomName,
+                brideName: data.brideName,
+                date: data.date,
+                time: data.time,
+                location: data.location,
+                mapLink: data.mapLink,
+                whatsapp: data.whatsapp,
+                invitationText: data.invitationText,
+                enabledBlocks: data.enabledBlocks,
+              }}
+              compact
+            />
+          </div>
+
+          {/* Home bar */}
+          <div className="absolute bottom-2 inset-x-0 flex justify-center pointer-events-none">
+            <div className="w-20 h-1 rounded-full bg-zinc-700" />
+          </div>
+        </div>
       </div>
+
+      <p className="text-xs text-zinc-400 text-center">
+        Шақыруыңызды жоба ретінде сақтаңыз — төлем кейінірек Dashboard-тан жасалады
+      </p>
     </div>
   );
 }

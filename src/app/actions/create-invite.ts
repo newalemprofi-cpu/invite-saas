@@ -12,13 +12,12 @@ export type CreateInviteResult =
 
 function logErr(label: string, err: unknown): void {
   const msg = err instanceof Error ? err.message : String(err);
-  const stack = err instanceof Error ? (err.stack ?? "") : "";
   const code = (err as Record<string, unknown>)?.code ?? "";
-  console.error(`CREATE_INVITE_ERROR [${label}]`, msg, code ? `(code:${code})` : "", stack);
+  console.error(`CREATE_INVITE_ERROR [${label}]`, msg, code ? `(code:${code})` : "");
 }
 
 export async function createInviteAction(
-  raw: CreateInviteFormData,
+  raw: CreateInviteFormData
 ): Promise<CreateInviteResult> {
   try {
     return await _createInvite(raw);
@@ -41,23 +40,21 @@ async function _createInvite(raw: CreateInviteFormData): Promise<CreateInviteRes
     return { ok: false, error: "Жасау үшін жүйеге кіруіңіз қажет" };
   }
 
-  let data: CreateInviteFormData;
-  try {
-    const parsed = createInviteSchema.safeParse(raw);
-    if (!parsed.success) {
-      const msg = parsed.error.issues.map((i) => i.message).join(", ");
-      return { ok: false, error: `Деректер дұрыс емес: ${msg}` };
-    }
-    data = parsed.data;
-  } catch (err) {
-    logErr("safeParse", err);
-    return { ok: false, error: "Деректерді тексеру кезінде қате орын алды." };
+  const parsed = createInviteSchema.safeParse(raw);
+  if (!parsed.success) {
+    const msg = parsed.error.issues.map((i) => i.message).join(", ");
+    return { ok: false, error: `Деректер дұрыс емес: ${msg}` };
   }
+  const data = parsed.data;
 
   let activeDays = 30;
+  let price = 4990;
+  let productKey = "INVITE";
   try {
     const product = await getProductSettings();
     activeDays = product.activeDays;
+    price = product.price;
+    productKey = product.productKey;
   } catch (err) {
     logErr("getProductSettings", err);
   }
@@ -79,14 +76,14 @@ async function _createInvite(raw: CreateInviteFormData): Promise<CreateInviteRes
 
   let slug: string;
   try {
-    slug = generateInviteSlug(data.person1, data.person2);
+    slug = generateInviteSlug(data.groomName, data.brideName);
     for (let i = 0; i < 6; i++) {
       const hit = await db.invite.findUnique({ where: { slug } });
       if (!hit) break;
       if (i === 5) {
         return { ok: false, error: "Бірегей сілтеме жасау мүмкін болмады. Қайталаңыз." };
       }
-      slug = generateInviteSlug(data.person1, data.person2);
+      slug = generateInviteSlug(data.groomName, data.brideName);
     }
   } catch (err) {
     logErr("slug", err);
@@ -95,9 +92,9 @@ async function _createInvite(raw: CreateInviteFormData): Promise<CreateInviteRes
 
   const title =
     data.title?.trim() ||
-    (data.person2?.trim()
-      ? `${data.person1.trim()} & ${data.person2.trim()}`
-      : data.person1.trim()) ||
+    (data.brideName?.trim()
+      ? `${data.groomName.trim()} & ${data.brideName.trim()}`
+      : data.groomName.trim()) ||
     "Шақыру";
 
   try {
@@ -109,16 +106,20 @@ async function _createInvite(raw: CreateInviteFormData): Promise<CreateInviteRes
         userId: session.userId,
         expiresAt,
         data: {
+          template: data.template,
           eventType: data.eventType,
-          theme: data.theme,
-          blocks: data.blocks,
-          person1: data.person1.trim(),
-          person2: data.person2?.trim() || null,
+          groomName: data.groomName.trim(),
+          brideName: data.brideName?.trim() || null,
           date: data.date,
           time: data.time,
-          locationName: data.locationName.trim(),
-          mapUrl: data.mapUrl?.trim() || null,
-          message: data.message?.trim() || null,
+          location: data.location.trim(),
+          mapLink: data.mapLink?.trim() || null,
+          whatsapp: data.whatsapp?.trim() || null,
+          invitationText: data.invitationText?.trim() || null,
+          enabledBlocks: data.enabledBlocks ?? [],
+          priceSnapshot: price,
+          activeDaysSnapshot: activeDays,
+          productKey,
         },
       },
       select: { id: true },

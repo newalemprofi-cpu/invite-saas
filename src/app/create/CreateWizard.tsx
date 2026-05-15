@@ -9,6 +9,7 @@ import {
   type CreateInviteFormData,
   STEPS,
   STEP_FIELDS,
+  DEFAULT_BLOCKS,
 } from "@/types/invite";
 import Link from "next/link";
 import { Stepper } from "@/components/ui/Stepper";
@@ -17,8 +18,6 @@ import { StepTemplate } from "./steps/StepTemplate";
 import { StepEventInfo } from "./steps/StepEventInfo";
 import { StepBlocks } from "./steps/StepBlocks";
 import { StepPreview } from "./steps/StepPreview";
-
-const STEP_COMPONENTS = [StepTemplate, StepEventInfo, StepBlocks, StepPreview];
 
 const LAST = STEPS.length - 1;
 
@@ -31,17 +30,18 @@ export function CreateWizard() {
   const methods = useForm<CreateInviteFormData>({
     resolver: zodResolver(createInviteSchema),
     defaultValues: {
+      template: "",
       eventType: "WEDDING",
-      theme: "ROSE_GOLD",
-      blocks: [],
-      person1: "",
-      person2: "",
       title: "",
+      groomName: "",
+      brideName: "",
       date: "",
       time: "",
-      locationName: "",
-      mapUrl: "",
-      message: "",
+      location: "",
+      mapLink: "",
+      whatsapp: "",
+      invitationText: "",
+      enabledBlocks: DEFAULT_BLOCKS,
     },
     mode: "onTouched",
   });
@@ -66,27 +66,37 @@ export function CreateWizard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      const result = await res.json() as { id?: string; error?: string };
+      const result = (await res.json()) as { id?: string; error?: string };
       if (res.ok && result.id) {
         router.push(`/dashboard/invites/${result.id}`);
       } else {
         setServerError(result.error ?? "Қате орын алды. Қайталаңыз.");
       }
     } catch {
-      setServerError("Желі қатесі. Интернет байланысыңызды тексеріп, қайталаңыз.");
+      setServerError(
+        "Желі қатесі. Интернет байланысыңызды тексеріп, қайталаңыз."
+      );
     } finally {
       setIsPending(false);
     }
   });
 
-  const CurrentStep = STEP_COMPONENTS[step];
+  const steps = [
+    <StepTemplate key="template" onNext={handleNext} />,
+    <StepEventInfo key="info" />,
+    <StepBlocks key="blocks" />,
+    <StepPreview key="preview" />,
+  ];
 
   return (
     <FormProvider {...methods}>
       <div className="min-h-screen bg-zinc-50 flex flex-col">
         {/* Header */}
         <header className="sticky top-0 z-20 bg-white/80 backdrop-blur border-b border-zinc-100 px-4 py-3 flex items-center justify-between">
-          <Link href="/" className="font-bold text-rose-500 text-lg tracking-tight">
+          <Link
+            href="/"
+            className="font-bold text-rose-500 text-lg tracking-tight"
+          >
             Шақыру
           </Link>
           <Link
@@ -107,7 +117,7 @@ export function CreateWizard() {
         {/* Step content */}
         <main className="flex-1 px-4 py-6">
           <div className="max-w-xl mx-auto">
-            <CurrentStep />
+            {steps[step]}
 
             {serverError && (
               <div className="mt-5 rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
@@ -117,8 +127,8 @@ export function CreateWizard() {
           </div>
         </main>
 
-        {/* Navigation — sticky bottom bar */}
-        <div className="sticky bottom-0 z-20 bg-white/90 backdrop-blur border-t border-zinc-100 px-4 py-3 safe-bottom">
+        {/* Bottom nav */}
+        <div className="sticky bottom-0 z-20 bg-white/90 backdrop-blur border-t border-zinc-100 px-4 py-3">
           <div className="max-w-xl mx-auto flex items-center gap-3">
             <Button
               variant="secondary"

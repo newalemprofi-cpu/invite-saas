@@ -3,21 +3,27 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { EVENT_TYPES, THEMES } from "@/types/invite";
+import { EVENT_TYPES, THEMES, TEMPLATES } from "@/types/invite";
 import { cn } from "@/lib/utils";
 import { RSVPForm } from "./RSVPForm";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
 interface StoredData {
   eventType?: string;
-  person1?: string;
-  person2?: string | null;
   date?: string;
   time?: string;
-  locationName?: string;
+  // New field names
+  template?: string | null;
+  groomName?: string | null;
+  brideName?: string | null;
+  location?: string | null;
+  mapLink?: string | null;
+  invitationText?: string | null;
+  // Legacy field names
+  person1?: string | null;
+  person2?: string | null;
+  locationName?: string | null;
   mapUrl?: string | null;
-  theme?: string;
+  theme?: string | null;
   message?: string | null;
 }
 
@@ -25,8 +31,6 @@ interface Props {
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ preview?: string }>;
 }
-
-// ─── Metadata ────────────────────────────────────────────────────────────────
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
@@ -41,8 +45,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 function formatDate(s: string): string {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("kk-KZ", {
@@ -52,8 +54,6 @@ function formatDate(s: string): string {
     year: "numeric",
   });
 }
-
-// ─── Inactive / expired states ───────────────────────────────────────────────
 
 function NotActive({ title }: { title: string }) {
   return (
@@ -103,8 +103,6 @@ function Expired({ title }: { title: string }) {
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
 export default async function PublicInvitePage({ params, searchParams }: Props) {
   const { slug } = await params;
   const { preview } = await searchParams;
@@ -112,7 +110,6 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
   const invite = await db.invite.findUnique({ where: { slug } });
   if (!invite) notFound();
 
-  // Owner preview mode — user must be logged in and own the invite
   let isPreview = false;
   if (preview === "1") {
     const session = await getSession();
@@ -120,9 +117,6 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
       session?.userId === invite.userId || session?.role === "ADMIN";
   }
 
-  // Runtime expiry check: catch the window before the cron job runs.
-  // Only treat PUBLISHED invites as runtime-expired — DRAFT/PENDING_PAYMENT invites
-  // should show "Not Active", not "Expired", even after their creation-time expiresAt passes.
   const now = new Date();
   const isExpired =
     invite.status === "EXPIRED" ||
@@ -139,19 +133,32 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
   }
 
   const data = (invite.data ?? {}) as StoredData;
-  const theme = THEMES.find((t) => t.id === data.theme) ?? THEMES[0];
+
+  // Resolve styling — new templates take priority over old themes
+  const tmpl = TEMPLATES.find((t) => t.id === data.template);
+  const legacyTheme = THEMES.find((t) => t.id === data.theme) ?? THEMES[0];
+  const theme = {
+    gradient: tmpl?.gradient ?? legacyTheme.gradient,
+    accent: tmpl?.accent ?? legacyTheme.accent,
+    textColor: tmpl?.textColor ?? legacyTheme.textColor,
+    dark: tmpl?.dark ?? legacyTheme.dark,
+  };
+
   const eventType = EVENT_TYPES.find((e) => e.value === data.eventType);
+  const locationText = data.location ?? data.locationName;
+  const mapUrl = data.mapLink ?? data.mapUrl;
+  const personalMessage = data.invitationText ?? data.message;
+  const isKazakh = data.template === "kazakh_ornament" || data.theme === "KAZAKH";
 
   return (
     <div className="min-h-screen">
-      {/* Preview banner */}
       {isPreview && (
         <div className="sticky top-0 z-50 bg-amber-500 text-white text-center text-sm font-semibold py-2 px-4">
           👁 Алдын ала қарау — шақыру әлі жарияланбаған
         </div>
       )}
 
-      {/* ── Hero section ────────────────────────────────────────────────── */}
+      {/* Hero */}
       <section
         className={cn(
           "relative min-h-screen flex flex-col items-center justify-center px-5 py-20 overflow-hidden",
@@ -168,22 +175,18 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
           style={{ backgroundColor: theme.accent }}
         />
 
-        {/* Kazakh Heritage border stripes */}
-        {data.theme === "KAZAKH" && (
+        {isKazakh && (
           <>
             <div className="absolute top-0 inset-x-0 h-3 bg-amber-400 pointer-events-none" />
             <div className="absolute bottom-0 inset-x-0 h-3 bg-amber-400 pointer-events-none" />
           </>
         )}
 
-        {/* Content */}
         <div className="relative z-10 w-full max-w-lg mx-auto text-center flex flex-col items-center gap-6">
-          {/* Event emoji */}
           <span className="text-6xl sm:text-7xl drop-shadow-md leading-none">
             {eventType?.emoji ?? "✨"}
           </span>
 
-          {/* Invited label */}
           <p
             className="text-[11px] tracking-[0.45em] uppercase font-semibold"
             style={{
@@ -195,7 +198,6 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
             Сізді шақырамыз
           </p>
 
-          {/* Title */}
           <h1
             className="text-4xl sm:text-5xl font-bold leading-tight tracking-tight break-words"
             style={{ color: theme.textColor }}
@@ -203,16 +205,12 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
             {invite.title}
           </h1>
 
-          {/* Ornamental divider */}
           <div className="flex items-center gap-5 w-full px-8">
             <div
               className="flex-1 h-px opacity-20"
               style={{ backgroundColor: theme.accent }}
             />
-            <span
-              className="text-base opacity-60"
-              style={{ color: theme.accent }}
-            >
+            <span className="text-base opacity-60" style={{ color: theme.accent }}>
               ◆
             </span>
             <div
@@ -221,7 +219,6 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
             />
           </div>
 
-          {/* Event details */}
           <div className="flex flex-col gap-4 w-full max-w-sm">
             {data.date && (
               <div className="flex items-start gap-4 text-left">
@@ -249,7 +246,7 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
               </div>
             )}
 
-            {data.locationName && (
+            {locationText && (
               <div className="flex items-start gap-4 text-left">
                 <span className="text-2xl leading-none shrink-0 mt-0.5">📍</span>
                 <div>
@@ -257,22 +254,18 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
                     className="font-semibold text-base leading-snug"
                     style={{ color: theme.textColor }}
                   >
-                    {data.locationName}
+                    {locationText}
                   </p>
-                  {data.mapUrl && (
+                  {mapUrl && (
                     <a
-                      href={data.mapUrl}
+                      href={mapUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-sm mt-0.5 inline-flex items-center gap-1 underline underline-offset-2 hover:opacity-80 transition-opacity"
                       style={{ color: theme.accent }}
                     >
                       Картада ашу
-                      <svg
-                        className="w-3 h-3"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                      >
+                      <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
                         <path
                           fillRule="evenodd"
                           d="M5.22 14.78a.75.75 0 001.06 0l7.22-7.22v5.69a.75.75 0 001.5 0v-7.5a.75.75 0 00-.75-.75h-7.5a.75.75 0 000 1.5h5.69l-7.22 7.22a.75.75 0 000 1.06z"
@@ -286,8 +279,7 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
             )}
           </div>
 
-          {/* Personal message */}
-          {data.message && (
+          {personalMessage && (
             <div
               className="w-full max-w-sm rounded-2xl px-6 py-4 text-sm leading-relaxed italic text-center"
               style={{
@@ -297,7 +289,7 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
                 color: theme.textColor,
               }}
             >
-              &ldquo;{data.message}&rdquo;
+              &ldquo;{personalMessage}&rdquo;
             </div>
           )}
         </div>
@@ -334,13 +326,11 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
         </div>
       </section>
 
-      {/* ── RSVP section ────────────────────────────────────────────────── */}
+      {/* RSVP */}
       <section className="bg-zinc-50 px-4 py-14">
         <div className="max-w-md mx-auto">
           <div className="text-center mb-8">
-            <h2 className="text-2xl font-bold text-zinc-900">
-              Қатысасыз ба?
-            </h2>
+            <h2 className="text-2xl font-bold text-zinc-900">Қатысасыз ба?</h2>
             <p className="text-sm text-zinc-500 mt-1.5">
               Жауабыңызды жіберіп, ойыңызды бізбен бөлісіңіз
             </p>
@@ -349,7 +339,6 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
           {invite.status === "PUBLISHED" ? (
             <RSVPForm inviteId={invite.id} />
           ) : (
-            // Preview mode — show disabled form placeholder
             <div className="bg-white rounded-2xl border border-dashed border-zinc-200 p-10 text-center">
               <p className="text-sm text-zinc-400">
                 RSVP пішіні жарияланғаннан кейін белсенді болады
@@ -359,7 +348,6 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
         </div>
       </section>
 
-      {/* ── Footer ──────────────────────────────────────────────────────── */}
       <footer className="bg-white border-t border-zinc-100 py-6">
         <p className="text-center text-xs text-zinc-400">
           Онлайн шақыру сервисі ·{" "}
