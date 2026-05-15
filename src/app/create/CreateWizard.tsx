@@ -11,7 +11,7 @@ import {
   STEP_FIELDS,
 } from "@/types/invite";
 import Link from "next/link";
-import { createInviteAction } from "@/app/actions/create-invite";
+import { createInviteAction, type CreateInviteResult } from "@/app/actions/create-invite";
 import { Stepper } from "@/components/ui/Stepper";
 import { Button } from "@/components/ui/Button";
 import { StepPlan } from "./steps/StepPlan";
@@ -74,12 +74,20 @@ export function CreateWizard() {
   const handleSubmit = methods.handleSubmit((data) => {
     setServerError(null);
     startTransition(async () => {
-      const result = await createInviteAction(data);
-      if (!result) return;
-      if ("error" in result && result.error) {
-        setServerError(result.error);
-      } else if ("inviteId" in result && result.inviteId) {
+      let result: CreateInviteResult;
+      try {
+        result = await createInviteAction(data);
+      } catch (err) {
+        // Catches network errors, RSC deserialization errors, or anything
+        // unexpected thrown by the Next.js server action machinery.
+        console.error("CLIENT createInviteAction threw:", err);
+        setServerError("Желі қатесі. Интернет байланысыңызды тексеріп, қайталаңыз.");
+        return;
+      }
+      if (result.ok) {
         router.push(`/dashboard/invites/${result.inviteId}`);
+      } else {
+        setServerError(result.error);
       }
     });
   });
