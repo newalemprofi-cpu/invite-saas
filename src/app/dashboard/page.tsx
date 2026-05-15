@@ -7,8 +7,6 @@ import { CopyButton } from "@/components/dashboard/CopyButton";
 
 export const metadata: Metadata = { title: "Dashboard — Шақыру" };
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
 function relativeDate(date: Date): string {
   const diff = Math.floor((Date.now() - date.getTime()) / 86_400_000);
   if (diff === 0) return "Бүгін";
@@ -17,8 +15,6 @@ function relativeDate(date: Date): string {
   if (diff < 30) return `${Math.floor(diff / 7)} апта бұрын`;
   return date.toLocaleDateString("kk-KZ");
 }
-
-// ─── Sub-components ──────────────────────────────────────────────────────────
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
@@ -29,18 +25,11 @@ function StatCard({ label, value }: { label: string; value: number }) {
   );
 }
 
-function InviteCard({
-  invite,
-  appUrl,
-}: {
-  invite: InviteWithCount;
-  appUrl: string;
-}) {
+function InviteCard({ invite, appUrl }: { invite: InviteWithCount; appUrl: string }) {
   const shareUrl = `${appUrl}/i/${invite.slug}`;
 
   return (
     <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-4 flex flex-col gap-3">
-      {/* Top row */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-zinc-900 truncate">{invite.title}</p>
@@ -54,7 +43,6 @@ function InviteCard({
         <StatusBadge status={invite.status} />
       </div>
 
-      {/* Actions */}
       <div className="flex items-center gap-2 pt-1 border-t border-zinc-50">
         <CopyButton text={shareUrl} />
         <Link
@@ -63,11 +51,7 @@ function InviteCard({
         >
           Басқару
           <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-            <path
-              fillRule="evenodd"
-              d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
-              clipRule="evenodd"
-            />
+            <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
           </svg>
         </Link>
       </div>
@@ -83,9 +67,7 @@ function EmptyState() {
       </div>
       <div>
         <p className="font-semibold text-zinc-800">Шақырулар жоқ</p>
-        <p className="text-sm text-zinc-400 mt-1">
-          Алғашқы шақыруыңызды жасаңыз
-        </p>
+        <p className="text-sm text-zinc-400 mt-1">Алғашқы шақыруыңызды жасаңыз</p>
       </div>
       <Link
         href="/create"
@@ -97,11 +79,9 @@ function EmptyState() {
   );
 }
 
-// ─── Page ────────────────────────────────────────────────────────────────────
-
 export default async function DashboardPage() {
-  const session = (await getSession())!; // middleware + layout already guard this
-  const invites = await listInvites(session.userId, session.role);
+  const session = (await getSession())!;
+  const invites = await listInvites(session.userId);
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
   const stats = {
@@ -112,18 +92,8 @@ export default async function DashboardPage() {
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-zinc-900">
-            {session.role === "ADMIN" ? "Барлық шақырулар" : "Менің шақыруларым"}
-          </h1>
-          {session.role === "ADMIN" && (
-            <p className="text-xs text-amber-600 font-medium mt-0.5">
-              Admin режимі — барлық пайдаланушылар көрінеді
-            </p>
-          )}
-        </div>
+        <h1 className="text-xl font-bold text-zinc-900">Менің шақыруларым</h1>
         <Link
           href="/create"
           className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-rose-500 px-4 text-sm font-semibold text-white shadow-sm shadow-rose-200 hover:bg-rose-600 transition-colors"
@@ -132,14 +102,12 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         <StatCard label="Барлығы" value={stats.total} />
         <StatCard label="Жарияланды" value={stats.published} />
         <StatCard label="Қонақтар" value={stats.guests} />
       </div>
 
-      {/* List */}
       {invites.length === 0 ? (
         <EmptyState />
       ) : (

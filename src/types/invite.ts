@@ -1,5 +1,4 @@
 import { z } from "zod";
-export { PLANS, type PlanId } from "@/lib/payment/plans";
 
 export const EVENT_TYPES = [
   { value: "WEDDING" as const, label: "Үйлену той", emoji: "💍", dualName: true },
@@ -76,13 +75,20 @@ export const THEMES = [
   },
 ] as const;
 
+export const BLOCKS = [
+  { id: "countdown", nameKk: "Кері санақ", icon: "⏱️" },
+  { id: "map", nameKk: "Карта", icon: "📍" },
+  { id: "music", nameKk: "Музыка", icon: "🎵" },
+  { id: "gallery", nameKk: "Галерея", icon: "🖼️" },
+  { id: "program", nameKk: "Бағдарлама", icon: "📋" },
+  { id: "dress_code", nameKk: "Dress code", icon: "👗" },
+] as const;
+
 export type EventTypeValue = (typeof EVENT_TYPES)[number]["value"];
 export type ThemeId = (typeof THEMES)[number]["id"];
+export type BlockId = (typeof BLOCKS)[number]["id"];
 
 export const createInviteSchema = z.object({
-  plan: z.enum(["BASIC", "STANDARD", "PREMIUM"], {
-    message: "Жоспарды таңдаңыз",
-  }),
   eventType: z.enum([
     "WEDDING",
     "BIRTHDAY",
@@ -91,17 +97,6 @@ export const createInviteSchema = z.object({
     "ANNIVERSARY",
     "CORPORATE",
   ]),
-  person1: z.string().min(1, "Атыңызды енгізіңіз").max(50),
-  person2: z.string().max(50).optional(),
-  title: z.string().min(2, "Тақырып міндетті").max(100),
-  date: z.string().min(1, "Күнді таңдаңыз"),
-  time: z.string().min(1, "Уақытты таңдаңыз"),
-  locationName: z.string().min(1, "Орнын енгізіңіз").max(200),
-  mapUrl: z
-    .string()
-    .url("Жарамды URL енгізіңіз")
-    .optional()
-    .or(z.literal("")),
   theme: z.enum([
     "ROSE_GOLD",
     "MIDNIGHT",
@@ -111,29 +106,33 @@ export const createInviteSchema = z.object({
     "PINK_UZATU",
     "KIDS_BIRTHDAY",
   ]),
+  blocks: z.array(z.string()).optional(),
+  person1: z.string().min(1, "Атыңызды енгізіңіз").max(50),
+  person2: z.string().max(50).optional(),
+  title: z.string().max(100).optional(),
+  date: z.string().min(1, "Күнді таңдаңыз"),
+  time: z.string().min(1, "Уақытты таңдаңыз"),
+  locationName: z.string().min(1, "Орнын енгізіңіз").max(200),
+  mapUrl: z
+    .string()
+    .url("Жарамды URL енгізіңіз")
+    .optional()
+    .or(z.literal("")),
   message: z.string().max(500).optional(),
 });
 
 export type CreateInviteFormData = z.infer<typeof createInviteSchema>;
 
 export const STEP_FIELDS: Record<number, (keyof CreateInviteFormData)[]> = {
-  0: ["plan"],
-  1: ["eventType"],
-  2: ["person1", "title"],
-  3: ["date", "time"],
-  4: ["locationName"],
-  5: ["theme"],
-  6: [],
-  7: [],
+  0: ["eventType", "theme"],
+  1: ["person1", "date", "time", "locationName"],
+  2: [],
+  3: [],
 };
 
 export const STEPS = [
-  { label: "Жоспар" },
-  { label: "Іс-шара" },
-  { label: "Есімдер" },
-  { label: "Уақыт" },
-  { label: "Орны" },
   { label: "Тема" },
+  { label: "Мәлімет" },
+  { label: "Блоктар" },
   { label: "Алдын ала" },
-  { label: "Төлем" },
 ];

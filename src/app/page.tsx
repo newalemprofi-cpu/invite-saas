@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PLANS } from "@/lib/payment/plans";
+import { getProductSettings } from "@/lib/product";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Шақыру — Онлайн шақыру конструкторы",
@@ -9,76 +11,35 @@ export const metadata: Metadata = {
 };
 
 const features = [
-  {
-    emoji: "🎨",
-    title: "7 Premium тема",
-    desc: "Rose Gold, Midnight, Kazakh Heritage, Ұзату, Балалар тойы және тағы басқалары",
-  },
-  {
-    emoji: "📱",
-    title: "Мобильді-бірінші",
-    desc: "Барлық телефон мен планшетте керемет көрінеді",
-  },
-  {
-    emoji: "✅",
-    title: "RSVP жинау",
-    desc: "Қонақтар браузер арқылы жауап береді. Барлық жауаптар дашбордта",
-  },
-  {
-    emoji: "🔗",
-    title: "Бөлісу оңай",
-    desc: "WhatsApp, Instagram, Telegram арқылы бір сілтемемен бөлісіңіз",
-  },
-  {
-    emoji: "⚡",
-    title: "3 минутта дайын",
-    desc: "7 қадамнан тұратын конструктор арқылы жылдам жасаңыз",
-  },
-  {
-    emoji: "💳",
-    title: "Kaspi арқылы төлеу",
-    desc: "Қазақстанның ең танымал төлем жүйесімен ыңғайлы төлем",
-  },
+  { emoji: "🎨", title: "7 Premium тема", desc: "Rose Gold, Midnight, Kazakh Heritage, Ұзату, Балалар тойы және тағы басқалары" },
+  { emoji: "📱", title: "Мобильді-бірінші", desc: "Барлық телефон мен планшетте керемет көрінеді" },
+  { emoji: "✅", title: "RSVP жинау", desc: "Қонақтар браузер арқылы жауап береді. Барлық жауаптар дашбордта" },
+  { emoji: "🔗", title: "Бөлісу оңай", desc: "WhatsApp, Instagram, Telegram арқылы бір сілтемемен бөлісіңіз" },
+  { emoji: "⚡", title: "5 минутта дайын", desc: "4 қадамнан тұратын конструктор арқылы жылдам жасаңыз" },
+  { emoji: "💳", title: "Kaspi арқылы төлеу", desc: "Қазақстанның ең танымал төлем жүйесімен ыңғайлы төлем" },
 ];
 
 const steps = [
-  {
-    n: "01",
-    title: "Жасаңыз",
-    desc: "Іс-шараны таңдаңыз, тема мен барлық мәліметтерді толтырыңыз",
-  },
-  {
-    n: "02",
-    title: "Төлеңіз",
-    desc: "Kaspi арқылы жоспарды таңдаңыз. Admin 1-24 сағатта растайды",
-  },
-  {
-    n: "03",
-    title: "Бөлісіңіз",
-    desc: "Сілтемені WhatsApp немесе Instagram-ға жіберіп, RSVP жинаңыз",
-  },
+  { n: "01", title: "Жасаңыз", desc: "Тема мен іс-шараны таңдаңыз, барлық мәліметтерді толтырыңыз" },
+  { n: "02", title: "Төлеңіз", desc: "Kaspi арқылы төлем жасаңыз. Admin 1-24 сағатта растайды" },
+  { n: "03", title: "Бөлісіңіз", desc: "Сілтемені WhatsApp немесе Instagram-ға жіберіп, RSVP жинаңыз" },
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const product = await getProductSettings();
+  const priceDisplay = product.price.toLocaleString("kk-KZ");
+
   return (
     <div className="min-h-screen bg-white">
       {/* Nav */}
       <header className="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-zinc-100">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <span className="font-bold text-rose-500 text-xl tracking-tight">
-            Шақыру
-          </span>
+          <span className="font-bold text-rose-500 text-xl tracking-tight">Шақыру</span>
           <div className="flex items-center gap-3">
-            <Link
-              href="/auth/login"
-              className="text-sm font-medium text-zinc-600 hover:text-zinc-900 transition-colors"
-            >
+            <Link href="/auth/login" className="text-sm font-medium text-zinc-600 hover:text-zinc-900 transition-colors">
               Кіру
             </Link>
-            <Link
-              href="/auth/register"
-              className="inline-flex h-9 items-center rounded-xl bg-rose-500 px-4 text-sm font-semibold text-white shadow-sm shadow-rose-200 hover:bg-rose-600 transition-colors"
-            >
+            <Link href="/auth/register" className="inline-flex h-9 items-center rounded-xl bg-rose-500 px-4 text-sm font-semibold text-white shadow-sm shadow-rose-200 hover:bg-rose-600 transition-colors">
               Тіркелу
             </Link>
           </div>
@@ -108,7 +69,7 @@ export default function LandingPage() {
               href="/create"
               className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-rose-500 px-8 text-base font-semibold text-white shadow-md shadow-rose-200 hover:bg-rose-600 transition-all hover:scale-[1.02] active:scale-100"
             >
-              ✨ Шақыру жасау — тегін
+              ✨ Шақыру жасау
             </Link>
             <Link
               href="/auth/login"
@@ -127,9 +88,7 @@ export default function LandingPage() {
       <section className="py-20 px-4 bg-white">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-2xl sm:text-3xl font-bold text-zinc-900">
-              Қалай жұмыс істейді?
-            </h2>
+            <h2 className="text-2xl sm:text-3xl font-bold text-zinc-900">Қалай жұмыс істейді?</h2>
             <p className="text-zinc-500 mt-2">3 қадам — дайын</p>
           </div>
           <div className="grid sm:grid-cols-3 gap-8">
@@ -153,16 +112,11 @@ export default function LandingPage() {
       <section className="py-20 px-4 bg-zinc-50">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-2xl sm:text-3xl font-bold text-zinc-900">
-              Неге Шақыру?
-            </h2>
+            <h2 className="text-2xl sm:text-3xl font-bold text-zinc-900">Неге Шақыру?</h2>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {features.map((f) => (
-              <div
-                key={f.title}
-                className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-5 flex flex-col gap-3"
-              >
+              <div key={f.title} className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-5 flex flex-col gap-3">
                 <span className="text-3xl leading-none">{f.emoji}</span>
                 <h3 className="font-bold text-zinc-900">{f.title}</h3>
                 <p className="text-sm text-zinc-500 leading-relaxed">{f.desc}</p>
@@ -172,65 +126,44 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Pricing */}
+      {/* Pricing — single product */}
       <section className="py-20 px-4 bg-white" id="pricing">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-2xl sm:text-3xl font-bold text-zinc-900">
-              Бағалар
-            </h2>
-            <p className="text-zinc-500 mt-2">
-              Тіркелу тегін · Жариялаған кезде ғана төлем
-            </p>
+        <div className="max-w-md mx-auto">
+          <div className="text-center mb-10">
+            <h2 className="text-2xl sm:text-3xl font-bold text-zinc-900">Баға</h2>
+            <p className="text-zinc-500 mt-2">Тіркелу тегін · Жариялаған кезде ғана төлем</p>
           </div>
-          <div className="grid sm:grid-cols-3 gap-5">
-            {Object.values(PLANS).map((plan) => (
-              <div
-                key={plan.id}
-                className={`relative rounded-2xl border-2 p-6 flex flex-col gap-4 ${
-                  plan.popular
-                    ? "border-rose-400 bg-rose-50 shadow-md"
-                    : "border-zinc-100 bg-white"
-                }`}
-              >
-                {plan.popular && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-rose-500 px-3 py-0.5 text-[11px] font-bold text-white whitespace-nowrap">
-                    Танымал
-                  </span>
-                )}
-                <div>
-                  <p className="font-bold text-zinc-900 text-lg">{plan.nameKk}</p>
-                  <p className="text-xs text-zinc-400 mt-0.5">
-                    {plan.days} күн белсенді
-                  </p>
-                </div>
-                <p className="text-3xl font-black text-zinc-900">
-                  {plan.price.toLocaleString("kk-KZ")}
-                  <span className="text-base font-semibold text-zinc-400"> ₸</span>
-                </p>
-                <ul className="flex flex-col gap-1.5 flex-1">
-                  {plan.features.map((f) => (
-                    <li
-                      key={f}
-                      className="flex items-center gap-2 text-sm text-zinc-600"
-                    >
-                      <span className="text-emerald-500 shrink-0">✓</span>
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  href="/auth/register"
-                  className={`mt-2 inline-flex h-10 items-center justify-center rounded-xl text-sm font-semibold transition-colors ${
-                    plan.popular
-                      ? "bg-rose-500 text-white hover:bg-rose-600"
-                      : "border border-zinc-200 text-zinc-700 hover:bg-zinc-50"
-                  }`}
-                >
-                  Бастау →
-                </Link>
-              </div>
-            ))}
+          <div className="relative rounded-2xl border-2 border-rose-400 bg-rose-50 shadow-md p-8 flex flex-col gap-6 text-center">
+            <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-rose-500 px-4 py-0.5 text-sm font-bold text-white whitespace-nowrap">
+              Жариялау үшін
+            </span>
+            <div>
+              <p className="text-4xl font-black text-zinc-900">
+                {priceDisplay}
+                <span className="text-xl font-semibold text-zinc-400"> ₸</span>
+              </p>
+              <p className="text-sm text-zinc-500 mt-1">{product.activeDays} күн белсенді</p>
+            </div>
+            <ul className="flex flex-col gap-2 text-left">
+              {[
+                "Кез-келген іс-шара түрі",
+                "7 premium тема",
+                "RSVP жинау",
+                "Бөлісу сілтемесі",
+                "Қонақтар тізімі",
+              ].map((f) => (
+                <li key={f} className="flex items-center gap-2 text-sm text-zinc-600">
+                  <span className="text-emerald-500 shrink-0">✓</span>
+                  {f}
+                </li>
+              ))}
+            </ul>
+            <Link
+              href="/auth/register"
+              className="inline-flex h-12 items-center justify-center rounded-xl bg-rose-500 text-base font-semibold text-white hover:bg-rose-600 transition-colors"
+            >
+              Бастау →
+            </Link>
           </div>
         </div>
       </section>
@@ -258,34 +191,12 @@ export default function LandingPage() {
       <footer className="bg-zinc-900 py-10 px-4">
         <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <span className="font-bold text-rose-400 text-lg">Шақыру</span>
-          <p className="text-sm text-zinc-500 text-center">
-            Қазақстандық онлайн шақыру сервисі
-          </p>
+          <p className="text-sm text-zinc-500 text-center">Қазақстандық онлайн шақыру сервисі</p>
           <div className="flex items-center gap-6 text-sm text-zinc-500">
-            <Link
-              href="/auth/login"
-              className="hover:text-zinc-300 transition-colors"
-            >
-              Кіру
-            </Link>
-            <Link
-              href="/auth/register"
-              className="hover:text-zinc-300 transition-colors"
-            >
-              Тіркелу
-            </Link>
-            <Link
-              href="/create"
-              className="hover:text-zinc-300 transition-colors"
-            >
-              Жасау
-            </Link>
-            <Link
-              href="#pricing"
-              className="hover:text-zinc-300 transition-colors"
-            >
-              Бағалар
-            </Link>
+            <Link href="/auth/login" className="hover:text-zinc-300 transition-colors">Кіру</Link>
+            <Link href="/auth/register" className="hover:text-zinc-300 transition-colors">Тіркелу</Link>
+            <Link href="/create" className="hover:text-zinc-300 transition-colors">Жасау</Link>
+            <Link href="#pricing" className="hover:text-zinc-300 transition-colors">Баға</Link>
           </div>
         </div>
       </footer>

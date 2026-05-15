@@ -2,12 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { PLANS } from "@/lib/payment/plans";
+import { getProductSettings } from "@/lib/product";
 import { kaspiProvider } from "@/lib/payment/providers/kaspi";
 
 const schema = z.object({
   inviteId: z.string().uuid(),
-  plan: z.enum(["BASIC", "STANDARD", "PREMIUM"]),
   provider: z
     .enum(["MANUAL_KASPI", "APIPAY", "CLOUDPAYMENTS"])
     .default("MANUAL_KASPI"),
@@ -36,10 +35,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { inviteId, plan: planId, provider } = parsed.data;
-  const plan = PLANS[planId];
+  const { inviteId, provider } = parsed.data;
 
-  // Ownership check — never trust client
   const invite = await db.invite.findUnique({
     where: { id: inviteId },
     select: { id: true, userId: true, status: true },
@@ -57,41 +54,37 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const product = await getProductSettings();
+  const price = product.price;
+
   // Return existing PENDING payment instead of creating a duplicate
   const existing = await db.payment.findFirst({
     where: { inviteId, status: "PENDING" },
-    select: { id: true, amount: true, rawPayload: true },
+    select: { id: true, amount: true },
   });
   if (existing) {
-    const raw = (existing.rawPayload ?? {}) as { plan?: string };
-    const instructions = kaspiProvider.getInstructions(
-      Number(existing.amount),
-      existing.id
-    );
+    const instructions = kaspiProvider.getInstructions(Number(existing.amount), existing.id);
     return NextResponse.json({
       paymentId: existing.id,
       status: "PENDING",
       amount: Number(existing.amount),
       currency: "KZT",
-      plan: raw.plan ?? planId,
       instructions,
     });
   }
 
-  // Create payment + update invite inside a transaction
   const payment = await db.$transaction(async (tx) => {
     const p = await tx.payment.create({
       data: {
-        amount: plan.price,
+        amount: price,
         currency: "KZT",
         provider,
         status: "PENDING",
         userId: session.userId,
         inviteId,
         rawPayload: {
-          plan: planId,
-          planName: plan.nameKk,
-          planDays: plan.days,
+          productKey: product.productKey,
+          activeDays: product.activeDays,
           provider,
           createdBy: session.userId,
         },
@@ -109,22 +102,21 @@ export async function POST(req: NextRequest) {
         entity: "Payment",
         entityId: p.id,
         userId: session.userId,
-        meta: { plan: planId, amount: plan.price, provider },
+        meta: { amount: price, provider },
       },
     });
 
     return p;
   });
 
-  const instructions = kaspiProvider.getInstructions(plan.price, payment.id);
+  const instructions = kaspiProvider.getInstructions(price, payment.id);
 
   return NextResponse.json(
     {
       paymentId: payment.id,
       status: "PENDING",
-      amount: plan.price,
+      amount: price,
       currency: "KZT",
-      plan: planId,
       instructions,
     },
     { status: 201 }

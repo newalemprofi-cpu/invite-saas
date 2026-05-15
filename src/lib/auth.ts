@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify, type JWTPayload } from "jose";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "./constants";
 
 export interface SessionPayload {
@@ -47,4 +48,17 @@ export async function getSession(): Promise<SessionPayload | null> {
 export async function deleteSession(): Promise<void> {
   const store = await cookies();
   store.delete(SESSION_COOKIE);
+}
+
+export async function requireAuth(): Promise<SessionPayload> {
+  const session = await getSession();
+  if (!session) redirect("/auth/login");
+  return session;
+}
+
+export async function requireAdmin(): Promise<SessionPayload> {
+  const session = await getSession();
+  if (!session) redirect("/auth/login");
+  if (session.role !== "ADMIN") redirect("/dashboard");
+  return session;
 }

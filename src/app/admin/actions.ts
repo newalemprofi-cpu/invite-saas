@@ -43,4 +43,5 @@ export async function togglePublishAction(
   });
 
   revalidatePath("/admin");
+  revalidatePath("/admin/invites");
 }

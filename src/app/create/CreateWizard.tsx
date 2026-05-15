@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,28 +11,14 @@ import {
   STEP_FIELDS,
 } from "@/types/invite";
 import Link from "next/link";
-import { createInviteAction, type CreateInviteResult } from "@/app/actions/create-invite";
 import { Stepper } from "@/components/ui/Stepper";
 import { Button } from "@/components/ui/Button";
-import { StepPlan } from "./steps/StepPlan";
-import { StepEventType } from "./steps/StepEventType";
-import { StepNames } from "./steps/StepNames";
-import { StepDateTime } from "./steps/StepDateTime";
-import { StepLocation } from "./steps/StepLocation";
-import { StepTheme } from "./steps/StepTheme";
+import { StepTemplate } from "./steps/StepTemplate";
+import { StepEventInfo } from "./steps/StepEventInfo";
+import { StepBlocks } from "./steps/StepBlocks";
 import { StepPreview } from "./steps/StepPreview";
-import { StepPayment } from "./steps/StepPayment";
 
-const STEP_COMPONENTS = [
-  StepPlan,
-  StepEventType,
-  StepNames,
-  StepDateTime,
-  StepLocation,
-  StepTheme,
-  StepPreview,
-  StepPayment,
-];
+const STEP_COMPONENTS = [StepTemplate, StepEventInfo, StepBlocks, StepPreview];
 
 const LAST = STEPS.length - 1;
 
@@ -40,14 +26,14 @@ export function CreateWizard() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [serverError, setServerError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
 
   const methods = useForm<CreateInviteFormData>({
     resolver: zodResolver(createInviteSchema),
     defaultValues: {
-      // plan intentionally omitted — user must select
       eventType: "WEDDING",
       theme: "ROSE_GOLD",
+      blocks: [],
       person1: "",
       person2: "",
       title: "",
@@ -71,25 +57,26 @@ export function CreateWizard() {
     setStep((s) => Math.max(s - 1, 0));
   };
 
-  const handleSubmit = methods.handleSubmit((data) => {
+  const handleSubmit = methods.handleSubmit(async (data) => {
     setServerError(null);
-    startTransition(async () => {
-      let result: CreateInviteResult;
-      try {
-        result = await createInviteAction(data);
-      } catch (err) {
-        // Catches network errors, RSC deserialization errors, or anything
-        // unexpected thrown by the Next.js server action machinery.
-        console.error("CLIENT createInviteAction threw:", err);
-        setServerError("Желі қатесі. Интернет байланысыңызды тексеріп, қайталаңыз.");
-        return;
-      }
-      if (result.ok) {
-        router.push(`/dashboard/invites/${result.inviteId}`);
+    setIsPending(true);
+    try {
+      const res = await fetch("/api/invites/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      const result = await res.json() as { id?: string; error?: string };
+      if (res.ok && result.id) {
+        router.push(`/dashboard/invites/${result.id}`);
       } else {
-        setServerError(result.error);
+        setServerError(result.error ?? "Қате орын алды. Қайталаңыз.");
       }
-    });
+    } catch {
+      setServerError("Желі қатесі. Интернет байланысыңызды тексеріп, қайталаңыз.");
+    } finally {
+      setIsPending(false);
+    }
   });
 
   const CurrentStep = STEP_COMPONENTS[step];

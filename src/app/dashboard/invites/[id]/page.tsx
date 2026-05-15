@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { getInvite } from "@/lib/data/invites";
+import { getProductSettings } from "@/lib/product";
 import { db } from "@/lib/db";
 import { StaticInviteCard } from "@/components/StaticInviteCard";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
@@ -47,9 +48,11 @@ function DetailRow({ label, value }: { label: string; value?: string | null }) {
 export default async function InviteDetailPage({ params }: Props) {
   const { id } = await params;
 
-  // Layout already checks session but we need it for ownership
   const session = (await getSession())!;
-  const invite = await getInvite(id, session.userId, session.role);
+  const [invite, product] = await Promise.all([
+    getInvite(id, session.userId, session.role),
+    getProductSettings(),
+  ]);
   if (!invite) notFound();
 
   const guests = await db.guest.findMany({
@@ -69,9 +72,7 @@ export default async function InviteDetailPage({ params }: Props) {
     <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-zinc-400">
-        <Link href="/dashboard" className="hover:text-zinc-700 transition-colors">
-          Dashboard
-        </Link>
+        <Link href="/dashboard" className="hover:text-zinc-700 transition-colors">Dashboard</Link>
         <span>/</span>
         <span className="text-zinc-700 font-medium truncate">{invite.title}</span>
       </div>
@@ -92,22 +93,17 @@ export default async function InviteDetailPage({ params }: Props) {
 
       {/* Preview + share */}
       <div className="grid sm:grid-cols-2 gap-5 items-start">
-        {/* Mini preview */}
         <div className="max-w-[200px] mx-auto sm:mx-0">
           <StaticInviteCard data={data} />
         </div>
 
-        {/* Info panel */}
         <div className="flex flex-col gap-4">
-          {/* Share */}
           <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-4">
             <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
               Жариялау сілтемесі
             </p>
             <div className="flex items-center gap-2 bg-zinc-50 rounded-xl px-3 py-2.5 mb-3">
-              <span className="text-xs text-zinc-500 font-mono truncate flex-1">
-                {shareUrl}
-              </span>
+              <span className="text-xs text-zinc-500 font-mono truncate flex-1">{shareUrl}</span>
             </div>
             <CopyButton text={shareUrl} className="w-full justify-center" />
             {invite.status !== "PUBLISHED" && (
@@ -117,14 +113,9 @@ export default async function InviteDetailPage({ params }: Props) {
             )}
           </div>
 
-          {/* Guest count */}
           <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-4">
-            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-              Қонақтар
-            </p>
-            <p className="text-3xl font-bold text-zinc-900">
-              {invite._count.guests}
-            </p>
+            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Қонақтар</p>
+            <p className="text-3xl font-bold text-zinc-900">{invite._count.guests}</p>
             <p className="text-xs text-zinc-400 mt-0.5">RSVP жауабы</p>
           </div>
         </div>
@@ -132,22 +123,14 @@ export default async function InviteDetailPage({ params }: Props) {
 
       {/* Details */}
       <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-4">
-        <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
-          Мәліметтер
-        </p>
+        <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Мәліметтер</p>
         <DetailRow label="Іс-шара" value={eventLabel} />
         <DetailRow label="Тақырып" value={invite.title} />
         <DetailRow
           label="Күні"
-          value={
-            data.date
-              ? new Date(data.date).toLocaleDateString("kk-KZ", {
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                })
-              : undefined
-          }
+          value={data.date
+            ? new Date(data.date).toLocaleDateString("kk-KZ", { day: "numeric", month: "long", year: "numeric" })
+            : undefined}
         />
         <DetailRow label="Уақыты" value={data.time ? `Сағат ${data.time}` : undefined} />
         <DetailRow label="Орны" value={data.locationName} />
@@ -155,20 +138,12 @@ export default async function InviteDetailPage({ params }: Props) {
         {data.message && <DetailRow label="Хабарлама" value={data.message} />}
         <DetailRow
           label="Жасалған"
-          value={invite.createdAt.toLocaleDateString("kk-KZ", {
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-          })}
+          value={invite.createdAt.toLocaleDateString("kk-KZ", { day: "numeric", month: "long", year: "numeric" })}
         />
         {invite.expiresAt && (
           <DetailRow
             label="Мерзімі бітеді"
-            value={invite.expiresAt.toLocaleDateString("kk-KZ", {
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            })}
+            value={invite.expiresAt.toLocaleDateString("kk-KZ", { day: "numeric", month: "long", year: "numeric" })}
           />
         )}
       </div>
@@ -179,40 +154,23 @@ export default async function InviteDetailPage({ params }: Props) {
           <h2 className="text-base font-bold text-zinc-900">
             Қонақтар
             {guests.length > 0 && (
-              <span className="ml-2 text-sm font-normal text-zinc-400">
-                ({guests.length})
-              </span>
+              <span className="ml-2 text-sm font-normal text-zinc-400">({guests.length})</span>
             )}
           </h2>
         </div>
 
         {guests.length === 0 ? (
           <div className="bg-white rounded-2xl border border-zinc-100 p-8 text-center">
-            <p className="text-sm text-zinc-400">
-              Әлі RSVP жауабы жоқ
-            </p>
+            <p className="text-sm text-zinc-400">Әлі RSVP жауабы жоқ</p>
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm overflow-hidden">
-            {/* Summary row */}
             <div className="grid grid-cols-3 divide-x divide-zinc-50 border-b border-zinc-50">
               {(
                 [
-                  {
-                    label: "Барады",
-                    value: guests.filter((g) => g.status === "COMING").reduce((s, g) => s + g.peopleCount, 0),
-                    color: "text-emerald-600",
-                  },
-                  {
-                    label: "Белгісіз",
-                    value: guests.filter((g) => g.status === "MAYBE").reduce((s, g) => s + g.peopleCount, 0),
-                    color: "text-amber-600",
-                  },
-                  {
-                    label: "Бармайды",
-                    value: guests.filter((g) => g.status === "NOT_COMING").reduce((s, g) => s + g.peopleCount, 0),
-                    color: "text-red-500",
-                  },
+                  { label: "Барады", value: guests.filter((g) => g.status === "COMING").reduce((s, g) => s + g.peopleCount, 0), color: "text-emerald-600" },
+                  { label: "Белгісіз", value: guests.filter((g) => g.status === "MAYBE").reduce((s, g) => s + g.peopleCount, 0), color: "text-amber-600" },
+                  { label: "Бармайды", value: guests.filter((g) => g.status === "NOT_COMING").reduce((s, g) => s + g.peopleCount, 0), color: "text-red-500" },
                 ] as const
               ).map((s) => (
                 <div key={s.label} className="p-3 text-center">
@@ -221,8 +179,6 @@ export default async function InviteDetailPage({ params }: Props) {
                 </div>
               ))}
             </div>
-
-            {/* Guest rows */}
             <div className="divide-y divide-zinc-50">
               {guests.map((g) => {
                 const statusMap = {
@@ -230,43 +186,22 @@ export default async function InviteDetailPage({ params }: Props) {
                   NOT_COMING: { label: "Бармайды", cls: "bg-red-100 text-red-600" },
                   MAYBE: { label: "Белгісіз", cls: "bg-amber-100 text-amber-700" },
                 } as const;
-                const st = statusMap[g.status as keyof typeof statusMap] ?? {
-                  label: g.status,
-                  cls: "bg-zinc-100 text-zinc-500",
-                };
+                const st = statusMap[g.status as keyof typeof statusMap] ?? { label: g.status, cls: "bg-zinc-100 text-zinc-500" };
                 return (
-                  <div
-                    key={g.id}
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-50 transition-colors"
-                  >
+                  <div key={g.id} className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-50 transition-colors">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-zinc-900 truncate">
-                        {g.name}
-                      </p>
-                      {g.phone && (
-                        <p className="text-xs text-zinc-400 mt-0.5">{g.phone}</p>
-                      )}
-                      {g.note && (
-                        <p className="text-xs text-zinc-400 italic truncate mt-0.5">
-                          &ldquo;{g.note}&rdquo;
-                        </p>
-                      )}
+                      <p className="text-sm font-medium text-zinc-900 truncate">{g.name}</p>
+                      {g.phone && <p className="text-xs text-zinc-400 mt-0.5">{g.phone}</p>}
+                      {g.note && <p className="text-xs text-zinc-400 italic truncate mt-0.5">&ldquo;{g.note}&rdquo;</p>}
                     </div>
                     {g.peopleCount > 1 && (
-                      <span className="text-xs text-zinc-400 tabular-nums shrink-0">
-                        {g.peopleCount} адам
-                      </span>
+                      <span className="text-xs text-zinc-400 tabular-nums shrink-0">{g.peopleCount} адам</span>
                     )}
-                    <span
-                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${st.cls}`}
-                    >
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${st.cls}`}>
                       {st.label}
                     </span>
                     <span className="text-[10px] text-zinc-300 tabular-nums hidden sm:block shrink-0">
-                      {g.createdAt.toLocaleDateString("kk-KZ", {
-                        day: "numeric",
-                        month: "short",
-                      })}
+                      {g.createdAt.toLocaleDateString("kk-KZ", { day: "numeric", month: "short" })}
                     </span>
                   </div>
                 );
@@ -283,26 +218,23 @@ export default async function InviteDetailPage({ params }: Props) {
             inviteId={invite.id}
             inviteTitle={invite.title}
             currentStatus={invite.status}
+            price={product.price}
+            kaspiLink={product.kaspiPaymentLink}
           />
         </div>
       ) : invite.status === "PUBLISHED" ? (
         <div className="bg-emerald-50 rounded-2xl border border-emerald-100 p-4 flex items-center justify-between gap-3 flex-wrap">
-          <p className="text-sm font-semibold text-emerald-700">
-            Шақыру жарияланған
-          </p>
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/i/${invite.slug}?preview=1`}
-              target="_blank"
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
-            >
-              Алдын ала қарау ↗
-            </Link>
-          </div>
+          <p className="text-sm font-semibold text-emerald-700">Шақыру жарияланған</p>
+          <Link
+            href={`/i/${invite.slug}?preview=1`}
+            target="_blank"
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
+          >
+            Алдын ала қарау ↗
+          </Link>
         </div>
       ) : null}
 
-      {/* Bottom nav */}
       <div className="flex justify-end">
         <Link
           href="/dashboard"

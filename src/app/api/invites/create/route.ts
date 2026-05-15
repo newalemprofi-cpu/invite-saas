@@ -1,19 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { verifyN8nSecret } from "@/lib/n8n-auth";
 import { getSession } from "@/lib/auth";
+import { getProductSettings } from "@/lib/product";
 import { generateInviteSlug } from "@/lib/slug";
 
-/**
- * POST /api/invites/create
- *
- * REST endpoint for n8n workflows or admin scripts.
- * Auth: Authorization: Bearer <N8N_WEBHOOK_SECRET>  OR  admin session.
- */
-
 const schema = z.object({
-  userId: z.string().uuid(),
   eventType: z.enum([
     "WEDDING",
     "BIRTHDAY",
@@ -22,36 +14,30 @@ const schema = z.object({
     "ANNIVERSARY",
     "CORPORATE",
   ]),
-  title: z.string().min(2).max(100),
+  theme: z.enum([
+    "ROSE_GOLD",
+    "MIDNIGHT",
+    "EMERALD",
+    "IVORY",
+    "KAZAKH",
+    "PINK_UZATU",
+    "KIDS_BIRTHDAY",
+  ]),
+  blocks: z.array(z.string()).default([]),
   person1: z.string().min(1).max(50),
   person2: z.string().max(50).optional(),
-  date: z.string().optional(),
-  time: z.string().optional(),
-  locationName: z.string().max(200).optional(),
+  title: z.string().max(100).optional(),
+  date: z.string().min(1),
+  time: z.string().min(1),
+  locationName: z.string().min(1).max(200),
   mapUrl: z.string().url().optional().or(z.literal("")),
-  theme: z
-    .enum([
-      "ROSE_GOLD",
-      "MIDNIGHT",
-      "EMERALD",
-      "IVORY",
-      "KAZAKH",
-      "PINK_UZATU",
-      "KIDS_BIRTHDAY",
-    ])
-    .default("ROSE_GOLD"),
   message: z.string().max(500).optional(),
 });
 
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  const isN8n = verifyN8nSecret(authHeader);
-
-  if (!isN8n) {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Жүйеге кіруіңіз қажет" }, { status: 401 });
   }
 
   let body: unknown;
@@ -64,61 +50,84 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Validation error" },
+      { error: parsed.error.issues[0]?.message ?? "Деректер қате" },
       { status: 400 }
     );
   }
 
   const data = parsed.data;
 
-  // Verify target user exists
-  const userExists = await db.user.findUnique({
-    where: { id: data.userId },
+  // Verify user exists
+  const user = await db.user.findUnique({
+    where: { id: session.userId },
     select: { id: true },
   });
-  if (!userExists) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  if (!user) {
+    return NextResponse.json({ error: "Пайдаланушы табылмады" }, { status: 404 });
   }
 
+  // Get product settings for expiry
+  let activeDays = 30;
+  try {
+    const product = await getProductSettings();
+    activeDays = product.activeDays;
+  } catch {
+    // fallback to 30 days
+  }
+
+  // Generate unique slug
   let slug = generateInviteSlug(data.person1, data.person2);
-  let attempts = 0;
-  while (await db.invite.findUnique({ where: { slug } })) {
-    slug = generateInviteSlug(data.person1, data.person2);
-    if (++attempts > 10) {
+  for (let i = 0; i < 6; i++) {
+    const hit = await db.invite.findUnique({ where: { slug } });
+    if (!hit) break;
+    if (i === 5) {
       return NextResponse.json(
-        { error: "Could not generate unique slug" },
+        { error: "Бірегей сілтеме жасау мүмкін болмады" },
         { status: 500 }
       );
     }
+    slug = generateInviteSlug(data.person1, data.person2);
   }
 
-  const invite = await db.invite.create({
-    data: {
-      slug,
-      title: data.title,
-      status: "DRAFT",
-      userId: data.userId,
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      data: {
-        eventType: data.eventType,
-        person1: data.person1,
-        person2: data.person2 ?? null,
-        date: data.date ?? null,
-        time: data.time ?? null,
-        locationName: data.locationName ?? null,
-        mapUrl: data.mapUrl ?? null,
-        theme: data.theme,
-        message: data.message ?? null,
-      },
-    },
-    select: {
-      id: true,
-      slug: true,
-      title: true,
-      status: true,
-      createdAt: true,
-    },
-  });
+  const title =
+    data.title?.trim() ||
+    (data.person2?.trim()
+      ? `${data.person1.trim()} & ${data.person2.trim()}`
+      : data.person1.trim()) ||
+    "Шақыру";
 
-  return NextResponse.json(invite, { status: 201 });
+  const expiresAt = new Date(Date.now() + activeDays * 24 * 60 * 60 * 1000);
+
+  try {
+    const invite = await db.invite.create({
+      data: {
+        slug,
+        title,
+        status: "DRAFT",
+        userId: session.userId,
+        expiresAt,
+        data: {
+          eventType: data.eventType,
+          theme: data.theme,
+          blocks: data.blocks,
+          person1: data.person1.trim(),
+          person2: data.person2?.trim() || null,
+          date: data.date,
+          time: data.time,
+          locationName: data.locationName.trim(),
+          mapUrl: data.mapUrl?.trim() || null,
+          message: data.message?.trim() || null,
+        },
+      },
+      select: { id: true, slug: true, title: true },
+    });
+
+    return NextResponse.json(invite, { status: 201 });
+  } catch (err) {
+    console.error("CREATE_INVITE_ERROR", err);
+    return NextResponse.json(
+      { error: "Шақыру сақталмады. Қайталаңыз." },
+      { status: 500 }
+    );
+  }
 }
