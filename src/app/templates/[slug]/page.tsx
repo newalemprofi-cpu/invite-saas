@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getSession } from "@/lib/auth";
 import { getDbTemplate } from "@/lib/db-templates";
 import { getTemplate, localizeTemplate } from "@/lib/templates";
 import { getAdminConfig } from "@/lib/admin-config";
@@ -105,10 +104,9 @@ export default async function TemplateDetailPage({ params, searchParams }: Props
   const lang = resolveLang(langParam);
   const t = T[lang];
 
-  const [tmpl, config, session] = await Promise.all([
+  const [tmpl, config] = await Promise.all([
     getDbTemplate(slug).then((t) => t ?? getTemplate(slug) ?? null),
     getAdminConfig(),
-    getSession(),
   ]);
 
   if (!tmpl) notFound();
@@ -283,7 +281,7 @@ export default async function TemplateDetailPage({ params, searchParams }: Props
                 <span className="text-3xl">{tmpl.emoji}</span>
               </div>
 
-              <TemplateCreateButton templateSlug={tmpl.slug} session={session} lang={lang} />
+              <TemplateCreateButton templateSlug={tmpl.slug} lang={lang} />
 
               {/* WhatsApp alternative */}
               <a

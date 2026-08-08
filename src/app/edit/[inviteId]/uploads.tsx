@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useUpload, type UploadErrorCode } from "@/lib/useUpload";
+import { useUpload, type UploadErrorCode, type UploadTarget } from "@/lib/useUpload";
 import type { Lang } from "@/lib/i18n";
 
 const ERROR_MESSAGES: Record<Lang, Record<UploadErrorCode, string>> = {
@@ -12,7 +12,10 @@ const ERROR_MESSAGES: Record<Lang, Record<UploadErrorCode, string>> = {
     INVALID_KIND: "Қате сұрау",
     MISSING_FILE: "Файл таңдалмады",
     INVALID_FILE: "Файл форматы немесе өлшемі қолдамайды",
+    INVALID_DRAFT_TOKEN: "Қате сұрау. Бетті жаңартып көріңіз.",
     STORAGE_NOT_CONFIGURED: "Файл сақтау қызметі әлі қосылмаған",
+    RATE_LIMITED: "Тым көп жүктеу жасалды. Сәл кейін қайталаңыз.",
+    RATE_LIMITER_UNAVAILABLE: "Қызмет уақытша қолжетімсіз. Сәл кейін қайталаңыз.",
     UPLOAD_FAILED: "Жүктеу сәтсіз аяқталды. Қайталаңыз.",
     NETWORK_ERROR: "Желі қатесі. Қайталаңыз.",
     INVALID_FORM: "Қате сұрау",
@@ -25,7 +28,10 @@ const ERROR_MESSAGES: Record<Lang, Record<UploadErrorCode, string>> = {
     INVALID_KIND: "Некорректный запрос",
     MISSING_FILE: "Файл не выбран",
     INVALID_FILE: "Неподдерживаемый формат или размер файла",
+    INVALID_DRAFT_TOKEN: "Некорректный запрос. Обновите страницу.",
     STORAGE_NOT_CONFIGURED: "Хранилище файлов ещё не подключено",
+    RATE_LIMITED: "Слишком много загрузок. Попробуйте немного позже.",
+    RATE_LIMITER_UNAVAILABLE: "Сервис временно недоступен. Попробуйте немного позже.",
     UPLOAD_FAILED: "Не удалось загрузить файл. Попробуйте снова.",
     NETWORK_ERROR: "Ошибка сети. Попробуйте снова.",
     INVALID_FORM: "Некорректный запрос",
@@ -39,14 +45,14 @@ const IMAGE_LABELS = {
 } as const;
 
 interface ImageUploadFieldProps {
-  inviteId: string;
+  target: UploadTarget;
   lang: Lang;
   value: string;
   onChange: (url: string) => void;
 }
 
-export function ImageUploadField({ inviteId, lang, value, onChange }: ImageUploadFieldProps) {
-  const { upload, uploading, error, clearError } = useUpload(inviteId);
+export function ImageUploadField({ target, lang, value, onChange }: ImageUploadFieldProps) {
+  const { upload, uploading, error, clearError } = useUpload(target);
   const inputRef = useRef<HTMLInputElement>(null);
   const L = IMAGE_LABELS[lang];
   const err = error ? ERROR_MESSAGES[lang][error] : null;
@@ -115,14 +121,14 @@ const GALLERY_LABELS = {
 } as const;
 
 interface GalleryUploaderProps {
-  inviteId: string;
+  target: UploadTarget;
   lang: Lang;
   urls: string[];
   onChange: (urls: string[]) => void;
 }
 
-export function GalleryUploader({ inviteId, lang, urls, onChange }: GalleryUploaderProps) {
-  const { upload, uploading, error } = useUpload(inviteId);
+export function GalleryUploader({ target, lang, urls, onChange }: GalleryUploaderProps) {
+  const { upload, uploading, error } = useUpload(target);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragSrc = useRef<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
@@ -223,15 +229,15 @@ const MUSIC_LABELS = {
 } as const;
 
 interface MusicUploaderProps {
-  inviteId: string;
+  target: UploadTarget;
   lang: Lang;
   musicUrl: string;
   onUploaded: (url: string, fileLabel: string) => void;
   onRemove: () => void;
 }
 
-export function MusicUploader({ inviteId, lang, musicUrl, onUploaded, onRemove }: MusicUploaderProps) {
-  const { upload, uploading, error, clearError } = useUpload(inviteId);
+export function MusicUploader({ target, lang, musicUrl, onUploaded, onRemove }: MusicUploaderProps) {
+  const { upload, uploading, error, clearError } = useUpload(target);
   const inputRef = useRef<HTMLInputElement>(null);
   const L = MUSIC_LABELS[lang];
   const err = error ? ERROR_MESSAGES[lang][error] : null;

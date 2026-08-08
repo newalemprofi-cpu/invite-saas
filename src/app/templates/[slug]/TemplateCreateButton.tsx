@@ -2,30 +2,27 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { SessionPayload } from "@/lib/auth";
 import type { Lang } from "@/lib/i18n";
 
 interface Props {
   templateSlug: string;
-  session: SessionPayload | null;
   lang: Lang;
 }
 
 const LABELS = {
-  kk: { create: "✨ Осы шаблонмен жасау", registerAndCreate: "Тіркеліп жасау", creating: "Ашылуда..." },
-  ru: { create: "✨ Создать по этому шаблону", registerAndCreate: "Зарегистрироваться и создать", creating: "Открывается..." },
+  kk: { create: "✨ Осы шаблонмен жасау", creating: "Ашылуда..." },
+  ru: { create: "✨ Создать по этому шаблону", creating: "Открывается..." },
 } as const;
 
-export function TemplateCreateButton({ templateSlug, session, lang }: Props) {
+export function TemplateCreateButton({ templateSlug, lang }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const L = LABELS[lang];
 
   function handleClick() {
     setLoading(true);
-    // /invitations/new resolves auth itself: authenticated users go straight
-    // into the constructor with this template applied; anonymous users are
-    // bounced through register/login and land back here automatically.
+    // The constructor opens immediately for everyone, signed in or not —
+    // no account is required to try it. Only publishing later requires auth.
     router.push(`/invitations/new?template=${encodeURIComponent(templateSlug)}&lang=${lang}`);
   }
 
@@ -36,7 +33,7 @@ export function TemplateCreateButton({ templateSlug, session, lang }: Props) {
       className="btn-gold w-full justify-center text-base"
       style={{ opacity: loading ? 0.7 : 1 }}
     >
-      {loading ? L.creating : session ? L.create : L.registerAndCreate}
+      {loading ? L.creating : L.create}
     </button>
   );
 }

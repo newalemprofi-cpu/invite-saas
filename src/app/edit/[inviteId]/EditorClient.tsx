@@ -3,68 +3,26 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 import { getTemplate, localizeTemplate, type Template } from "@/lib/templates";
+import {
+  DEFAULT_SECTIONS,
+  editorDataToSaveBody,
+  type EditorData,
+  type Section,
+} from "@/lib/invite-editor-data";
+import { loadAnonymousDraft, saveAnonymousDraft, createDraftToken } from "@/lib/anonymousDraft";
+import type { UploadTarget } from "@/lib/useUpload";
 import { InvitePreview } from "./InvitePreview";
 import { ImageUploadField, GalleryUploader, MusicUploader } from "./uploads";
 import type { Lang } from "@/lib/i18n";
 
-export interface Section {
-  id: string;
-  enabled: boolean;
-}
-
-export interface EditorData {
-  // Basic
-  groomName: string;
-  brideName: string;
-  date: string;
-  time: string;
-  location: string;
-  mapLink: string;
-  whatsapp: string;
-  invitationText: string;
-  organizerPhone: string;
-  // Sections (ordered)
-  sections: Section[];
-  // Legacy (kept for compat)
-  enabledBlocks: string[];
-  // Design
-  bgColor: string;
-  accentColor: string;
-  fontFamily: string;
-  animationStyle: string;
-  templateSlug: string;
-  // Background
-  bgType: "color" | "gradient" | "image" | "video";
-  bgImageUrl: string;
-  bgVideoUrl: string;
-  bgGradient: string;
-  bgBlur: number;
-  bgOpacity: number;
-  bgOverlay: string;
-  // Media
-  galleryUrls: string[];
-  musicUrl: string;
-  musicTitle: string;
-  musicEnabled: boolean;
-  musicLoop: boolean;
-  musicAutoplay: boolean;
-  // Block content
-  loveStory: string;
-  dressCode: string;
-  wishesText: string;
-  contactsText: string;
-  giftInfo: string;
-  videoUrl: string;
-  programItems: { time: string; label: string }[];
-  rsvpText: string;
-  programText: string;
-}
+export type { EditorData, Section };
 
 interface Props {
-  inviteId: string;
+  /** null = anonymous/pre-account draft (no Invite row yet); string = editing a real invite. */
+  inviteId: string | null;
   initialData: EditorData;
   template: Template | null;
-  inviteStatus: string;
+  inviteStatus?: string;
   lang: Lang;
 }
 
@@ -84,24 +42,6 @@ const BLOCK_META: { id: string; icon: string; kk: string; ru: string }[] = [
   { id: "gift_info", icon: "🎁", kk: "Сыйлық ақпараты", ru: "Информация о подарках" },
   { id: "whatsapp", icon: "💬", kk: "WhatsApp", ru: "WhatsApp" },
   { id: "music", icon: "🎵", kk: "Музыка", ru: "Музыка" },
-];
-
-const DEFAULT_SECTIONS: Section[] = [
-  { id: "hero", enabled: true },
-  { id: "countdown", enabled: true },
-  { id: "invitation_text", enabled: true },
-  { id: "gallery", enabled: false },
-  { id: "program", enabled: true },
-  { id: "map", enabled: true },
-  { id: "rsvp", enabled: true },
-  { id: "whatsapp", enabled: false },
-  { id: "music", enabled: false },
-  { id: "love_story", enabled: false },
-  { id: "video_section", enabled: false },
-  { id: "dress_code", enabled: false },
-  { id: "wishes", enabled: false },
-  { id: "contacts", enabled: false },
-  { id: "gift_info", enabled: false },
 ];
 
 const ROMANTIC_PLAYLIST = [
@@ -133,11 +73,13 @@ const T = {
   kk: {
     tabs: { fields: "Мәлімет", design: "Дизайн", blocks: "Блоктар", media: "Медиа" },
     back: "← Менің шақыруларым",
+    backToTemplates: "← Шаблондар",
     saving: "Сақталуда...",
     saved: "✓ Сақталды",
     saveError: "Қате",
     view: "Қарау ↗",
     publish: "Жариялау →",
+    publishCta: "Шақыруды жариялау",
     toMyInvitations: "Менің шақыруларым",
     changeTemplate: "Ауыстыру",
     namesSection: "Аттар",
@@ -201,11 +143,13 @@ const T = {
   ru: {
     tabs: { fields: "Информация", design: "Дизайн", blocks: "Блоки", media: "Медиа" },
     back: "← Мои приглашения",
+    backToTemplates: "← Шаблоны",
     saving: "Сохраняется...",
     saved: "✓ Сохранено",
     saveError: "Ошибка",
     view: "Просмотр ↗",
     publish: "Опубликовать →",
+    publishCta: "Опубликовать приглашение",
     toMyInvitations: "Мои приглашения",
     changeTemplate: "Сменить",
     namesSection: "Имена",
@@ -277,7 +221,9 @@ function migrateSections(legacy: string[], existing: Section[]): Section[] {
   return DEFAULT_SECTIONS;
 }
 
-export function EditorClient({ inviteId, initialData, template, inviteStatus, lang }: Props) {
+export function EditorClient({ inviteId, initialData, template, inviteStatus, lang: initialLang }: Props) {
+  const isDraftMode = inviteId === null;
+  const [lang, setLang] = useState<Lang>(initialLang);
   const t = T[lang];
   const [data, setData] = useState<EditorData>(() => ({
     ...initialData,
@@ -290,11 +236,45 @@ export function EditorClient({ inviteId, initialData, template, inviteStatus, la
     programItems: initialData.programItems ?? [],
     sections: migrateSections(initialData.enabledBlocks, initialData.sections),
   }));
+  // Anonymous-mode identity for temp uploads + claim idempotency. Never
+  // rendered, so resolving it eagerly (client-only) can't cause a hydration
+  // mismatch — only `data`/`lang` (which affect markup) wait for the effect below.
+  const [draftToken, setDraftToken] = useState<string>(() =>
+    isDraftMode && typeof window !== "undefined" ? createDraftToken() : ""
+  );
   const [tab, setTab] = useState<Tab>("fields");
   const [saving, setSaving] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saved" | "error">("idle");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragSrc = useRef<number | null>(null);
+  const hydratedRef = useRef(false);
+
+  // On first client paint, resume a matching localStorage draft (same
+  // template) if one exists, or persist the fresh one so its token/template
+  // stay stable across reloads. Skipped entirely outside draft mode.
+  useEffect(() => {
+    if (!isDraftMode || hydratedRef.current) return;
+    hydratedRef.current = true;
+    const existing = loadAnonymousDraft();
+    if (existing && existing.templateSlug === initialData.templateSlug) {
+      // Reading localStorage must happen post-mount (unavailable during SSR),
+      // so correcting state here — once, guarded by hydratedRef — is the
+      // standard pattern for restoring client-only persisted state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setData(existing.data);
+      setLang(existing.lang);
+      setDraftToken(existing.token);
+    } else {
+      saveAnonymousDraft({
+        token: draftToken,
+        templateSlug: initialData.templateSlug,
+        lang: initialLang,
+        data: initialData,
+        updatedAt: Date.now(),
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const update = useCallback((patch: Partial<EditorData>) => {
     setData((prev) => ({ ...prev, ...patch }));
@@ -322,59 +302,25 @@ export function EditorClient({ inviteId, initialData, template, inviteStatus, la
   };
   const onDrop = () => { dragSrc.current = null; };
 
-  // Auto-save
+  // Auto-save: PATCH the real invite when editing one, otherwise persist to
+  // the local anonymous draft (no network round-trip needed).
   useEffect(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     setSaveState("idle");
     saveTimer.current = setTimeout(async () => {
       setSaving(true);
       try {
-        const body: Record<string, unknown> = {
-          groomName: data.groomName || undefined,
-          brideName: data.brideName || undefined,
-          date: data.date || undefined,
-          time: data.time || undefined,
-          location: data.location || undefined,
-          mapLink: data.mapLink || undefined,
-          whatsapp: data.whatsapp || undefined,
-          invitationText: data.invitationText || undefined,
-          organizerPhone: data.organizerPhone || undefined,
-          enabledBlocks: data.sections.filter((s) => s.enabled).map((s) => s.id),
-          sections: data.sections,
-          bgColor: data.bgColor || undefined,
-          accentColor: data.accentColor || undefined,
-          fontFamily: data.fontFamily || undefined,
-          animationStyle: data.animationStyle || undefined,
-          templateSlug: data.templateSlug || undefined,
-          bgType: data.bgType,
-          bgImageUrl: data.bgImageUrl || undefined,
-          bgVideoUrl: data.bgVideoUrl || undefined,
-          bgGradient: data.bgGradient || undefined,
-          bgBlur: data.bgBlur,
-          bgOpacity: data.bgOpacity,
-          bgOverlay: data.bgOverlay || undefined,
-          galleryUrls: data.galleryUrls,
-          musicUrl: data.musicUrl || undefined,
-          musicTitle: data.musicTitle || undefined,
-          musicEnabled: data.musicEnabled,
-          musicLoop: data.musicLoop,
-          musicAutoplay: data.musicAutoplay,
-          loveStory: data.loveStory || undefined,
-          dressCode: data.dressCode || undefined,
-          wishesText: data.wishesText || undefined,
-          contactsText: data.contactsText || undefined,
-          giftInfo: data.giftInfo || undefined,
-          videoUrl: data.videoUrl || undefined,
-          programItems: data.programItems.length > 0 ? data.programItems : undefined,
-          rsvpText: data.rsvpText || undefined,
-          programText: data.programText || undefined,
-        };
-        const res = await fetch(`/api/invites/${inviteId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        setSaveState(res.ok ? "saved" : "error");
+        if (isDraftMode) {
+          saveAnonymousDraft({ token: draftToken, templateSlug: data.templateSlug, lang, data, updatedAt: Date.now() });
+          setSaveState("saved");
+        } else {
+          const res = await fetch(`/api/invites/${inviteId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(editorDataToSaveBody(data)),
+          });
+          setSaveState(res.ok ? "saved" : "error");
+        }
       } catch {
         setSaveState("error");
       } finally {
@@ -382,11 +328,17 @@ export function EditorClient({ inviteId, initialData, template, inviteStatus, la
       }
     }, 1500);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-  }, [data, inviteId]);
+  }, [data, inviteId, isDraftMode, draftToken, lang]);
 
   const currentTemplate: Template | null = getTemplate(data.templateSlug) ?? template;
   const accent = data.accentColor || currentTemplate?.accent || "#C4963E";
   const currentTemplateName = currentTemplate ? localizeTemplate(currentTemplate, lang).name : "";
+  const uploadTarget: UploadTarget = inviteId
+    ? { mode: "invite", inviteId }
+    : { mode: "draft", draftToken };
+
+  const backHref = isDraftMode ? `/templates?lang=${lang}` : `/dashboard?lang=${lang}`;
+  const backLabel = isDraftMode ? t.backToTemplates : t.back;
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--ivory)" }}>
@@ -395,8 +347,8 @@ export function EditorClient({ inviteId, initialData, template, inviteStatus, la
         className="sticky top-0 z-40 flex items-center justify-between px-4 sm:px-6 h-14 shrink-0"
         style={{ background: "var(--charcoal)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
       >
-        <Link href={`/dashboard?lang=${lang}`} className="text-sm font-medium flex items-center gap-1.5" style={{ color: "#9A8F8A" }}>
-          {t.back}
+        <Link href={backHref} className="text-sm font-medium flex items-center gap-1.5" style={{ color: "#9A8F8A" }}>
+          {backLabel}
         </Link>
 
         <div className="flex items-center gap-3">
@@ -406,7 +358,7 @@ export function EditorClient({ inviteId, initialData, template, inviteStatus, la
             {saving ? t.saving : saveState === "saved" ? t.saved : saveState === "error" ? t.saveError : "."}
           </span>
 
-          {inviteStatus === "PUBLISHED" && (
+          {!isDraftMode && inviteStatus === "PUBLISHED" && (
             <Link
               href={`/i/${inviteId}`}
               target="_blank"
@@ -417,12 +369,18 @@ export function EditorClient({ inviteId, initialData, template, inviteStatus, la
             </Link>
           )}
 
-          <Link
-            href={inviteStatus === "DRAFT" || inviteStatus === "PENDING_PAYMENT" ? `/dashboard/invites/${inviteId}` : `/dashboard?lang=${lang}`}
-            className="btn-gold text-sm px-4 py-2"
-          >
-            {inviteStatus === "DRAFT" || inviteStatus === "PENDING_PAYMENT" ? t.publish : t.toMyInvitations}
-          </Link>
+          {isDraftMode ? (
+            <Link href={`/invitations/publish?lang=${lang}`} className="btn-gold text-sm px-4 py-2">
+              {t.publishCta}
+            </Link>
+          ) : (
+            <Link
+              href={inviteStatus === "DRAFT" || inviteStatus === "PENDING_PAYMENT" ? `/dashboard/invites/${inviteId}` : `/dashboard?lang=${lang}`}
+              className="btn-gold text-sm px-4 py-2"
+            >
+              {inviteStatus === "DRAFT" || inviteStatus === "PENDING_PAYMENT" ? t.publish : t.toMyInvitations}
+            </Link>
+          )}
         </div>
       </header>
 
@@ -575,7 +533,7 @@ export function EditorClient({ inviteId, initialData, template, inviteStatus, la
                 {/* Image bg */}
                 {data.bgType === "image" && (
                   <Section label={t.imageBgSection}>
-                    <ImageUploadField inviteId={inviteId} lang={lang} value={data.bgImageUrl} onChange={(url) => update({ bgImageUrl: url })} />
+                    <ImageUploadField target={uploadTarget} lang={lang} value={data.bgImageUrl} onChange={(url) => update({ bgImageUrl: url })} />
                     <div>
                       <label className="block text-xs font-medium mb-2" style={{ color: "var(--muted)" }}>
                         {t.blur(data.bgBlur)}
@@ -788,7 +746,7 @@ export function EditorClient({ inviteId, initialData, template, inviteStatus, la
               <>
                 <Section label={t.gallerySection}>
                   <GalleryUploader
-                    inviteId={inviteId}
+                    target={uploadTarget}
                     lang={lang}
                     urls={data.galleryUrls}
                     onChange={(urls) => update({ galleryUrls: urls })}
@@ -840,7 +798,7 @@ export function EditorClient({ inviteId, initialData, template, inviteStatus, la
                       <div>
                         <p className="text-xs font-medium mb-2" style={{ color: "var(--muted)" }}>{t.uploadOwnMusic}</p>
                         <MusicUploader
-                          inviteId={inviteId}
+                          target={uploadTarget}
                           lang={lang}
                           musicUrl={data.musicUrl}
                           onUploaded={(url, fileLabel) => update({ musicUrl: url, musicTitle: fileLabel })}

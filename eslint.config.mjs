@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Compiled worker output (see tsconfig.worker.json / build:worker) —
+    // generated JS, not source.
+    "dist-worker/**",
   ]),
 ]);
 

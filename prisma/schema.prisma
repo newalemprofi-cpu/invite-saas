@@ -78,6 +78,12 @@ model Invite {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
+  // Set when this invite originated from an anonymous pre-account draft
+  // (see /api/invites/claim). Unique so claiming the same draft twice
+  // (double-submit, redirect retries) idempotently returns the same invite
+  // instead of creating a duplicate.
+  sourceDraftToken String? @unique
+
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
