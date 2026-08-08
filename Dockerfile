@@ -72,3 +72,16 @@ ENV HOSTNAME="0.0.0.0"
 # Command (see README's Coolify section): node dist-worker/worker.js
 # — it must NEVER run `prisma migrate deploy`.
 CMD ["sh", "-c", "node ./node_modules/.bin/prisma migrate deploy --schema=./prisma/schema.prisma && node server.js"]
+# --- worker stage ---
+# Coolify worker application uses:
+# Docker Build Stage Target = worker
+
+FROM runner AS worker
+
+CMD ["node", "dist-worker/worker.js"]
+
+
+# --- default web stage ---
+# Keep this stage LAST so normal Docker builds continue to run the web app.
+
+FROM runner AS web
