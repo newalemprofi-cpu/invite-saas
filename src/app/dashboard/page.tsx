@@ -40,6 +40,7 @@ const T = {
     statGuests: "Қонақ жауабы",
     noRsvp: "Жауап жоқ",
     edit: "Редакторлау",
+    manage: "Басқару",
     emptyTitle: "Шақырулар жоқ",
     emptyDesc: "Алғашқы шақыруыңызды жасаңыз",
     emptyCta: "✨ Жаңа шақыру жасау",
@@ -56,6 +57,7 @@ const T = {
     statGuests: "Ответы гостей",
     noRsvp: "Нет ответов",
     edit: "Редактировать",
+    manage: "Управление",
     emptyTitle: "Приглашений пока нет",
     emptyDesc: "Создайте своё первое приглашение",
     emptyCta: "✨ Создать приглашение",
@@ -142,6 +144,13 @@ function InviteCard({
         >
           {t.edit}
         </Link>
+        <Link
+          href={`/dashboard/invites/${invite.id}?lang=${lang}`}
+          className="flex-1 text-center py-2 rounded-xl text-sm font-semibold text-white transition-all"
+          style={{ background: "var(--charcoal)" }}
+        >
+          {t.manage}
+        </Link>
         <DeleteInviteButton
           inviteId={invite.id}
           lang={lang}
@@ -197,6 +206,15 @@ export default async function DashboardPage({ searchParams }: Props) {
   const invites = await listInvites(session.userId);
   const appUrl = await getAppOrigin();
 
+  // Canonical stat definitions (see the audit report — keep these in sync
+  // with the Manage page's own RSVP summary, which reads the same rows):
+  //   "Барлығы"      total invitations owned by this user, any status.
+  //   "Жарияланды"   invitations currently PUBLISHED.
+  //   "Қонақ жауабы" total Guest rows (= submitted RSVP responses, any
+  //                  attending/declined/undecided status) across every
+  //                  invitation this user owns. Real DB data, never
+  //                  hardcoded — invite._count.guests comes straight from
+  //                  listInvites()'s Prisma query.
   const stats = {
     total: invites.length,
     published: invites.filter((i) => i.status === "PUBLISHED").length,

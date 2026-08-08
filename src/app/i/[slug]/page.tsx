@@ -74,8 +74,10 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const invite = await db.invite.findUnique({ where: { slug }, select: { title: true } });
-  if (!invite) return {};
+  const invite = await db.invite.findUnique({ where: { slug }, select: { title: true, status: true } });
+  // Unpublished invites are guessable by slug — never leak their title (couple
+  // names, event subject) via <title>/OG/description before payment confirms.
+  if (!invite || invite.status !== "PUBLISHED") return {};
   return {
     title: `${invite.title} — Шақыру`,
     description: `Сізді ${invite.title} шарасына шақырамыз`,
@@ -173,7 +175,11 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
   const expired = invite.status === "EXPIRED" || (invite.status === "PUBLISHED" && invite.expiresAt !== null && invite.expiresAt < now);
 
   if (expired && !isPreview) return <Gate emoji="⏳" title={invite.title} msg="Бұл шақырудың мерзімі аяқталды. RSVP қабылдау тоқтатылды." />;
-  if (invite.status !== "PUBLISHED" && !isPreview) return <Gate emoji="💌" title={invite.title} msg="Бұл шақыру әлі белсенді емес. Жарияланғаннан кейін қолжетімді болады." />;
+  // Never render the real title here: unpublished invites are reachable by
+  // guessing/enumerating slugs, and the title (couple names, event subject)
+  // was never made public — unlike the expired-invite gate above, whose
+  // invite was PUBLISHED (and thus its title already public) at some point.
+  if (invite.status !== "PUBLISHED" && !isPreview) return <Gate emoji="💌" title="Шақыру" msg="Бұл шақыру әлі белсенді емес. Жарияланғаннан кейін қолжетімді болады." />;
 
   const d = (invite.data ?? {}) as D;
 

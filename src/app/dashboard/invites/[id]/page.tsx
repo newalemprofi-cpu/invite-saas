@@ -12,9 +12,11 @@ import { PaymentFlow } from "@/components/payment/PaymentFlow";
 import { EVENT_TYPES, THEMES, TEMPLATES } from "@/types/invite";
 import { buildLoginUrl } from "@/lib/auth-redirect";
 import { getAppOrigin } from "@/lib/site-url";
+import { resolveLang, type Lang } from "@/lib/i18n";
 
 interface Props {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ lang?: string }>;
 }
 
 interface StoredData {
@@ -38,12 +40,76 @@ interface StoredData {
   message?: string | null;
 }
 
+const T = {
+  kk: {
+    breadcrumb: "Менің шақыруларым",
+    slug: "Сілтеме атауы:",
+    shareLinkTitle: "Жариялау сілтемесі",
+    notActiveYet: "Сілтеме белсенді болуы үшін шақыруды жариялаңыз",
+    guestResponsesTitle: "Қонақ жауабы",
+    detailsTitle: "Мәліметтер",
+    eventType: "Іс-шара",
+    subject: "Тақырып",
+    date: "Күні",
+    time: "Уақыты",
+    timeValue: (t: string) => `Сағат ${t}`,
+    place: "Орны",
+    theme: "Тема",
+    messageLabel: "Хабарлама",
+    createdAt: "Жасалған",
+    expiresAt: "Мерзімі бітеді",
+    guestsTitle: "Қонақтар",
+    noResponsesYet: "Әлі RSVP жауабы жоқ",
+    coming: "Барады",
+    maybe: "Белгісіз",
+    notComing: "Бармайды",
+    peopleSuffix: "адам",
+    published: "Шақыру жарияланған",
+    previewLink: "Алдын ала қарау ↗",
+    back: "← Менің шақыруларым",
+    locale: "kk-KZ",
+  },
+  ru: {
+    breadcrumb: "Мои приглашения",
+    slug: "Название ссылки:",
+    shareLinkTitle: "Ссылка для публикации",
+    notActiveYet: "Опубликуйте приглашение, чтобы ссылка стала активной",
+    guestResponsesTitle: "Ответы гостей",
+    detailsTitle: "Детали",
+    eventType: "Мероприятие",
+    subject: "Тема",
+    date: "Дата",
+    time: "Время",
+    timeValue: (t: string) => `${t}`,
+    place: "Место",
+    theme: "Оформление",
+    messageLabel: "Сообщение",
+    createdAt: "Создано",
+    expiresAt: "Истекает",
+    guestsTitle: "Гости",
+    noResponsesYet: "Пока нет ответов RSVP",
+    coming: "Придут",
+    maybe: "Не определились",
+    notComing: "Не придут",
+    peopleSuffix: "чел.",
+    published: "Приглашение опубликовано",
+    previewLink: "Предпросмотр ↗",
+    back: "← Мои приглашения",
+    locale: "ru-RU",
+  },
+} as const;
+
+const GUEST_STATUS_LABEL: Record<Lang, Record<"COMING" | "NOT_COMING" | "MAYBE", string>> = {
+  kk: { COMING: "Барады", NOT_COMING: "Бармайды", MAYBE: "Белгісіз" },
+  ru: { COMING: "Придёт", NOT_COMING: "Не придёт", MAYBE: "Не определился" },
+};
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const session = await getSession();
   if (!session) return {};
   const invite = await getInvite(id, session.userId, session.role);
-  return { title: invite ? `${invite.title} — Dashboard` : "Шақыру" };
+  return { title: invite ? `${invite.title} — Шақыру` : "Шақыру" };
 }
 
 function DetailRow({ label, value }: { label: string; value?: string | null }) {
@@ -56,15 +122,18 @@ function DetailRow({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-export default async function InviteDetailPage({ params }: Props) {
+export default async function InviteDetailPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const { lang: langParam } = await searchParams;
+  const lang = resolveLang(langParam);
+  const t = T[lang];
 
   // This route is already protected twice over (proxy.ts's /dashboard/:path*
   // matcher, and dashboard/layout.tsx's own getSession() check), so this
   // should never actually redirect in practice — but defense-in-depth means
   // this page defends itself too, rather than trusting an assertion.
   const session = await getSession();
-  if (!session) redirect(buildLoginUrl({ from: `/dashboard/invites/${id}`, lang: "kk" }));
+  if (!session) redirect(buildLoginUrl({ from: `/dashboard/invites/${id}?lang=${lang}`, lang }));
 
   const [invite, product] = await Promise.all([
     getInvite(id, session.userId, session.role),
@@ -84,17 +153,26 @@ export default async function InviteDetailPage({ params }: Props) {
 
   const eventLabel = EVENT_TYPES.find((e) => e.value === data.eventType)?.label;
   const themeLabel =
-    TEMPLATES.find((t) => t.id === data.template)?.name ??
-    THEMES.find((t) => t.id === data.theme)?.name;
+    TEMPLATES.find((tm) => tm.id === data.template)?.name ??
+    THEMES.find((tm) => tm.id === data.theme)?.name;
 
   const locationDisplay = data.location ?? data.locationName;
+
+  // RSVP summary: attending/declined/unanswered counts (by party size) plus
+  // total responses — the SAME Guest rows the dashboard's "Қонақ жауабы"
+  // stat is derived from (see dashboard/page.tsx), just broken down here.
+  const rsvpSummary = [
+    { label: t.coming, value: guests.filter((g) => g.status === "COMING").reduce((s, g) => s + g.peopleCount, 0), color: "text-emerald-600" },
+    { label: t.maybe, value: guests.filter((g) => g.status === "MAYBE").reduce((s, g) => s + g.peopleCount, 0), color: "text-amber-600" },
+    { label: t.notComing, value: guests.filter((g) => g.status === "NOT_COMING").reduce((s, g) => s + g.peopleCount, 0), color: "text-red-500" },
+  ] as const;
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-zinc-400">
-        <Link href="/dashboard" className="hover:text-zinc-700 transition-colors">
-          Dashboard
+        <Link href={`/dashboard?lang=${lang}`} className="hover:text-zinc-700 transition-colors">
+          {t.breadcrumb}
         </Link>
         <span>/</span>
         <span className="text-zinc-700 font-medium truncate">{invite.title}</span>
@@ -105,13 +183,13 @@ export default async function InviteDetailPage({ params }: Props) {
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">{invite.title}</h1>
           <p className="text-sm text-zinc-400 mt-1">
-            Slug:{" "}
+            {t.slug}{" "}
             <code className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-xs text-zinc-600">
               {invite.slug}
             </code>
           </p>
         </div>
-        <StatusBadge status={invite.status} />
+        <StatusBadge status={invite.status} lang={lang} />
       </div>
 
       {/* Preview + share */}
@@ -123,7 +201,7 @@ export default async function InviteDetailPage({ params }: Props) {
         <div className="flex flex-col gap-4">
           <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-4">
             <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
-              Жариялау сілтемесі
+              {t.shareLinkTitle}
             </p>
             <div className="flex items-center gap-2 bg-zinc-50 rounded-xl px-3 py-2.5 mb-3">
               <span className="text-xs text-zinc-500 font-mono truncate flex-1">
@@ -133,17 +211,17 @@ export default async function InviteDetailPage({ params }: Props) {
             <CopyButton text={shareUrl} className="w-full justify-center" />
             {invite.status !== "PUBLISHED" && (
               <p className="text-xs text-zinc-400 mt-2 text-center">
-                Сілтеме белсенді болуы үшін шақыруды жарияланғын
+                {t.notActiveYet}
               </p>
             )}
           </div>
 
           <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-4">
             <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-              Қонақтар
+              {t.guestsTitle}
             </p>
             <p className="text-3xl font-bold text-zinc-900">{invite._count.guests}</p>
-            <p className="text-xs text-zinc-400 mt-0.5">RSVP жауабы</p>
+            <p className="text-xs text-zinc-400 mt-0.5">{t.guestResponsesTitle}</p>
           </div>
         </div>
       </div>
@@ -151,15 +229,15 @@ export default async function InviteDetailPage({ params }: Props) {
       {/* Details */}
       <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-4">
         <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">
-          Мәліметтер
+          {t.detailsTitle}
         </p>
-        <DetailRow label="Іс-шара" value={eventLabel} />
-        <DetailRow label="Тақырып" value={invite.title} />
+        <DetailRow label={t.eventType} value={eventLabel} />
+        <DetailRow label={t.subject} value={invite.title} />
         <DetailRow
-          label="Күні"
+          label={t.date}
           value={
             data.date
-              ? new Date(data.date).toLocaleDateString("kk-KZ", {
+              ? new Date(data.date).toLocaleDateString(t.locale, {
                   day: "numeric",
                   month: "long",
                   year: "numeric",
@@ -167,15 +245,15 @@ export default async function InviteDetailPage({ params }: Props) {
               : undefined
           }
         />
-        <DetailRow label="Уақыты" value={data.time ? `Сағат ${data.time}` : undefined} />
-        <DetailRow label="Орны" value={locationDisplay} />
-        <DetailRow label="Тема" value={themeLabel} />
+        <DetailRow label={t.time} value={data.time ? t.timeValue(data.time) : undefined} />
+        <DetailRow label={t.place} value={locationDisplay} />
+        <DetailRow label={t.theme} value={themeLabel} />
         {(data.invitationText ?? data.message) && (
-          <DetailRow label="Хабарлама" value={data.invitationText ?? data.message} />
+          <DetailRow label={t.messageLabel} value={data.invitationText ?? data.message} />
         )}
         <DetailRow
-          label="Жасалған"
-          value={invite.createdAt.toLocaleDateString("kk-KZ", {
+          label={t.createdAt}
+          value={invite.createdAt.toLocaleDateString(t.locale, {
             day: "numeric",
             month: "long",
             year: "numeric",
@@ -183,8 +261,8 @@ export default async function InviteDetailPage({ params }: Props) {
         />
         {invite.expiresAt && (
           <DetailRow
-            label="Мерзімі бітеді"
-            value={invite.expiresAt.toLocaleDateString("kk-KZ", {
+            label={t.expiresAt}
+            value={invite.expiresAt.toLocaleDateString(t.locale, {
               day: "numeric",
               month: "long",
               year: "numeric",
@@ -197,7 +275,7 @@ export default async function InviteDetailPage({ params }: Props) {
       <section>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-bold text-zinc-900">
-            Қонақтар
+            {t.guestsTitle}
             {guests.length > 0 && (
               <span className="ml-2 text-sm font-normal text-zinc-400">
                 ({guests.length})
@@ -208,36 +286,12 @@ export default async function InviteDetailPage({ params }: Props) {
 
         {guests.length === 0 ? (
           <div className="bg-white rounded-2xl border border-zinc-100 p-8 text-center">
-            <p className="text-sm text-zinc-400">Әлі RSVP жауабы жоқ</p>
+            <p className="text-sm text-zinc-400">{t.noResponsesYet}</p>
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm overflow-hidden">
             <div className="grid grid-cols-3 divide-x divide-zinc-50 border-b border-zinc-50">
-              {(
-                [
-                  {
-                    label: "Барады",
-                    value: guests
-                      .filter((g) => g.status === "COMING")
-                      .reduce((s, g) => s + g.peopleCount, 0),
-                    color: "text-emerald-600",
-                  },
-                  {
-                    label: "Белгісіз",
-                    value: guests
-                      .filter((g) => g.status === "MAYBE")
-                      .reduce((s, g) => s + g.peopleCount, 0),
-                    color: "text-amber-600",
-                  },
-                  {
-                    label: "Бармайды",
-                    value: guests
-                      .filter((g) => g.status === "NOT_COMING")
-                      .reduce((s, g) => s + g.peopleCount, 0),
-                    color: "text-red-500",
-                  },
-                ] as const
-              ).map((s) => (
+              {rsvpSummary.map((s) => (
                 <div key={s.label} className="p-3 text-center">
                   <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
                   <p className="text-[10px] text-zinc-400 mt-0.5">{s.label}</p>
@@ -246,16 +300,14 @@ export default async function InviteDetailPage({ params }: Props) {
             </div>
             <div className="divide-y divide-zinc-50">
               {guests.map((g) => {
-                const statusMap = {
-                  COMING: { label: "Барады", cls: "bg-emerald-100 text-emerald-700" },
-                  NOT_COMING: { label: "Бармайды", cls: "bg-red-100 text-red-600" },
-                  MAYBE: { label: "Белгісіз", cls: "bg-amber-100 text-amber-700" },
+                const statusCls = {
+                  COMING: "bg-emerald-100 text-emerald-700",
+                  NOT_COMING: "bg-red-100 text-red-600",
+                  MAYBE: "bg-amber-100 text-amber-700",
                 } as const;
-                const st =
-                  statusMap[g.status as keyof typeof statusMap] ?? {
-                    label: g.status,
-                    cls: "bg-zinc-100 text-zinc-500",
-                  };
+                const key = g.status as keyof typeof statusCls;
+                const label = GUEST_STATUS_LABEL[lang][key] ?? g.status;
+                const cls = statusCls[key] ?? "bg-zinc-100 text-zinc-500";
                 return (
                   <div
                     key={g.id}
@@ -276,16 +328,16 @@ export default async function InviteDetailPage({ params }: Props) {
                     </div>
                     {g.peopleCount > 1 && (
                       <span className="text-xs text-zinc-400 tabular-nums shrink-0">
-                        {g.peopleCount} адам
+                        {g.peopleCount} {t.peopleSuffix}
                       </span>
                     )}
                     <span
-                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${st.cls}`}
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}
                     >
-                      {st.label}
+                      {label}
                     </span>
                     <span className="text-[10px] text-zinc-300 tabular-nums hidden sm:block shrink-0">
-                      {g.createdAt.toLocaleDateString("kk-KZ", {
+                      {g.createdAt.toLocaleDateString(t.locale, {
                         day: "numeric",
                         month: "short",
                       })}
@@ -307,29 +359,30 @@ export default async function InviteDetailPage({ params }: Props) {
             currentStatus={invite.status}
             price={product.price}
             kaspiLink={product.kaspiPaymentLink}
+            lang={lang}
           />
         </div>
       ) : invite.status === "PUBLISHED" ? (
         <div className="bg-emerald-50 rounded-2xl border border-emerald-100 p-4 flex items-center justify-between gap-3 flex-wrap">
           <p className="text-sm font-semibold text-emerald-700">
-            Шақыру жарияланған
+            {t.published}
           </p>
           <Link
             href={`/i/${invite.slug}?preview=1`}
             target="_blank"
             className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
           >
-            Алдын ала қарау ↗
+            {t.previewLink}
           </Link>
         </div>
       ) : null}
 
       <div className="flex justify-end">
         <Link
-          href="/dashboard"
+          href={`/dashboard?lang=${lang}`}
           className="inline-flex h-10 items-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors"
         >
-          ← Dashboard
+          {t.back}
         </Link>
       </div>
     </main>

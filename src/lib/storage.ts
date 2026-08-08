@@ -16,9 +16,12 @@
  *   S3_REGION      Region string, default: us-east-1
  *
  * Optional:
- *   MEDIA_PUBLIC_BASE_URL  Override the base URL used for /api/media links
- *                          (e.g. a CDN in front of this app). Falls back to
- *                          NEXT_PUBLIC_APP_URL, then localhost.
+ *   MEDIA_PUBLIC_BASE_URL  Only needed if a CDN sits in front of this app on
+ *                          a *different* origin. Unset (the normal case):
+ *                          getPublicUrl() returns a plain relative
+ *                          `/api/media/<key>` path — same-origin, so it
+ *                          works regardless of domain and never needs a
+ *                          localhost/production fallback at all.
  *   S3_PUBLIC_URL          Legacy-only: previously used as a *direct*
  *                          browser-facing MinIO URL. No longer used to
  *                          build new URLs (see getPublicUrl), but still
@@ -228,20 +231,22 @@ function decodeObjectKey(encoded: string): string {
   }
 }
 
-function mediaProxyBaseUrl(): string {
-  const base = process.env.MEDIA_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  return base.replace(/\/$/, "");
-}
-
 /**
- * Browser-facing URL for an object: a same-origin `/api/media/<key>` link
+ * Browser-facing URL for an object: a same-origin `/api/media/<key>` path
  * served by src/app/api/media/[...key]/route.ts. S3_ENDPOINT is internal
  * (e.g. Coolify's private MinIO service address) and must never reach the
  * browser directly — this is the one function anything client-visible
  * should call to point at a stored object.
+ *
+ * Deliberately relative (no origin) unless MEDIA_PUBLIC_BASE_URL is set:
+ * a relative path resolves correctly regardless of what domain the app is
+ * served from, so there's no localhost/production-origin fallback to get
+ * wrong, and a future domain change never requires rewriting stored URLs.
  */
 export function getPublicUrl(key: string): string {
-  return `${mediaProxyBaseUrl()}/api/media/${encodeObjectKey(key)}`;
+  const path = `/api/media/${encodeObjectKey(key)}`;
+  const base = process.env.MEDIA_PUBLIC_BASE_URL;
+  return base ? `${base.replace(/\/$/, "")}${path}` : path;
 }
 
 /**

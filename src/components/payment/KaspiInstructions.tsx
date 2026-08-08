@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import type { Lang } from "@/lib/i18n";
 
 interface KaspiInstructionsData {
   kaspiLink?: string;
@@ -11,25 +12,59 @@ interface KaspiInstructionsData {
 interface Props {
   data: KaspiInstructionsData;
   planName: string;
+  lang: Lang;
 }
 
-export function KaspiInstructions({ data, planName }: Props) {
+const T = {
+  kk: {
+    amountLabel: "Төлем сомасы",
+    planSuffix: (plan: string) => `${plan} жоспары`,
+    referenceLabel: "Себеп/хабарлама:",
+    stepsTitle: "Төлем нұсқаулары",
+    openKaspi: "Kaspi арқылы ашу",
+    warning: (
+      <>
+        Төлемді жасағаннан кейін admin <strong>1-24 сағат ішінде</strong> растайды. Шақыру автоматты түрде белсенді болады.
+      </>
+    ),
+  },
+  ru: {
+    amountLabel: "Сумма к оплате",
+    planSuffix: (plan: string) => `План: ${plan}`,
+    referenceLabel: "Назначение платежа:",
+    stepsTitle: "Инструкция по оплате",
+    openKaspi: "Открыть в Kaspi",
+    warning: (
+      <>
+        После оплаты администратор подтвердит в течение <strong>1-24 часов</strong>. Приглашение станет активным автоматически.
+      </>
+    ),
+  },
+} as const;
+
+// Note: `data.steps` comes from the Kaspi provider layer
+// (src/lib/payment/providers/kaspi.ts) and is currently Kazakh-only —
+// localizing it would mean changing the provider's public interface,
+// which is out of scope here (lifecycle integration only, not provider
+// internals). Everything else on this screen is fully bilingual.
+export function KaspiInstructions({ data, planName, lang }: Props) {
+  const t = T[lang];
   return (
     <div className="flex flex-col gap-5">
       {/* Amount card */}
       <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-5 text-center">
         <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider mb-1">
-          Төлем сомасы
+          {t.amountLabel}
         </p>
         <p className="text-4xl font-bold text-emerald-700">
-          {data.amount.toLocaleString("kk-KZ")} ₸
+          {data.amount.toLocaleString(lang === "ru" ? "ru-RU" : "kk-KZ")} ₸
         </p>
-        <p className="text-xs text-emerald-600 mt-1">{planName} жоспары</p>
+        <p className="text-xs text-emerald-600 mt-1">{t.planSuffix(planName)}</p>
       </div>
 
       {/* Reference */}
       <div className="rounded-xl bg-zinc-100 px-4 py-3 flex items-center justify-between gap-3">
-        <span className="text-xs text-zinc-500 font-medium">Себеп/хабарлама:</span>
+        <span className="text-xs text-zinc-500 font-medium">{t.referenceLabel}</span>
         <code className="text-sm font-mono font-bold text-zinc-800 tracking-widest">
           INV-{data.reference}
         </code>
@@ -37,7 +72,7 @@ export function KaspiInstructions({ data, planName }: Props) {
 
       {/* Steps */}
       <div className="flex flex-col gap-3">
-        <p className="text-sm font-semibold text-zinc-700">Төлем нұсқаулары</p>
+        <p className="text-sm font-semibold text-zinc-700">{t.stepsTitle}</p>
         <ol className="flex flex-col gap-2.5">
           {data.steps.map((step, i) => (
             <li key={i} className="flex items-start gap-3">
@@ -61,7 +96,7 @@ export function KaspiInstructions({ data, planName }: Props) {
           <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18a8 8 0 110-16 8 8 0 010 16zm-1-13h2v6h-2zm0 8h2v2h-2z" />
           </svg>
-          Kaspi арқылы ашу
+          {t.openKaspi}
         </a>
       )}
 
@@ -73,11 +108,7 @@ export function KaspiInstructions({ data, planName }: Props) {
         )}
       >
         <span className="text-lg shrink-0">⚠️</span>
-        <p className="text-xs text-amber-800 leading-relaxed">
-          Төлемді жасағаннан кейін admin{" "}
-          <strong>1-24 сағат ішінде</strong> растайды. Шақыру автоматты түрде
-          белсенді болады.
-        </p>
+        <p className="text-xs text-amber-800 leading-relaxed">{t.warning}</p>
       </div>
     </div>
   );
