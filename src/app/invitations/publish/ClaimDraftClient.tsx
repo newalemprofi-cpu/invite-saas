@@ -44,8 +44,9 @@ export function ClaimDraftClient({ lang }: { lang: Lang }) {
       return;
     }
     setState("working");
-    try {
-      const res = await fetch("/api/invites/claim", {
+
+    const claimOnce = () =>
+      fetch("/api/invites/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -54,7 +55,22 @@ export function ClaimDraftClient({ lang }: { lang: Lang }) {
           data: editorDataToSaveBody(draft.data),
         }),
       });
-      const json = (await res.json().catch(() => ({}))) as { id?: string; error?: string };
+
+    try {
+      let res = await claimOnce();
+      let json = (await res.json().catch(() => ({}))) as { id?: string; error?: string };
+
+      // A 401 landing here is surprising: this page only renders past its
+      // own server-side session check, so we just proved a valid session
+      // existed moments ago (most commonly right after register/login). A
+      // single retry absorbs a cold-start/propagation blip between that
+      // check and this client-side fetch without ever weakening the check
+      // itself — a *second* 401 is treated as a real dead session below.
+      if (res.status === 401 || json.error === "UNAUTHORIZED") {
+        await new Promise((r) => setTimeout(r, 500));
+        res = await claimOnce();
+        json = (await res.json().catch(() => ({}))) as { id?: string; error?: string };
+      }
 
       if (res.ok && json.id) {
         clearAnonymousDraft();
