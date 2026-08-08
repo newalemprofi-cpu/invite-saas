@@ -13,6 +13,29 @@ enum UserRole {
   ADMIN
 }
 
+// Invite lifecycle (see the auth/lifecycle audit report for the full
+// state-machine writeup). Only DRAFT <-> PENDING_PAYMENT <-> PUBLISHED are
+// actively used today:
+//   DRAFT            being edited / unpaid. Set on creation (both
+//                    createInviteFromTemplate and claimAnonymousInvite
+//                    always start here) and never re-entered afterward.
+//   PENDING_PAYMENT  a Payment row exists and is PENDING (see
+//                    /api/payments/create). Reversible: PAYABLE_STATUSES
+//                    there includes DRAFT/PENDING_PAYMENT/EXPIRED so a
+//                    stalled payment can be retried.
+//   PUBLISHED        payment confirmed (webhook or manual-approve) — the
+//                    ONLY two places that ever set this status. This is
+//                    what gates public visibility in /i/[slug].
+//   EXPIRED          set by the expire-invites cron once a PUBLISHED
+//                    invite's expiresAt has passed. Still PAYABLE (renewal
+//                    re-activates it via the same PENDING_PAYMENT path).
+//   PAID             reserved / not currently assigned to Invite.status
+//                    anywhere in the codebase (Payment.status does use
+//                    "PAID" — a separate model). Kept in the enum for
+//                    forward compatibility with a possible future
+//                    paid-but-not-yet-published step; do not rely on it.
+//   CANCELLED        reserved / not currently assigned anywhere. No admin
+//                    or user-facing action sets this today.
 enum InviteStatus {
   DRAFT
   PENDING_PAYMENT

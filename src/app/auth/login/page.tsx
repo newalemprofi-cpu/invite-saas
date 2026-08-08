@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { LoginForm } from "./LoginForm";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
 import { resolveLang } from "@/lib/i18n";
+import { safeRedirectTarget, buildRegisterUrl } from "@/lib/auth-redirect";
+import { LoginForm } from "./LoginForm";
 
 export const metadata: Metadata = {
   title: "Кіру — Шақыру",
 };
+
+export const dynamic = "force-dynamic";
 
 interface Props {
   searchParams: Promise<{ from?: string; lang?: string }>;
@@ -20,7 +25,15 @@ export default async function LoginPage({ searchParams }: Props) {
   const { from, lang: langParam } = await searchParams;
   const lang = resolveLang(langParam);
   const t = T[lang];
-  const registerHref = `/auth/register?lang=${lang}${from ? `&from=${encodeURIComponent(from)}` : ""}`;
+
+  // Canonical rule: an already-authenticated visitor never sees the auth
+  // form — they're bounced straight to their intended destination (or
+  // /dashboard). This is what prevents an authenticated user from ever
+  // getting stuck in a login loop just by landing on this URL.
+  const session = await getSession();
+  if (session) redirect(safeRedirectTarget(from));
+
+  const registerHref = buildRegisterUrl({ from, lang });
 
   return (
     <div className="min-h-screen bg-zinc-50 flex items-center justify-center px-4">

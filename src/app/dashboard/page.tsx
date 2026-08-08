@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { listInvites, type InviteWithCount } from "@/lib/data/invites";
 import { resolveLang, type Lang } from "@/lib/i18n";
+import { buildLoginUrl } from "@/lib/auth-redirect";
+import { getAppOrigin } from "@/lib/site-url";
 import { DeleteInviteButton } from "@/components/dashboard/DeleteInviteButton";
 
 export const dynamic = "force-dynamic";
@@ -191,9 +193,9 @@ export default async function DashboardPage({ searchParams }: Props) {
   const t = T[lang];
 
   const session = await getSession();
-  if (!session) redirect("/auth/login");
+  if (!session) redirect(buildLoginUrl({ from: `/dashboard?lang=${lang}`, lang }));
   const invites = await listInvites(session.userId);
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const appUrl = await getAppOrigin();
 
   const stats = {
     total: invites.length,

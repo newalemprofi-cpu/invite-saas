@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { getInvite } from "@/lib/data/invites";
 import { getProductSettings } from "@/lib/product";
@@ -10,6 +10,8 @@ import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { CopyButton } from "@/components/dashboard/CopyButton";
 import { PaymentFlow } from "@/components/payment/PaymentFlow";
 import { EVENT_TYPES, THEMES, TEMPLATES } from "@/types/invite";
+import { buildLoginUrl } from "@/lib/auth-redirect";
+import { getAppOrigin } from "@/lib/site-url";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -57,7 +59,13 @@ function DetailRow({ label, value }: { label: string; value?: string | null }) {
 export default async function InviteDetailPage({ params }: Props) {
   const { id } = await params;
 
-  const session = (await getSession())!;
+  // This route is already protected twice over (proxy.ts's /dashboard/:path*
+  // matcher, and dashboard/layout.tsx's own getSession() check), so this
+  // should never actually redirect in practice — but defense-in-depth means
+  // this page defends itself too, rather than trusting an assertion.
+  const session = await getSession();
+  if (!session) redirect(buildLoginUrl({ from: `/dashboard/invites/${id}`, lang: "kk" }));
+
   const [invite, product] = await Promise.all([
     getInvite(id, session.userId, session.role),
     getProductSettings(),
@@ -71,7 +79,7 @@ export default async function InviteDetailPage({ params }: Props) {
   });
 
   const data = (invite.data ?? {}) as StoredData;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const appUrl = await getAppOrigin();
   const shareUrl = `${appUrl}/i/${invite.slug}`;
 
   const eventLabel = EVENT_TYPES.find((e) => e.value === data.eventType)?.label;

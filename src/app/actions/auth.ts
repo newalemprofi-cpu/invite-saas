@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { createSession, deleteSession } from "@/lib/auth";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { resolveLang, type Lang } from "@/lib/i18n";
+import { safeRedirectTarget } from "@/lib/auth-redirect";
 
 const MESSAGES = {
   kk: {
@@ -42,13 +43,6 @@ function schemas(lang: Lang) {
       password: z.string().min(8, m.passwordMin),
     }),
   };
-}
-
-function safeRedirectTarget(from: unknown): string {
-  if (typeof from === "string" && from.startsWith("/") && !from.startsWith("//")) {
-    return from;
-  }
-  return "/dashboard";
 }
 
 export async function loginAction(

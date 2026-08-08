@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { resolveLang } from "@/lib/i18n";
+import { buildRegisterUrl } from "@/lib/auth-redirect";
 import { ClaimDraftClient } from "./ClaimDraftClient";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ export default async function PublishPage({ searchParams }: Props) {
   const session = await getSession();
   if (!session) {
     const returnTo = `/invitations/publish?lang=${lang}`;
-    redirect(`/auth/register?from=${encodeURIComponent(returnTo)}&lang=${lang}`);
+    redirect(buildRegisterUrl({ from: returnTo, lang }));
   }
 
   return <ClaimDraftClient lang={lang} />;

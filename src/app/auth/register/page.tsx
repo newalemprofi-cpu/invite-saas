@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { RegisterForm } from "./RegisterForm";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
 import { resolveLang } from "@/lib/i18n";
+import { safeRedirectTarget, buildLoginUrl } from "@/lib/auth-redirect";
+import { RegisterForm } from "./RegisterForm";
 
 export const metadata: Metadata = {
   title: "Тіркелу — Шақыру",
 };
+
+export const dynamic = "force-dynamic";
 
 interface Props {
   searchParams: Promise<{ from?: string; lang?: string }>;
@@ -20,7 +25,13 @@ export default async function RegisterPage({ searchParams }: Props) {
   const { from, lang: langParam } = await searchParams;
   const lang = resolveLang(langParam);
   const t = T[lang];
-  const loginHref = `/auth/login?lang=${lang}${from ? `&from=${encodeURIComponent(from)}` : ""}`;
+
+  // Same rule as /auth/login: an already-authenticated visitor never sees
+  // the auth form.
+  const session = await getSession();
+  if (session) redirect(safeRedirectTarget(from));
+
+  const loginHref = buildLoginUrl({ from, lang });
 
   return (
     <div className="min-h-screen bg-zinc-50 flex items-center justify-center px-4 py-10">
