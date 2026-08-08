@@ -7,20 +7,34 @@ import { z } from "zod";
 import { loginAction } from "@/app/actions/auth";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import type { Lang } from "@/lib/i18n";
 
-const schema = z.object({
-  email: z.string().email("Жарамды email енгізіңіз"),
-  password: z.string().min(1, "Парольді енгізіңіз"),
-});
-type FormData = z.infer<typeof schema>;
+const MESSAGES = {
+  kk: { email: "Жарамды email енгізіңіз", password: "Парольді енгізіңіз" },
+  ru: { email: "Введите корректный email", password: "Введите пароль" },
+} as const;
+
+const LABELS = {
+  kk: { email: "Email", password: "Пароль", submit: "Кіру" },
+  ru: { email: "Email", password: "Пароль", submit: "Войти" },
+} as const;
 
 interface Props {
   from?: string;
+  lang: Lang;
 }
 
-export function LoginForm({ from }: Props) {
+export function LoginForm({ from, lang }: Props) {
   const [serverError, setServerError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const m = MESSAGES[lang];
+  const L = LABELS[lang];
+
+  const schema = z.object({
+    email: z.string().email(m.email),
+    password: z.string().min(1, m.password),
+  });
+  type FormData = z.infer<typeof schema>;
 
   const {
     register,
@@ -31,7 +45,7 @@ export function LoginForm({ from }: Props) {
   const onSubmit = handleSubmit((data) => {
     setServerError(null);
     startTransition(async () => {
-      const result = await loginAction(data, from);
+      const result = await loginAction(data, from, lang);
       if (result?.error) setServerError(result.error);
     });
   });
@@ -40,7 +54,7 @@ export function LoginForm({ from }: Props) {
     <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
       <Input
         type="email"
-        label="Email"
+        label={L.email}
         placeholder="you@example.com"
         autoComplete="email"
         error={errors.email?.message}
@@ -48,7 +62,7 @@ export function LoginForm({ from }: Props) {
       />
       <Input
         type="password"
-        label="Пароль"
+        label={L.password}
         placeholder="••••••••"
         autoComplete="current-password"
         error={errors.password?.message}
@@ -60,7 +74,7 @@ export function LoginForm({ from }: Props) {
         </p>
       )}
       <Button type="submit" loading={isPending} size="lg" className="w-full mt-1">
-        Кіру
+        {L.submit}
       </Button>
     </form>
   );

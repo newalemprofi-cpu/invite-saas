@@ -14,25 +14,39 @@ export default async function DashboardLayout({
   if (!session) redirect("/auth/login");
 
   return (
-    <div className="min-h-screen bg-zinc-50">
-      {/* Nav */}
-      <header className="sticky top-0 z-20 bg-white border-b border-zinc-100">
-        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
+    <div className="min-h-screen" style={{ background: "var(--ivory)" }}>
+      <header
+        className="sticky top-0 z-20 backdrop-blur"
+        style={{
+          background: "rgba(250,248,243,0.9)",
+          borderBottom: "1px solid var(--border)",
+        }}
+      >
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
           <Link
             href="/dashboard"
-            className="font-bold text-rose-500 text-lg tracking-tight"
+            className="font-serif text-xl font-semibold"
+            style={{ color: "var(--charcoal)" }}
           >
             Шақыру
           </Link>
 
           <div className="flex items-center gap-4">
-            <span className="hidden sm:block text-sm text-zinc-500 truncate max-w-[200px]">
+            <span
+              className="hidden sm:block text-sm truncate max-w-[200px]"
+              style={{ color: "var(--muted)" }}
+            >
               {session.name ?? session.email}
             </span>
             {session.role === "ADMIN" && (
               <Link
                 href="/admin"
-                className="text-xs font-medium text-amber-600 bg-amber-50 rounded-full px-2.5 py-1 hover:bg-amber-100 transition-colors"
+                className="label-caps px-3 py-1 rounded-full transition-colors"
+                style={{
+                  background: "rgba(196,150,62,0.1)",
+                  color: "var(--gold-dark)",
+                  border: "1px solid rgba(196,150,62,0.2)",
+                }}
               >
                 Admin
               </Link>

@@ -1,17 +1,26 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LoginForm } from "./LoginForm";
+import { resolveLang } from "@/lib/i18n";
 
 export const metadata: Metadata = {
   title: "Кіру — Шақыру",
 };
 
 interface Props {
-  searchParams: Promise<{ from?: string }>;
+  searchParams: Promise<{ from?: string; lang?: string }>;
 }
 
+const T = {
+  kk: { tagline: "Жүйеге кіріңіз", noAccount: "Тіркелмегенсіз бе?", register: "Тіркелу" },
+  ru: { tagline: "Войдите в аккаунт", noAccount: "Ещё нет аккаунта?", register: "Регистрация" },
+} as const;
+
 export default async function LoginPage({ searchParams }: Props) {
-  const { from } = await searchParams;
+  const { from, lang: langParam } = await searchParams;
+  const lang = resolveLang(langParam);
+  const t = T[lang];
+  const registerHref = `/auth/register?lang=${lang}${from ? `&from=${encodeURIComponent(from)}` : ""}`;
 
   return (
     <div className="min-h-screen bg-zinc-50 flex items-center justify-center px-4">
@@ -21,21 +30,21 @@ export default async function LoginPage({ searchParams }: Props) {
           <Link href="/" className="inline-block text-2xl font-bold text-rose-500 tracking-tight">
             Шақыру
           </Link>
-          <p className="mt-1 text-sm text-zinc-500">Жүйеге кіріңіз</p>
+          <p className="mt-1 text-sm text-zinc-500">{t.tagline}</p>
         </div>
 
         {/* Card */}
         <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-6">
-          <LoginForm from={from} />
+          <LoginForm from={from} lang={lang} />
 
           <div className="mt-5 text-center">
             <p className="text-sm text-zinc-500">
-              Тіркелмегенсіз бе?{" "}
+              {t.noAccount}{" "}
               <Link
-                href={from ? `/auth/register?from=${encodeURIComponent(from)}` : "/auth/register"}
+                href={registerHref}
                 className="font-semibold text-rose-500 hover:text-rose-600 transition-colors"
               >
-                Тіркелу
+                {t.register}
               </Link>
             </p>
           </div>

@@ -1,18 +1,27 @@
 import { db } from "@/lib/db";
-
-const DEFAULTS = {
-  productKey: "INVITE",
-  price: 4990,
-  currency: "KZT",
-  activeDays: 30,
-  kaspiPaymentLink: null as string | null,
-  isActive: true,
-};
+import { getAdminConfig } from "@/lib/admin-config";
 
 export async function getProductSettings() {
-  return db.productSettings.upsert({
-    where: { productKey: "INVITE" },
-    update: {},
-    create: DEFAULTS,
-  });
+  const config = await getAdminConfig();
+  // Use admin_config as authoritative source; fall back to ProductSettings for activeDays
+  try {
+    const ps = await db.productSettings.findUnique({ where: { productKey: "INVITE" } });
+    return {
+      productKey: "INVITE",
+      price: config.price,
+      currency: "KZT",
+      activeDays: ps?.activeDays ?? 30,
+      kaspiPaymentLink: config.kaspiLink || ps?.kaspiPaymentLink || null,
+      isActive: true,
+    };
+  } catch {
+    return {
+      productKey: "INVITE",
+      price: config.price,
+      currency: "KZT",
+      activeDays: 30,
+      kaspiPaymentLink: config.kaspiLink || null,
+      isActive: true,
+    };
+  }
 }

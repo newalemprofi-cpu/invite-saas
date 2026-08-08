@@ -102,6 +102,7 @@ export async function POST(req: NextRequest) {
         expiresAt,
         data: {
           template: data.template,
+          templateSlug: data.template,
           eventType: data.eventType,
           groomName: data.groomName.trim(),
           brideName: data.brideName?.trim() || null,

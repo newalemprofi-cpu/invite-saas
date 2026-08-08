@@ -14,10 +14,10 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variants: Record<Variant, string> = {
   primary:
-    "bg-rose-500 text-white hover:bg-rose-600 active:bg-rose-700 shadow-sm shadow-rose-200",
+    "bg-[#1C1917] text-[#FAF8F3] hover:bg-[#2D2520] active:bg-[#3D3530] shadow-sm",
   secondary:
-    "bg-white border border-zinc-200 text-zinc-800 hover:bg-zinc-50 active:bg-zinc-100",
-  ghost: "text-zinc-600 hover:bg-zinc-100 active:bg-zinc-200",
+    "bg-white border border-[#E8E2D9] text-[#1C1917] hover:bg-[#F5F0E8] active:bg-[#EBE5DC]",
+  ghost: "text-[#78716C] hover:bg-[#F5F0E8] active:bg-[#EBE5DC]",
   danger: "bg-red-500 text-white hover:bg-red-600 shadow-sm",
 };
 
@@ -28,24 +28,13 @@ const sizes: Record<Size, string> = {
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  (
-    {
-      variant = "primary",
-      size = "md",
-      loading = false,
-      className,
-      children,
-      disabled,
-      ...props
-    },
-    ref
-  ) => (
+  ({ variant = "primary", size = "md", loading = false, className, children, disabled, ...props }, ref) => (
     <button
       ref={ref}
       disabled={disabled || loading}
       className={cn(
         "inline-flex items-center justify-center font-medium transition-all",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:ring-offset-2",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4963E] focus-visible:ring-offset-2",
         "disabled:pointer-events-none disabled:opacity-50",
         variants[variant],
         sizes[size],
@@ -54,24 +43,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       {...props}
     >
       {loading && (
-        <svg
-          className="animate-spin h-4 w-4 shrink-0"
-          viewBox="0 0 24 24"
-          fill="none"
-        >
-          <circle
-            className="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="4"
-          />
-          <path
-            className="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8v8z"
-          />
+        <svg className="animate-spin h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
         </svg>
       )}
       {children}

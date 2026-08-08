@@ -31,7 +31,7 @@ export const CATEGORIES = [
   { id: "premium", label: "Премиум" },
 ] as const;
 
-export const TEMPLATES = [
+export const LEGACY_TEMPLATES = [
   {
     id: "uzatu_premium",
     name: "Ұзату Premium",
@@ -121,6 +121,8 @@ export const TEMPLATES = [
     emoji: "🏢",
   },
 ] as const;
+
+export const TEMPLATES = LEGACY_TEMPLATES;
 
 export const BLOCKS_CONFIG = [
   { id: "hero", nameKk: "Басты бөлім", icon: "🎉", description: "Аттар мен іс-шара атауы" },

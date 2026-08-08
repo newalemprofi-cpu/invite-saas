@@ -1,26 +1,282 @@
 @import "tailwindcss";
 
+/* ─── Premium Color Tokens ─────────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ivory:       #FAF8F3;
+  --cream:       #F5F0E8;
+  --gold:        #C4963E;
+  --gold-light:  #E8C97A;
+  --gold-dark:   #9A7B2F;
+  --charcoal:    #1C1917;
+  --warm-dark:   #2D2520;
+  --muted:       #78716C;
+  --border:      #E8E2D9;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-ivory:      var(--ivory);
+  --color-cream:      var(--cream);
+  --color-gold:       var(--gold);
+  --color-gold-light: var(--gold-light);
+  --color-gold-dark:  var(--gold-dark);
+  --color-charcoal:   var(--charcoal);
+  --color-warm-dark:  var(--warm-dark);
+  --color-muted:      var(--muted);
+  --color-border:     var(--border);
+
+  --font-serif: var(--font-cormorant), 'Georgia', 'Times New Roman', serif;
+  --font-sans:  var(--font-dm-sans), system-ui, -apple-system, sans-serif;
+
+  --animate-fade-up:   fade-up 0.6s ease-out both;
+  --animate-fade-in:   fade-in 0.5s ease-out both;
+  --animate-float:     float 5s ease-in-out infinite;
+  --animate-shimmer:   shimmer 2s linear infinite;
+  --animate-pulse-slow: pulse-slow 3s ease-in-out infinite;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ─── Keyframes ─────────────────────────────────────────────────────── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%      { transform: translateY(-12px); }
+}
+
+@keyframes shimmer {
+  from { background-position: -200% center; }
+  to   { background-position:  200% center; }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+@keyframes countdown-tick {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+/* ─── Base ──────────────────────────────────────────────────────────── */
+html { scroll-behavior: smooth; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--ivory);
+  color: var(--charcoal);
+  font-family: var(--font-sans, system-ui, sans-serif);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+/* ─── Typography Helpers ────────────────────────────────────────────── */
+.font-serif { font-family: var(--font-serif); }
+.font-sans  { font-family: var(--font-sans); }
+
+.heading-display {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+.label-caps {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+/* ─── Gold Gradient Text ────────────────────────────────────────────── */
+.text-gold-gradient {
+  background: linear-gradient(135deg, #C4963E 0%, #E8C97A 50%, #C4963E 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 3s linear infinite;
+}
+
+/* ─── Glass Card ────────────────────────────────────────────────────── */
+.glass {
+  background: rgba(250, 248, 243, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(196, 150, 62, 0.15);
+}
+
+/* ─── Phone Mockup ──────────────────────────────────────────────────── */
+.phone-frame {
+  border-radius: 48px;
+  border: 8px solid #1C1917;
+  background: #1C1917;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.05),
+    0 40px 80px rgba(28,25,23,0.4),
+    0 20px 40px rgba(28,25,23,0.2);
+}
+
+.phone-screen {
+  border-radius: 40px;
+  overflow: hidden;
+}
+
+/* ─── Invite Card Preview (inside phone) ───────────────────────────── */
+.invite-preview-scroll {
+  height: 100%;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+.invite-preview-scroll::-webkit-scrollbar { display: none; }
+
+/* ─── Gold Divider ──────────────────────────────────────────────────── */
+.gold-divider {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.gold-divider::before,
+.gold-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: 0.4;
+}
+
+/* ─── Pricing Card Gold Border ──────────────────────────────────────── */
+.gold-border {
+  border: 1px solid rgba(196, 150, 62, 0.3);
+  background: linear-gradient(#FAF8F3, #FAF8F3) padding-box,
+    linear-gradient(135deg, rgba(196,150,62,0.6) 0%, rgba(232,201,122,0.8) 50%, rgba(196,150,62,0.6) 100%) border-box;
+  border: 1px solid transparent;
+}
+
+/* ─── Section Entrance Animations ───────────────────────────────────── */
+.animate-delay-100 { animation-delay: 100ms; }
+.animate-delay-200 { animation-delay: 200ms; }
+.animate-delay-300 { animation-delay: 300ms; }
+.animate-delay-400 { animation-delay: 400ms; }
+.animate-delay-500 { animation-delay: 500ms; }
+.animate-delay-600 { animation-delay: 600ms; }
+
+/* ─── RSVP / Form Styles ────────────────────────────────────────────── */
+.input-premium {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 0.9375rem;
+  width: 100%;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+  color: var(--charcoal);
+}
+.input-premium:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(196, 150, 62, 0.12);
+}
+.input-premium::placeholder { color: #A8A29E; }
+
+/* ─── Button Base ───────────────────────────────────────────────────── */
+.btn-gold {
+  background: linear-gradient(135deg, #C4963E 0%, #E8C97A 50%, #C4963E 100%);
+  background-size: 200% auto;
+  color: #1C1917;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-radius: 100px;
+  padding: 14px 32px;
+  transition: background-position 0.4s, transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 24px rgba(196, 150, 62, 0.3);
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  font-size: 0.9375rem;
+}
+.btn-gold:hover {
+  background-position: right center;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 32px rgba(196, 150, 62, 0.4);
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1.5px solid var(--border);
+  color: var(--charcoal);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 100px;
+  padding: 13px 28px;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  font-size: 0.9375rem;
+}
+.btn-outline:hover {
+  border-color: var(--gold);
+  color: var(--gold-dark);
+}
+
+/* ─── Editor Sidebar ────────────────────────────────────────────────── */
+.editor-sidebar {
+  height: calc(100vh - 64px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.editor-sidebar::-webkit-scrollbar { width: 4px; }
+.editor-sidebar::-webkit-scrollbar-track { background: transparent; }
+.editor-sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ─── Toggle Switch ─────────────────────────────────────────────────── */
+.toggle-track {
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  background: #E7E5E4;
+  position: relative;
+  transition: background 0.2s;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.toggle-track.active { background: var(--gold); }
+.toggle-thumb {
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  transition: transform 0.2s;
+}
+.toggle-track.active .toggle-thumb { transform: translateX(20px); }
+
+/* ─── Accordion ─────────────────────────────────────────────────────── */
+.accordion-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.35s ease;
+}
+.accordion-content.open { max-height: 500px; }
+
+/* ─── Premium scrollbar ─────────────────────────────────────────────── */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+*::-webkit-scrollbar { width: 5px; height: 5px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }

@@ -8,8 +8,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─── Enums ───────────────────────────────────────────────────────────────────
-
 enum UserRole {
   USER
   ADMIN
@@ -49,8 +47,6 @@ enum MediaType {
   AUDIO
 }
 
-// ─── Models ──────────────────────────────────────────────────────────────────
-
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -61,9 +57,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  invites  Invite[]
-  payments Payment[]
-  auditLogs AuditLog[]
+  invites         Invite[]
+  payments        Payment[]
+  auditLogs       AuditLog[]
+  aiConversations AiConversation[]
 
   @@index([email])
 }
@@ -77,15 +74,17 @@ model Invite {
   data        Json         @default("{}")
   expiresAt   DateTime?
   publishedAt DateTime?
+  viewCount   Int          @default(0)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  guests   Guest[]
-  payments Payment[]
-  media    Media[]
+  guests          Guest[]
+  payments        Payment[]
+  media           Media[]
+  aiConversations AiConversation[]
 
   @@index([userId])
   @@index([slug])
@@ -93,15 +92,15 @@ model Invite {
 }
 
 model Guest {
-  id        String      @id @default(uuid())
-  name      String
-  phone     String?
-  email     String?
+  id          String      @id @default(uuid())
+  name        String
+  phone       String?
+  email       String?
   status      GuestStatus @default(MAYBE)
   peopleCount Int         @default(1)
   note        String?
   createdAt   DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  updatedAt   DateTime    @updatedAt
 
   inviteId String
   invite   Invite @relation(fields: [inviteId], references: [id], onDelete: Cascade)
@@ -111,16 +110,20 @@ model Guest {
 }
 
 model Payment {
-  id         String          @id @default(uuid())
-  amount     Decimal         @db.Decimal(10, 2)
-  currency   String          @default("KZT")
-  provider   PaymentProvider
-  status     PaymentStatus   @default(PENDING)
-  externalId String?
-  rawPayload Json?
-  paidAt     DateTime?
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  id            String          @id @default(uuid())
+  amount        Decimal         @db.Decimal(10, 2)
+  currency      String          @default("KZT")
+  provider      PaymentProvider
+  status        PaymentStatus   @default(PENDING)
+  externalId    String?
+  rawPayload    Json?
+  screenshotUrl String?
+  notes         String?
+  approvedAt    DateTime?
+  approvedBy    String?
+  paidAt        DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
@@ -164,6 +167,16 @@ model AuditLog {
   @@index([entity, entityId])
 }
 
+model SiteSettings {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([key])
+}
+
+// Keep for backward compat
 model ProductSettings {
   id               String   @id @default(uuid())
   productKey       String   @unique
@@ -176,4 +189,69 @@ model ProductSettings {
   updatedAt        DateTime @updatedAt
 
   @@index([productKey])
+}
+
+model AiConversation {
+  id        String      @id @default(uuid())
+  inviteId  String
+  invite    Invite      @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  AiMessage[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@unique([inviteId, userId])
+  @@index([userId])
+  @@index([inviteId])
+}
+
+model AiMessage {
+  id             String         @id @default(uuid())
+  conversationId String
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String         @db.Text
+  type           String?
+  inputTokens    Int            @default(0)
+  outputTokens   Int            @default(0)
+  createdAt      DateTime       @default(now())
+
+  @@index([conversationId])
+  @@index([createdAt])
+}
+
+model InviteTemplate {
+  id            String   @id @default(cuid())
+  title         String
+  slug          String   @unique
+  nameKk        String?
+  nameRu        String?
+  category      String
+  language      String   @default("both")
+  style         String   @default("elegant")
+  description   String?
+  descriptionRu String?
+  previewImage  String?
+  demoImage     String?
+  isActive      Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  isPremium     Boolean  @default(false)
+  bg            String   @default("#FAF8F3")
+  gradient      String   @default("from-stone-50 to-amber-50")
+  accent        String   @default("#C4963E")
+  textDark      String   @default("#1C1917")
+  textMuted     String   @default("#78716C")
+  dark          Boolean  @default(false)
+  emoji         String   @default("✨")
+  demoName1     String   @default("Атыңыз")
+  demoName2     String?
+  tags          String[] @default([])
+  tagsKk        String[] @default([])
+  tagsRu        String[] @default([])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([category])
 }

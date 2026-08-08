@@ -1,86 +1,200 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { listInvites, type InviteWithCount } from "@/lib/data/invites";
-import { StatusBadge } from "@/components/dashboard/StatusBadge";
-import { CopyButton } from "@/components/dashboard/CopyButton";
+import { resolveLang, type Lang } from "@/lib/i18n";
 
-export const metadata: Metadata = { title: "Dashboard — Шақыру" };
+export const dynamic = "force-dynamic";
 
-function relativeDate(date: Date): string {
+export const metadata: Metadata = { title: "Менің шақыруларым — Шақыру" };
+
+const STATUS_MAP = {
+  kk: {
+    DRAFT: { label: "Жоба", bg: "rgba(28,25,23,0.06)", color: "var(--muted)" },
+    PENDING_PAYMENT: { label: "Төлем күтілуде", bg: "rgba(196,150,62,0.1)", color: "var(--gold-dark)" },
+    PAID: { label: "Төленді", bg: "rgba(196,150,62,0.15)", color: "var(--gold)" },
+    PUBLISHED: { label: "Жарияланды", bg: "rgba(34,197,94,0.1)", color: "#16a34a" },
+    EXPIRED: { label: "Мерзімі өтті", bg: "rgba(239,68,68,0.08)", color: "#dc2626" },
+    CANCELLED: { label: "Бекерленді", bg: "rgba(113,113,122,0.1)", color: "#71717a" },
+  },
+  ru: {
+    DRAFT: { label: "Черновик", bg: "rgba(28,25,23,0.06)", color: "var(--muted)" },
+    PENDING_PAYMENT: { label: "Ожидает оплаты", bg: "rgba(196,150,62,0.1)", color: "var(--gold-dark)" },
+    PAID: { label: "Оплачено", bg: "rgba(196,150,62,0.15)", color: "var(--gold)" },
+    PUBLISHED: { label: "Опубликовано", bg: "rgba(34,197,94,0.1)", color: "#16a34a" },
+    EXPIRED: { label: "Срок истёк", bg: "rgba(239,68,68,0.08)", color: "#dc2626" },
+    CANCELLED: { label: "Отменено", bg: "rgba(113,113,122,0.1)", color: "#71717a" },
+  },
+} as const;
+
+const T = {
+  kk: {
+    heading: "Менің шақыруларым",
+    newBtn: "+ Жаңа",
+    statTotal: "Барлығы",
+    statPublished: "Жарияланды",
+    statGuests: "Қонақ жауабы",
+    noRsvp: "Жауап жоқ",
+    edit: "Редакторлау",
+    manage: "Басқару →",
+    emptyTitle: "Шақырулар жоқ",
+    emptyDesc: "Алғашқы шақыруыңызды жасаңыз",
+    emptyCta: "✨ Жаңа шақыру жасау",
+    today: "Бүгін",
+    yesterday: "Кеше",
+    daysAgo: (n: number) => `${n} күн бұрын`,
+    weeksAgo: (n: number) => `${n} апта бұрын`,
+  },
+  ru: {
+    heading: "Мои приглашения",
+    newBtn: "+ Новое",
+    statTotal: "Всего",
+    statPublished: "Опубликовано",
+    statGuests: "Ответы гостей",
+    noRsvp: "Нет ответов",
+    edit: "Редактировать",
+    manage: "Управлять →",
+    emptyTitle: "Приглашений пока нет",
+    emptyDesc: "Создайте своё первое приглашение",
+    emptyCta: "✨ Создать приглашение",
+    today: "Сегодня",
+    yesterday: "Вчера",
+    daysAgo: (n: number) => `${n} дн. назад`,
+    weeksAgo: (n: number) => `${n} нед. назад`,
+  },
+} as const;
+
+function relativeDate(date: Date, lang: Lang): string {
+  const t = T[lang];
   const diff = Math.floor((Date.now() - date.getTime()) / 86_400_000);
-  if (diff === 0) return "Бүгін";
-  if (diff === 1) return "Кеше";
-  if (diff < 7) return `${diff} күн бұрын`;
-  if (diff < 30) return `${Math.floor(diff / 7)} апта бұрын`;
-  return date.toLocaleDateString("kk-KZ");
+  if (diff === 0) return t.today;
+  if (diff === 1) return t.yesterday;
+  if (diff < 7) return t.daysAgo(diff);
+  if (diff < 30) return t.weeksAgo(Math.floor(diff / 7));
+  return date.toLocaleDateString(lang === "ru" ? "ru-RU" : "kk-KZ");
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-4 text-center">
-      <p className="text-2xl font-bold text-zinc-900">{value}</p>
-      <p className="text-xs text-zinc-500 mt-0.5">{label}</p>
-    </div>
-  );
-}
-
-function InviteCard({ invite, appUrl }: { invite: InviteWithCount; appUrl: string }) {
+function InviteCard({
+  invite,
+  appUrl,
+  lang,
+}: {
+  invite: InviteWithCount;
+  appUrl: string;
+  lang: Lang;
+}) {
+  const t = T[lang];
   const shareUrl = `${appUrl}/i/${invite.slug}`;
+  const st =
+    STATUS_MAP[lang][invite.status as keyof typeof STATUS_MAP["kk"]] ??
+    STATUS_MAP[lang].DRAFT;
 
   return (
-    <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-4 flex flex-col gap-3">
+    <div
+      className="rounded-2xl p-5 flex flex-col gap-4 transition-all hover:shadow-md"
+      style={{
+        background: "white",
+        border: "1px solid var(--border)",
+        boxShadow: "0 2px 12px rgba(28,25,23,0.04)",
+      }}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-zinc-900 truncate">{invite.title}</p>
-          <p className="text-xs text-zinc-400 mt-0.5">
-            {relativeDate(invite.createdAt)} ·{" "}
+          <p
+            className="font-semibold truncate"
+            style={{ color: "var(--charcoal)" }}
+          >
+            {invite.title}
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+            {relativeDate(invite.createdAt, lang)} ·{" "}
             {invite._count.guests === 0
-              ? "қонақ жоқ"
-              : `${invite._count.guests} қонақ`}
+              ? t.noRsvp
+              : `${invite._count.guests} RSVP`}
           </p>
         </div>
-        <StatusBadge status={invite.status} />
+        <span
+          className="shrink-0 text-xs font-medium px-2.5 py-1 rounded-full"
+          style={{ background: st.bg, color: st.color }}
+        >
+          {st.label}
+        </span>
       </div>
 
-      <div className="flex items-center gap-2 pt-1 border-t border-zinc-50">
-        <CopyButton text={shareUrl} />
+      <div
+        className="text-xs font-mono truncate px-3 py-2 rounded-xl"
+        style={{ background: "var(--cream)", color: "var(--muted)" }}
+      >
+        {shareUrl}
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <Link
+          href={`/edit/${invite.id}?lang=${lang}`}
+          className="flex-1 text-center py-2 rounded-xl text-sm font-medium transition-all"
+          style={{
+            background: "var(--cream)",
+            color: "var(--charcoal)",
+            border: "1px solid var(--border)",
+          }}
+        >
+          {t.edit}
+        </Link>
         <Link
           href={`/dashboard/invites/${invite.id}`}
-          className="ml-auto inline-flex items-center gap-1 rounded-lg bg-zinc-900 px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-zinc-700"
+          className="flex-1 text-center py-2 rounded-xl text-sm font-semibold text-white transition-all"
+          style={{ background: "var(--charcoal)" }}
         >
-          Басқару
-          <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
-          </svg>
+          {t.manage}
         </Link>
       </div>
     </div>
   );
 }
 
-function EmptyState() {
+function EmptyState({ lang }: { lang: Lang }) {
+  const t = T[lang];
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
-      <div className="w-16 h-16 rounded-full bg-rose-50 flex items-center justify-center text-3xl">
+    <div className="flex flex-col items-center justify-center py-24 text-center gap-6">
+      <div
+        className="w-24 h-24 rounded-3xl flex items-center justify-center text-5xl"
+        style={{
+          background: "rgba(196,150,62,0.06)",
+          border: "1px solid rgba(196,150,62,0.15)",
+        }}
+      >
         💌
       </div>
       <div>
-        <p className="font-semibold text-zinc-800">Шақырулар жоқ</p>
-        <p className="text-sm text-zinc-400 mt-1">Алғашқы шақыруыңызды жасаңыз</p>
+        <p
+          className="font-serif text-xl font-semibold mb-2"
+          style={{ color: "var(--charcoal)" }}
+        >
+          {t.emptyTitle}
+        </p>
+        <p className="text-sm" style={{ color: "var(--muted)" }}>
+          {t.emptyDesc}
+        </p>
       </div>
-      <Link
-        href="/create"
-        className="mt-2 inline-flex h-10 items-center gap-2 rounded-xl bg-rose-500 px-5 text-sm font-semibold text-white shadow-sm shadow-rose-200 hover:bg-rose-600 transition-colors"
-      >
-        + Жаңа шақыру
+      <Link href={`/templates?lang=${lang}`} className="btn-gold">
+        {t.emptyCta}
       </Link>
     </div>
   );
 }
 
-export default async function DashboardPage() {
-  const session = (await getSession())!;
+interface Props {
+  searchParams: Promise<{ lang?: string }>;
+}
+
+export default async function DashboardPage({ searchParams }: Props) {
+  const { lang: langParam } = await searchParams;
+  const lang = resolveLang(langParam);
+  const t = T[lang];
+
+  const session = await getSession();
+  if (!session) redirect("/auth/login");
   const invites = await listInvites(session.userId);
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
@@ -91,29 +205,56 @@ export default async function DashboardPage() {
   };
 
   return (
-    <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-zinc-900">Менің шақыруларым</h1>
-        <Link
-          href="/create"
-          className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-rose-500 px-4 text-sm font-semibold text-white shadow-sm shadow-rose-200 hover:bg-rose-600 transition-colors"
+    <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <h1
+          className="heading-display text-3xl"
+          style={{ color: "var(--charcoal)" }}
         >
-          + Жаңа
+          {t.heading}
+        </h1>
+        <Link href={`/templates?lang=${lang}`} className="btn-gold text-sm">
+          {t.newBtn}
         </Link>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Барлығы" value={stats.total} />
-        <StatCard label="Жарияланды" value={stats.published} />
-        <StatCard label="Қонақтар" value={stats.guests} />
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-4 mb-8">
+        {[
+          { label: t.statTotal, value: stats.total },
+          { label: t.statPublished, value: stats.published },
+          { label: t.statGuests, value: stats.guests },
+        ].map((s) => (
+          <div
+            key={s.label}
+            className="rounded-2xl p-4 text-center"
+            style={{
+              background: "white",
+              border: "1px solid var(--border)",
+              boxShadow: "0 2px 12px rgba(28,25,23,0.04)",
+            }}
+          >
+            <p
+              className="font-serif text-3xl font-bold"
+              style={{ color: "var(--charcoal)" }}
+            >
+              {s.value}
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+              {s.label}
+            </p>
+          </div>
+        ))}
       </div>
 
+      {/* Invite list */}
       {invites.length === 0 ? (
-        <EmptyState />
+        <EmptyState lang={lang} />
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="grid sm:grid-cols-2 gap-4">
           {invites.map((invite) => (
-            <InviteCard key={invite.id} invite={invite} appUrl={appUrl} />
+            <InviteCard key={invite.id} invite={invite} appUrl={appUrl} lang={lang} />
           ))}
         </div>
       )}

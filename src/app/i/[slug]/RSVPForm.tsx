@@ -87,7 +87,7 @@ function DuplicateState() {
 
 // ─── Form ─────────────────────────────────────────────────────────────────────
 
-export function RSVPForm({ inviteId }: { inviteId: string }) {
+export function RSVPForm({ inviteId, accent: _accent }: { inviteId: string; accent?: string }) {
   const [isPending, startTransition] = useTransition();
   const [outcome, setOutcome] = useState<
     "success" | "duplicate" | null

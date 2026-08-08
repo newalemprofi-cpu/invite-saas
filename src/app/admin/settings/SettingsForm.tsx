@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { updateProductSettingsAction } from "./actions";
+import { updateSettingsAction } from "./actions";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 
@@ -9,9 +9,10 @@ interface Props {
   price: number;
   activeDays: number;
   kaspiPaymentLink: string;
+  whatsapp: string;
 }
 
-export function SettingsForm({ price, activeDays, kaspiPaymentLink }: Props) {
+export function SettingsForm({ price, activeDays, kaspiPaymentLink, whatsapp }: Props) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -20,14 +21,11 @@ export function SettingsForm({ price, activeDays, kaspiPaymentLink }: Props) {
     e.preventDefault();
     setError(null);
     setSuccess(false);
-    const formData = new FormData(e.currentTarget);
+    const fd = new FormData(e.currentTarget);
     startTransition(async () => {
-      const result = await updateProductSettingsAction(formData);
-      if (result.error) {
-        setError(result.error);
-      } else {
-        setSuccess(true);
-      }
+      const result = await updateSettingsAction(fd);
+      if (result.error) setError(result.error);
+      else setSuccess(true);
     });
   };
 
@@ -47,6 +45,14 @@ export function SettingsForm({ price, activeDays, kaspiPaymentLink }: Props) {
         name="activeDays"
         defaultValue={activeDays}
         min={1}
+        required
+      />
+      <Input
+        label="WhatsApp нөмірі (заказ алу үшін)"
+        type="tel"
+        name="whatsapp"
+        defaultValue={whatsapp}
+        placeholder="+77010000000"
         required
       />
       <Input

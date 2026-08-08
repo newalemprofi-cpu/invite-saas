@@ -7,24 +7,56 @@ import { z } from "zod";
 import { registerAction } from "@/app/actions/auth";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import type { Lang } from "@/lib/i18n";
 
-const schema = z.object({
-  name: z.string().min(1, "Атыңызды енгізіңіз").max(100),
-  email: z.string().email("Жарамды email енгізіңіз"),
-  phone: z.string().optional(),
-  password: z
-    .string()
-    .min(8, "Пароль кем дегенде 8 таңбадан тұруы керек"),
-});
-type FormData = z.infer<typeof schema>;
+const MESSAGES = {
+  kk: {
+    name: "Атыңызды енгізіңіз",
+    email: "Жарамды email енгізіңіз",
+    passwordMin: "Пароль кем дегенде 8 таңбадан тұруы керек",
+  },
+  ru: {
+    name: "Введите ваше имя",
+    email: "Введите корректный email",
+    passwordMin: "Пароль должен содержать минимум 8 символов",
+  },
+} as const;
+
+const LABELS = {
+  kk: {
+    name: "Аты-жөні", namePlaceholder: "Айдар Сейітов",
+    email: "Email",
+    phone: "Телефон (міндетті емес)", phonePlaceholder: "+7 701 000 00 00",
+    password: "Пароль", passwordPlaceholder: "Кем дегенде 8 таңба",
+    submit: "Тіркелу",
+  },
+  ru: {
+    name: "Имя и фамилия", namePlaceholder: "Айдар Сейитов",
+    email: "Email",
+    phone: "Телефон (необязательно)", phonePlaceholder: "+7 701 000 00 00",
+    password: "Пароль", passwordPlaceholder: "Минимум 8 символов",
+    submit: "Зарегистрироваться",
+  },
+} as const;
 
 interface Props {
   from?: string;
+  lang: Lang;
 }
 
-export function RegisterForm({ from }: Props) {
+export function RegisterForm({ from, lang }: Props) {
   const [serverError, setServerError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const m = MESSAGES[lang];
+  const L = LABELS[lang];
+
+  const schema = z.object({
+    name: z.string().min(1, m.name).max(100),
+    email: z.string().email(m.email),
+    phone: z.string().optional(),
+    password: z.string().min(8, m.passwordMin),
+  });
+  type FormData = z.infer<typeof schema>;
 
   const {
     register,
@@ -35,7 +67,7 @@ export function RegisterForm({ from }: Props) {
   const onSubmit = handleSubmit((data) => {
     setServerError(null);
     startTransition(async () => {
-      const result = await registerAction(data, from);
+      const result = await registerAction(data, from, lang);
       if (result?.error) setServerError(result.error);
     });
   });
@@ -43,15 +75,15 @@ export function RegisterForm({ from }: Props) {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
       <Input
-        label="Аты-жөні"
-        placeholder="Айдар Сейітов"
+        label={L.name}
+        placeholder={L.namePlaceholder}
         autoComplete="name"
         error={errors.name?.message}
         {...register("name")}
       />
       <Input
         type="email"
-        label="Email"
+        label={L.email}
         placeholder="you@example.com"
         autoComplete="email"
         error={errors.email?.message}
@@ -59,16 +91,16 @@ export function RegisterForm({ from }: Props) {
       />
       <Input
         type="tel"
-        label="Телефон (міндетті емес)"
-        placeholder="+7 701 000 00 00"
+        label={L.phone}
+        placeholder={L.phonePlaceholder}
         autoComplete="tel"
         error={errors.phone?.message}
         {...register("phone")}
       />
       <Input
         type="password"
-        label="Пароль"
-        placeholder="Кем дегенде 8 таңба"
+        label={L.password}
+        placeholder={L.passwordPlaceholder}
         autoComplete="new-password"
         error={errors.password?.message}
         {...register("password")}
@@ -79,7 +111,7 @@ export function RegisterForm({ from }: Props) {
         </p>
       )}
       <Button type="submit" loading={isPending} size="lg" className="w-full mt-1">
-        Тіркелу
+        {L.submit}
       </Button>
     </form>
   );
