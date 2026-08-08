@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { listInvites, type InviteWithCount } from "@/lib/data/invites";
 import { resolveLang, type Lang } from "@/lib/i18n";
+import { DeleteInviteButton } from "@/components/dashboard/DeleteInviteButton";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,6 @@ const T = {
     statGuests: "Қонақ жауабы",
     noRsvp: "Жауап жоқ",
     edit: "Редакторлау",
-    manage: "Басқару →",
     emptyTitle: "Шақырулар жоқ",
     emptyDesc: "Алғашқы шақыруыңызды жасаңыз",
     emptyCta: "✨ Жаңа шақыру жасау",
@@ -54,7 +54,6 @@ const T = {
     statGuests: "Ответы гостей",
     noRsvp: "Нет ответов",
     edit: "Редактировать",
-    manage: "Управлять →",
     emptyTitle: "Приглашений пока нет",
     emptyDesc: "Создайте своё первое приглашение",
     emptyCta: "✨ Создать приглашение",
@@ -141,13 +140,11 @@ function InviteCard({
         >
           {t.edit}
         </Link>
-        <Link
-          href={`/dashboard/invites/${invite.id}`}
-          className="flex-1 text-center py-2 rounded-xl text-sm font-semibold text-white transition-all"
-          style={{ background: "var(--charcoal)" }}
-        >
-          {t.manage}
-        </Link>
+        <DeleteInviteButton
+          inviteId={invite.id}
+          lang={lang}
+          className="flex-1 text-center py-2 rounded-xl text-sm font-medium transition-all"
+        />
       </div>
     </div>
   );

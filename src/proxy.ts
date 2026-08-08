@@ -14,12 +14,13 @@ function toLogin(req: NextRequest, from: string) {
 }
 
 export async function proxy(req: NextRequest) {
-  const { pathname } = req.nextUrl;
+  const { pathname, search } = req.nextUrl;
+  const from = pathname + search;
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const key = secretKey();
 
-  if (!token || !key) return toLogin(req, pathname);
+  if (!token || !key) return toLogin(req, from);
 
   try {
     const { payload } = await jwtVerify(token, key);
@@ -31,10 +32,15 @@ export async function proxy(req: NextRequest) {
 
     return NextResponse.next();
   } catch {
-    return toLogin(req, pathname);
+    return toLogin(req, from);
   }
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/admin/:path*", "/create"],
+  // /edit/:path* was missing here: the editor relied solely on its own
+  // page-level requireAuth() check, with no `from=` return path and no
+  // network-level (pre-render) session validation — see the auth-redirect
+  // investigation in the "dashboard invite actions" fix for the full
+  // writeup of why that's the fix for the reported login-redirect bug.
+  matcher: ["/dashboard/:path*", "/admin/:path*", "/create", "/edit/:path*"],
 };

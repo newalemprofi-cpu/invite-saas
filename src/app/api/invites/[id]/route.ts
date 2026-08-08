@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { verifyN8nSecret } from "@/lib/n8n-auth";
 import { getSession } from "@/lib/auth";
+import { deleteFile } from "@/lib/storage";
 
 const patchSchema = z.object({
   // Basic fields
@@ -124,4 +126,56 @@ export async function PATCH(req: NextRequest, { params }: Props) {
   });
 
   return NextResponse.json(updated);
+}
+
+/**
+ * DELETE /api/invites/[id] — owner (or admin) only. Not exposed to the n8n
+ * webhook integration: nothing currently needs automation access to a
+ * destructive action, so it isn't given any (smallest safe surface).
+ */
+export async function DELETE(req: NextRequest, { params }: Props) {
+  const { id } = await params;
+
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+
+  const invite = await db.invite.findUnique({
+    where: { id },
+    select: { userId: true, media: { select: { key: true } } },
+  });
+  if (!invite) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+
+  if (invite.userId !== session.userId && session.role !== "ADMIN") {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
+  try {
+    await db.invite.delete({ where: { id } });
+  } catch (err) {
+    // Payment.invite is `onDelete: Restrict` (financial records are never
+    // cascade-deleted) — an invite that ever reached checkout can't be
+    // hard-deleted. Surface that clearly instead of a raw 500.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && (err.code === "P2003" || err.code === "P2014")) {
+      return NextResponse.json({ error: "HAS_PAYMENTS" }, { status: 409 });
+    }
+    console.error("[invite-delete] failed", err instanceof Error ? err.message : err);
+    return NextResponse.json({ error: "DELETE_FAILED" }, { status: 500 });
+  }
+
+  // Guest/Media/AiConversation rows cascade-delete with the Invite in
+  // Postgres, but the underlying S3/MinIO objects don't — clean those up
+  // now that the DB delete succeeded. Best-effort: a stray orphaned object
+  // is a minor storage cost, not a correctness issue worth failing the
+  // request over (the invite is already gone).
+  await Promise.all(
+    invite.media.map((m) =>
+      deleteFile(m.key).catch((err) => {
+        console.error("[invite-delete] failed to delete media object", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      })
+    )
+  );
+
+  return NextResponse.json({ ok: true });
 }
