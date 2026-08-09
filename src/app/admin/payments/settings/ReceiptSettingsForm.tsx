@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { saveReceiptVerificationSettingsAction } from "./actions";
+import { saveReceiptVerificationSettingsAction, testExtractorConnectionAction } from "./actions";
 import type { ReceiptVerificationSettings } from "@/lib/receipts/settings";
 
 function Toggle({ name, label, defaultChecked, hint }: { name: string; label: string; defaultChecked: boolean; hint?: string }) {
@@ -16,17 +16,44 @@ function Toggle({ name, label, defaultChecked, hint }: { name: string; label: st
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
     <label className="flex flex-col gap-1.5">
       <span className="text-xs font-semibold text-zinc-500">{label}</span>
       {children}
+      {hint && <span className="text-xs text-zinc-400">{hint}</span>}
     </label>
   );
 }
 
 const fieldClass =
   "w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-400";
+
+function TestExtractorButton() {
+  const [isPending, startTransition] = useTransition();
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  return (
+    <div className="flex flex-col gap-2 mt-2">
+      <button
+        type="button"
+        disabled={isPending}
+        onClick={() =>
+          startTransition(async () => {
+            setResult(null);
+            setResult(await testExtractorConnectionAction());
+          })
+        }
+        className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-60 transition-colors w-fit"
+      >
+        {isPending ? "Тексерілуде..." : "Баптауды тексеру"}
+      </button>
+      {result && (
+        <p className={`text-xs ${result.ok ? "text-emerald-600" : "text-red-500"}`}>{result.ok ? "✓ " : "✕ "}{result.message}</p>
+      )}
+    </div>
+  );
+}
 
 export function ReceiptSettingsForm({ settings }: { settings: ReceiptVerificationSettings }) {
   const [isPending, startTransition] = useTransition();
@@ -48,65 +75,76 @@ export function ReceiptSettingsForm({ settings }: { settings: ReceiptVerificatio
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6 max-w-2xl">
       <section className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-5">
-        <h2 className="text-base font-bold text-zinc-900 mb-1">Чекті автоматты тексеру</h2>
+        <h2 className="text-base font-bold text-zinc-900 mb-1">Чекті тексеру</h2>
         <p className="text-xs text-zinc-400 mb-2">
           Күтілетін сома әрқашан нақты Payment жазбасынан алынады (промокодтан кейінгі соңғы сома) — мұнда баға қолмен енгізілмейді.
         </p>
-        <Toggle name="enabled" label="Қосулы" hint="Өшірулі болса, тек WhatsApp түймесі көрінеді, чек жүктеу мүлдем жасырын" defaultChecked={settings.enabled} />
-        <Toggle name="autoApprove" label="Автоматты растау" hint="Барлық тексеру өтсе, төлем қолмен растаусыз бірден PAID болады" defaultChecked={settings.autoApprove} />
+        <Toggle name="enabled" label="Чекті тексеру" hint="Өшірулі болса, тек WhatsApp түймесі көрінеді, чек жүктеу мүлдем жасырын" defaultChecked={settings.enabled} />
+        <Toggle name="autoApproveVerifiedReceipts" label="Автоматты растау" hint="Барлық қосулы тексеру өтсе, төлем қолмен растаусыз бірден PAID болады" defaultChecked={settings.autoApproveVerifiedReceipts} />
+      </section>
+
+      <section className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-5">
+        <h2 className="text-sm font-bold text-zinc-900 mb-2">Экстрактор</h2>
+        <Field label="Экстрактор URL" hint="Бос болса, серверде орнатылған RECEIPT_EXTRACTOR_URL қолданылады">
+          <input type="text" name="extractorUrl" defaultValue={settings.extractorUrl} placeholder="https://extract.alemprofi.com/extract-receipt" className={fieldClass} />
+        </Field>
+        <TestExtractorButton />
       </section>
 
       <section className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-5">
         <h2 className="text-sm font-bold text-zinc-900 mb-2">Сома тексеруі</h2>
         <Toggle name="amountCheck" label="Сома тексеруі" defaultChecked={settings.amountCheck} />
         <div className="mt-3">
-          <Field label="Рұқсат етілген сома айырмасы (₸)">
-            <input type="number" name="allowedAmountDifference" min={0} step={1} defaultValue={settings.allowedAmountDifference} className={fieldClass} />
+          <Field label="Рұқсат етілген айырма (₸)">
+            <input type="number" name="amountTolerance" min={0} step={1} defaultValue={settings.amountTolerance} className={fieldClass} />
           </Field>
         </div>
       </section>
 
       <section className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-5">
-        <h2 className="text-sm font-bold text-zinc-900 mb-2">Алушы тексеруі</h2>
-        <Toggle name="recipientCheck" label="Алушы тексеруі" defaultChecked={settings.recipientCheck} />
+        <h2 className="text-sm font-bold text-zinc-900 mb-2">Төлем әдісі тексеруі</h2>
+        <Toggle name="verifyPaymentMethod" label="Төлем әдісі тексеруі" defaultChecked={settings.verifyPaymentMethod} />
         <div className="mt-3">
-          <Field label="Күтілетін алушы">
-            <input type="text" name="expectedRecipient" defaultValue={settings.expectedRecipient} placeholder="ТОО ALEM PROFI" className={fieldClass} />
+          <Field label="Күтілетін әдіс">
+            <input type="text" name="expectedPaymentMethod" defaultValue={settings.expectedPaymentMethod} placeholder="Kaspi Gold" className={fieldClass} />
           </Field>
         </div>
       </section>
 
       <section className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-5">
-        <h2 className="text-sm font-bold text-zinc-900 mb-2">Уақыт тексеруі</h2>
-        <Toggle name="dateTimeCheck" label="Уақыт/күн тексеруі" defaultChecked={settings.dateTimeCheck} />
+        <h2 className="text-sm font-bold text-zinc-900 mb-2">ЖСН тексеруі</h2>
+        <Toggle name="verifyIin" label="ЖСН тексеруі" defaultChecked={settings.verifyIin} />
         <div className="mt-3">
-          <Field label="Рұқсат етілген төлем терезесі (сағат)">
-            <input type="number" name="allowedTimeWindowHours" min={0} step={1} defaultValue={settings.allowedTimeWindowHours} className={fieldClass} />
+          <Field label="Рұқсат етілген ЖСН тізімі" hint="Әр жолда бір ЖСН немесе үтірмен бөліңіз">
+            <textarea
+              name="allowedIins"
+              defaultValue={settings.allowedIins.join("\n")}
+              placeholder={"123456789012"}
+              rows={3}
+              className={fieldClass}
+            />
           </Field>
         </div>
       </section>
 
       <section className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-5">
-        <h2 className="text-sm font-bold text-zinc-900 mb-2">Чек ID</h2>
+        <h2 className="text-sm font-bold text-zinc-900 mb-2">Чек жасы тексеруі</h2>
+        <Toggle name="verifyReceiptAge" label="Чек жасы тексеруі" defaultChecked={settings.verifyReceiptAge} />
+        <div className="mt-3">
+          <Field label="Максималды жас (сағат)">
+            <input type="number" name="receiptMaxAgeHours" min={0} step={1} defaultValue={settings.receiptMaxAgeHours} className={fieldClass} />
+          </Field>
+        </div>
+      </section>
+
+      <section className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-5">
+        <h2 className="text-sm font-bold text-zinc-900 mb-2">Қайталанатын чек тексеруі</h2>
         <Toggle
-          name="receiptIdUniquenessCheck"
-          label="Чек ID болуы міндетті"
-          hint="Қайталанатын чек әрқашан тексеріледі — бұл баптау тек ID жоқ болған жағдайды басқарады"
-          defaultChecked={settings.receiptIdUniquenessCheck}
+          name="verifyDuplicateReceipt"
+          label="Қайталанатын чек тексеруі"
+          hint="Әдетте қосулы болуы керек"
+          defaultChecked={settings.verifyDuplicateReceipt}
         />
-        <div className="mt-3">
-          <Field label="Минималды сенімділік (0–1, міндетті емес)">
-            <input type="number" name="minConfidence" min={0} max={1} step={0.05} defaultValue={settings.minConfidence ?? ""} placeholder="—" className={fieldClass} />
-          </Field>
-        </div>
-      </section>
-
-      <section className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-5">
-        <h2 className="text-sm font-bold text-zinc-900 mb-2">Сәйкессіздік болғанда</h2>
-        <select name="mismatchAction" defaultValue={settings.mismatchAction} className={fieldClass}>
-          <option value="REVIEW_REQUIRED">Қолмен тексеруге жіберу</option>
-          <option value="REJECTED">Қабылдамау</option>
-        </select>
       </section>
 
       {error && <p className="rounded-xl bg-red-50 border border-red-100 px-4 py-2.5 text-sm text-red-600">{error}</p>}

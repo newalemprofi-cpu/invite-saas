@@ -110,6 +110,25 @@ enum ReceiptStatus {
   FAILED
 }
 
+// Fine-grained, machine-readable reason recorded alongside ReceiptStatus.
+// ReceiptStatus answers "what state is this receipt in / does it need admin
+// attention"; this answers "why" — VERIFIED is the only value that can ever
+// lead to ReceiptStatus.AUTO_VERIFIED, everything else routes to
+// REVIEW_REQUIRED (see src/lib/receipts/verify.ts — there is deliberately
+// no automatic REJECTED outcome; only an admin can reject).
+enum ReceiptVerificationResult {
+  VERIFIED
+  AMOUNT_MISMATCH
+  PAYMENT_METHOD_MISMATCH
+  IIN_MISMATCH
+  RECEIPT_TOO_OLD
+  DUPLICATE_RECEIPT
+  EXTRACTION_FAILED
+  INVALID_RECEIPT
+  NOT_CONFIGURED
+  MANUAL_REVIEW_REQUIRED
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -247,20 +266,36 @@ model PaymentReceipt {
   uploadedBy       User          @relation(fields: [uploadedByUserId], references: [id], onDelete: Restrict)
   source           ReceiptSource @default(WEBSITE)
   mediaKey         String
+  // The PDF actually sent to the (PDF-only) extractor service — equals
+  // `mediaKey` when the customer uploaded a PDF directly, or a converted
+  // one-page wrapper around their JPG/PNG otherwise (see
+  // src/lib/payment/receipt-extractor.ts). Kept separate from `mediaKey` so
+  // the admin/customer preview always shows the original upload untouched.
+  extractionMediaKey String?
 
   receiptId          String?   @unique
   extractedAmount    Decimal?  @db.Decimal(10, 2)
   extractedCurrency  String?
+  // Legacy fields from a prior Anthropic-vision-based extractor — no longer
+  // written by current code (the real extractor has no concept of
+  // recipient/sender/confidence), kept so old rows remain viewable.
   extractedRecipient String?
   extractedSender    String?
-  extractedBank      String?
-  extractedPaidAt    DateTime?
   confidence         Float?
+  extractedBank             String?
+  extractedIin              String?
+  extractedMethodOfPayment  String?
+  // Raw, unparsed datetime string exactly as the extractor returned it —
+  // kept alongside the parsed `extractedPaidAt` so a malformed/unparseable
+  // date is still visible to an admin instead of silently disappearing.
+  extractedDatetimeRaw     String?
+  extractedPaidAt          DateTime?
   rawExtractionJson  Json?
 
-  status        ReceiptStatus @default(UPLOADED)
-  failureReason String?
-  checksJson    Json?
+  status             ReceiptStatus              @default(UPLOADED)
+  verificationResult ReceiptVerificationResult?
+  failureReason      String?
+  checksJson         Json?
 
   createdAt  DateTime  @default(now())
   verifiedAt DateTime?

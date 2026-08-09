@@ -7,45 +7,53 @@
  * always read fresh from Payment.amount (the authoritative finalAmount —
  * see the comment on that field in schema.prisma) by the verification
  * rules engine. Admins only ever configure *tolerance* around it
- * (allowedAmountDifference), never the amount itself.
+ * (amountTolerance), never the amount itself.
  */
 import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 
-export type MismatchAction = "REVIEW_REQUIRED" | "REJECTED";
-
 export interface ReceiptVerificationSettings {
   enabled: boolean;
-  autoApprove: boolean;
+  autoApproveVerifiedReceipts: boolean;
+  /** Admin override for the extractor's base URL. Empty string = use RECEIPT_EXTRACTOR_URL env var. */
+  extractorUrl: string;
+
   amountCheck: boolean;
-  allowedAmountDifference: number;
-  recipientCheck: boolean;
-  expectedRecipient: string;
-  dateTimeCheck: boolean;
-  allowedTimeWindowHours: number;
-  receiptIdUniquenessCheck: boolean;
-  minConfidence: number | null;
-  mismatchAction: MismatchAction;
+  amountTolerance: number;
+
+  verifyPaymentMethod: boolean;
+  expectedPaymentMethod: string;
+
+  verifyIin: boolean;
+  allowedIins: string[];
+
+  verifyReceiptAge: boolean;
+  receiptMaxAgeHours: number;
+
+  /** "This should normally remain enabled" per spec — admin CAN disable it, but auto-verify never bypasses it silently either way (see verify.ts). */
+  verifyDuplicateReceipt: boolean;
 }
 
 const SETTINGS_KEY = "receipt_verification";
 
-// Conservative migration defaults (see task Part 27): verification starts
-// OFF and auto-approval starts OFF, so nothing in the existing manual-Kaspi
-// flow changes behavior until an admin deliberately opts in.
+// Conservative migration defaults: verification and auto-approval both
+// start OFF, so nothing in the existing manual-Kaspi flow changes behavior
+// until an admin deliberately opts in and fills in the required settings
+// (extractor URL, allowed IINs).
 export function defaultReceiptVerificationSettings(): ReceiptVerificationSettings {
   return {
     enabled: false,
-    autoApprove: false,
+    autoApproveVerifiedReceipts: false,
+    extractorUrl: "",
     amountCheck: true,
-    allowedAmountDifference: 0,
-    recipientCheck: false,
-    expectedRecipient: "",
-    dateTimeCheck: true,
-    allowedTimeWindowHours: 24,
-    receiptIdUniquenessCheck: true,
-    minConfidence: null,
-    mismatchAction: "REVIEW_REQUIRED",
+    amountTolerance: 0,
+    verifyPaymentMethod: true,
+    expectedPaymentMethod: "Kaspi Gold",
+    verifyIin: true,
+    allowedIins: [],
+    verifyReceiptAge: true,
+    receiptMaxAgeHours: 24,
+    verifyDuplicateReceipt: true,
   };
 }
 
@@ -55,7 +63,11 @@ export async function getReceiptVerificationSettings(): Promise<ReceiptVerificat
     const row = await db.siteSettings.findUnique({ where: { key: SETTINGS_KEY } });
     if (!row) return d;
     const v = (row.value ?? {}) as Partial<ReceiptVerificationSettings>;
-    return { ...d, ...v };
+    return {
+      ...d,
+      ...v,
+      allowedIins: Array.isArray(v.allowedIins) ? v.allowedIins.filter((x): x is string => typeof x === "string") : d.allowedIins,
+    };
   } catch {
     return d;
   }

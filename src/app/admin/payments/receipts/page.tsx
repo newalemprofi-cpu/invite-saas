@@ -7,6 +7,10 @@ export const metadata: Metadata = { title: "Чектерді тексеру — 
 export const dynamic = "force-dynamic";
 
 export default async function ReceiptsReviewPage() {
+  // FAILED is included for backward compat — older rows from before the
+  // extractor migration may still carry that status; they must remain
+  // visible here (task: "existing manual-review records ... must remain
+  // viewable"), not silently disappear from the queue.
   const receipts = await db.paymentReceipt.findMany({
     where: { status: { in: ["REVIEW_REQUIRED", "FAILED"] }, payment: { status: "PENDING" } },
     orderBy: { createdAt: "asc" },
@@ -26,13 +30,18 @@ export default async function ReceiptsReviewPage() {
   const serialized = receipts.map((r) => ({
     id: r.id,
     status: r.status,
+    verificationResult: r.verificationResult,
     failureReason: r.failureReason,
     receiptId: r.receiptId,
     extractedAmount: r.extractedAmount != null ? Number(r.extractedAmount) : null,
+    extractedBank: r.extractedBank,
+    extractedIin: r.extractedIin,
+    extractedMethodOfPayment: r.extractedMethodOfPayment,
+    extractedDatetimeRaw: r.extractedDatetimeRaw,
+    extractedPaidAt: r.extractedPaidAt ? r.extractedPaidAt.toISOString() : null,
+    // Legacy fields from the retired Anthropic-based extractor — only ever non-null on old rows.
     extractedRecipient: r.extractedRecipient,
     extractedSender: r.extractedSender,
-    extractedBank: r.extractedBank,
-    extractedPaidAt: r.extractedPaidAt ? r.extractedPaidAt.toISOString() : null,
     confidence: r.confidence,
     checks: (r.checksJson as unknown as ReceiptCheck[] | null) ?? [],
     createdAt: r.createdAt.toISOString(),

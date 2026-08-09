@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
-import { updateReceiptVerificationSettings, type MismatchAction } from "@/lib/receipts/settings";
+import { updateReceiptVerificationSettings } from "@/lib/receipts/settings";
+import { testExtractorConnection } from "@/lib/payment/receipt-extractor";
 
 export async function saveReceiptVerificationSettingsAction(formData: FormData): Promise<{ error?: string }> {
   try {
@@ -12,53 +13,64 @@ export async function saveReceiptVerificationSettingsAction(formData: FormData):
   }
 
   const enabled = formData.get("enabled") === "on";
-  const autoApprove = formData.get("autoApprove") === "on";
+  const autoApproveVerifiedReceipts = formData.get("autoApproveVerifiedReceipts") === "on";
+  const extractorUrl = String(formData.get("extractorUrl") ?? "").trim();
   const amountCheck = formData.get("amountCheck") === "on";
-  const recipientCheck = formData.get("recipientCheck") === "on";
-  const dateTimeCheck = formData.get("dateTimeCheck") === "on";
-  const receiptIdUniquenessCheck = formData.get("receiptIdUniquenessCheck") === "on";
-  const mismatchAction = formData.get("mismatchAction") === "REJECTED" ? "REJECTED" : ("REVIEW_REQUIRED" as MismatchAction);
-  const expectedRecipient = String(formData.get("expectedRecipient") ?? "").trim();
+  const verifyPaymentMethod = formData.get("verifyPaymentMethod") === "on";
+  const expectedPaymentMethod = String(formData.get("expectedPaymentMethod") ?? "").trim();
+  const verifyIin = formData.get("verifyIin") === "on";
+  const allowedIins = String(formData.get("allowedIins") ?? "")
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const verifyReceiptAge = formData.get("verifyReceiptAge") === "on";
+  const verifyDuplicateReceipt = formData.get("verifyDuplicateReceipt") === "on";
 
-  const allowedAmountDifference = Number(formData.get("allowedAmountDifference"));
-  if (!Number.isFinite(allowedAmountDifference) || allowedAmountDifference < 0) {
+  const amountTolerance = Number(formData.get("amountTolerance"));
+  if (!Number.isFinite(amountTolerance) || amountTolerance < 0) {
     return { error: "Рұқсат етілген сома айырмасы теріс болмауы керек" };
   }
 
-  const allowedTimeWindowHours = Number(formData.get("allowedTimeWindowHours"));
-  if (!Number.isFinite(allowedTimeWindowHours) || allowedTimeWindowHours < 0) {
-    return { error: "Уақыт терезесі теріс болмауы керек" };
+  const receiptMaxAgeHours = Number(formData.get("receiptMaxAgeHours"));
+  if (!Number.isFinite(receiptMaxAgeHours) || receiptMaxAgeHours < 0) {
+    return { error: "Максималды жас теріс болмауы керек" };
   }
 
-  const minConfidenceRaw = String(formData.get("minConfidence") ?? "").trim();
-  let minConfidence: number | null = null;
-  if (minConfidenceRaw) {
-    const parsed = Number(minConfidenceRaw);
-    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
-      return { error: "Минималды сенімділік 0 мен 1 аралығында болуы керек" };
-    }
-    minConfidence = parsed;
-  }
-
-  if (autoApprove && !enabled) {
+  if (autoApproveVerifiedReceipts && !enabled) {
     return { error: "Автоматты растауды қосу үшін алдымен чекті тексеруді қосыңыз" };
+  }
+  if (verifyPaymentMethod && !expectedPaymentMethod) {
+    return { error: "Күтілетін төлем әдісін енгізіңіз" };
+  }
+  if (verifyIin && allowedIins.length === 0) {
+    return { error: "Кем дегенде бір рұқсат етілген ЖСН/БСН енгізіңіз" };
   }
 
   await updateReceiptVerificationSettings({
     enabled,
-    autoApprove,
+    autoApproveVerifiedReceipts,
+    extractorUrl,
     amountCheck,
-    allowedAmountDifference,
-    recipientCheck,
-    expectedRecipient,
-    dateTimeCheck,
-    allowedTimeWindowHours,
-    receiptIdUniquenessCheck,
-    minConfidence,
-    mismatchAction,
+    amountTolerance,
+    verifyPaymentMethod,
+    expectedPaymentMethod,
+    verifyIin,
+    allowedIins,
+    verifyReceiptAge,
+    receiptMaxAgeHours,
+    verifyDuplicateReceipt,
   });
 
   revalidatePath("/admin/payments/settings");
   revalidatePath("/dashboard/invites");
   return {};
+}
+
+export async function testExtractorConnectionAction(): Promise<{ ok: boolean; message: string }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { ok: false, message: "Рұқсат жоқ" };
+  }
+  return testExtractorConnection();
 }
