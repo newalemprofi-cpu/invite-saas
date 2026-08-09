@@ -49,29 +49,64 @@ function normalizeIin(s: string): string {
   return s.replace(/\D/g, "");
 }
 
+// Kazakhstan ("Дата и время по Астане" on the receipt) is a fixed UTC+5
+// offset with no daylight-saving transitions — unlike almost everywhere
+// else, this never changes across the year, so it's safe to hardcode
+// rather than needing a timezone database.
+const ASTANA_UTC_OFFSET_HOURS = 5;
+
 /**
- * Safely parses the extractor's raw datetime string. Never throws. Tries
- * native Date parsing first (covers ISO 8601 and many common shapes), then
- * a common Kazakhstani bank-receipt format ("DD.MM.YYYY, HH:MM[:SS]").
- * Returns null for anything it can't confidently parse — a malformed date
- * must never be silently treated as "recent enough".
+ * Safely parses the extractor's raw datetime string. Never throws, and
+ * deliberately never falls back to bare `new Date(str)` for Kaspi's own
+ * "DD.MM.YYYY HH:mm" format — V8's ambiguous parser silently reads that as
+ * MM.DD.YYYY (e.g. "09.08.2026" becomes September 8th, not August 9th) and
+ * additionally treats the time as being in the *server process's* local
+ * timezone rather than the receipt's stated Astana time, so the same input
+ * parses differently depending on the container's TZ setting. Both bugs
+ * were reproduced and confirmed against this exact code path — see the
+ * task's final report. Every component below is parsed as plain digits and
+ * combined with the fixed +05:00 offset explicitly, so the result is
+ * identical no matter what timezone this process happens to run in.
+ *
+ * The receipt's stated time is ALREADY Astana-local — it must not receive
+ * a second timezone conversion on top of that.
  */
 export function parseReceiptDatetime(raw: string | null): Date | null {
   if (!raw) return null;
   const trimmed = raw.trim();
   if (!trimmed) return null;
 
-  const native = new Date(trimmed);
-  if (!isNaN(native.getTime())) return native;
+  // Kaspi's own format: DD.MM.YYYY HH:mm[:ss] — always day-first. Never
+  // interpret this as MM.DD.YYYY.
+  const kaspiMatch = trimmed.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (kaspiMatch) {
+    const [, d, mo, y, h, mi, s] = kaspiMatch;
+    return fromAstanaLocal(Number(y), Number(mo), Number(d), Number(h), Number(mi), s ? Number(s) : 0);
+  }
 
-  const m = trimmed.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-  if (m) {
-    const [, d, mo, y, h, mi, s] = m;
-    const date = new Date(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), s ? Number(s) : 0);
-    if (!isNaN(date.getTime())) return date;
+  // Already-ISO 8601 input (e.g. a future extractor version returning
+  // "2026-08-09T22:30:00+05:00") carries its own explicit offset, so this
+  // shape alone is unambiguous and safe to hand to the native parser.
+  if (/^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}/.test(trimmed)) {
+    const iso = new Date(trimmed);
+    if (!isNaN(iso.getTime())) return iso;
   }
 
   return null;
+}
+
+/**
+ * Builds the correct UTC instant from date/time components that are
+ * already Astana (UTC+5) local time — via Date.UTC, so the result never
+ * depends on the running process's own timezone. Returns null for
+ * out-of-range components instead of letting Date.UTC silently roll them
+ * over into a different, wrong date.
+ */
+function fromAstanaLocal(year: number, month: number, day: number, hour: number, minute: number, second: number): Date | null {
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) return null;
+  const utcMs = Date.UTC(year, month - 1, day, hour - ASTANA_UTC_OFFSET_HOURS, minute, second);
+  const date = new Date(utcMs);
+  return isNaN(date.getTime()) ? null : date;
 }
 
 const FUTURE_TOLERANCE_HOURS = 1;
