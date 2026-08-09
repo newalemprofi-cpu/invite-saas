@@ -11,9 +11,11 @@ import { cn } from "@/lib/utils";
 const SUB_NAV = [
   { href: "/admin/payments", label: "Төлемдер тарихы" },
   { href: "/admin/payments/manual", label: "Қолмен төлемдер" },
+  { href: "/admin/payments/receipts", label: "Чектерді тексеру" },
   { href: "/admin/payments/providers", label: "Провайдерлер" },
   { href: "/admin/payments/refunds", label: "Қайтарымдар" },
   { href: "/admin/payments/promocodes", label: "Промокодтар" },
+  { href: "/admin/payments/settings", label: "Баптаулар" },
   { href: "/admin/payments/stats", label: "Статистика" },
 ];
 

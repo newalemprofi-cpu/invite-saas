@@ -94,6 +94,27 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Additional receipt-specific audit trail entry when this payment had a
+    // receipt awaiting human review — the receipt's own status stays
+    // whatever the automated rules found (a frozen record of that verdict);
+    // this just records that an admin then resolved it manually.
+    const pendingReceipt = await tx.paymentReceipt.findFirst({
+      where: { paymentId, status: { in: ["REVIEW_REQUIRED", "FAILED"] } },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    if (pendingReceipt) {
+      await tx.auditLog.create({
+        data: {
+          action: "RECEIPT_MANUALLY_APPROVED",
+          entity: "PaymentReceipt",
+          entityId: pendingReceipt.id,
+          userId: session.userId,
+          meta: { paymentId },
+        },
+      });
+    }
+
     return result;
   });
 

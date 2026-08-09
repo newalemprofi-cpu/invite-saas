@@ -14,6 +14,9 @@ import { buildLoginUrl } from "@/lib/auth-redirect";
 import { getAppOrigin } from "@/lib/site-url";
 import { resolveLang, type Lang } from "@/lib/i18n";
 import { getCheckoutProviders } from "@/lib/payment-providers";
+import { getReceiptVerificationSettings } from "@/lib/receipts/settings";
+import { getAdminConfig } from "@/lib/admin-config";
+import { formatPaymentReference } from "@/lib/payment/reference";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -136,10 +139,12 @@ export default async function InviteDetailPage({ params, searchParams }: Props) 
   const session = await getSession();
   if (!session) redirect(buildLoginUrl({ from: `/dashboard/invites/${id}?lang=${lang}`, lang }));
 
-  const [invite, product, checkoutProviders] = await Promise.all([
+  const [invite, product, checkoutProviders, receiptSettings, adminConfig] = await Promise.all([
     getInvite(id, session.userId, session.role),
     getProductSettings(),
     getCheckoutProviders(),
+    getReceiptVerificationSettings(),
+    getAdminConfig(),
   ]);
   if (!invite) notFound();
 
@@ -148,6 +153,23 @@ export default async function InviteDetailPage({ params, searchParams }: Props) 
     orderBy: { createdAt: "desc" },
     take: 200,
   });
+
+  // The active PENDING payment (if any) drives both the receipt-upload
+  // block and the WhatsApp deep-link — reference/amount always come from
+  // this row, never recomputed from the product price, so a promo-adjusted
+  // amount is reflected correctly (see PaymentFlow's own price display).
+  const pendingPayment = await db.payment.findFirst({
+    where: { inviteId: invite.id, status: "PENDING" },
+    select: { id: true, amount: true },
+    orderBy: { createdAt: "desc" },
+  });
+  const latestReceipt = pendingPayment
+    ? await db.paymentReceipt.findFirst({
+        where: { paymentId: pendingPayment.id },
+        orderBy: { createdAt: "desc" },
+        select: { status: true },
+      })
+    : null;
 
   const data = (invite.data ?? {}) as StoredData;
   const appUrl = await getAppOrigin();
@@ -364,6 +386,12 @@ export default async function InviteDetailPage({ params, searchParams }: Props) 
             price={product.price}
             lang={lang}
             providers={checkoutProviders}
+            receiptVerificationEnabled={receiptSettings.enabled}
+            whatsapp={adminConfig.whatsapp}
+            pendingPaymentId={pendingPayment?.id ?? null}
+            pendingPaymentReference={pendingPayment ? formatPaymentReference(pendingPayment.id) : null}
+            pendingPaymentAmount={pendingPayment ? Number(pendingPayment.amount) : null}
+            latestReceiptStatus={latestReceipt?.status ?? null}
           />
         </div>
       ) : invite.status === "PUBLISHED" ? (

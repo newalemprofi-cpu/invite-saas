@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { KaspiInstructions } from "./KaspiInstructions";
 import { Button } from "@/components/ui/Button";
 import type { Lang } from "@/lib/i18n";
 import type { ProviderId } from "@/lib/payment-providers";
+import type { ReceiptStatus } from "@prisma/client";
+import { formatPaymentReference } from "@/lib/payment/reference";
 
 interface InstructionsData {
   kaspiLink?: string;
@@ -45,9 +48,53 @@ interface Props {
   lang: Lang;
   /** Providers the customer may actually choose — already filtered to enabled + fully configured. */
   providers: CheckoutProviderOption[];
+  /** Whether admin has enabled the receipt-upload/auto-verification feature at all. */
+  receiptVerificationEnabled: boolean;
+  /** Admin's WhatsApp contact number (E.164-ish), reused from existing admin config. */
+  whatsapp: string;
+  /** Id/reference/amount of the current PENDING payment, if one exists — never recomputed client-side. */
+  pendingPaymentId: string | null;
+  pendingPaymentReference: string | null;
+  pendingPaymentAmount: number | null;
+  /** Most recent receipt attempt's status for the current PENDING payment, if any (never AUTO_VERIFIED — that implies the payment is already PAID, not PENDING). */
+  latestReceiptStatus: ReceiptStatus | null;
 }
 
-const T = {
+interface PaymentFlowStrings {
+  pendingTitle: string;
+  pendingBody: string;
+  payTitle: string;
+  back: string;
+  publishTitle: (title: string) => string;
+  choosePayVia: string;
+  oneTime: string;
+  features: string[];
+  genericError: string;
+  planName: string;
+  unavailableTitle: string;
+  unavailableBody: string;
+  priceLabel: string;
+  payableLabel: string;
+  promoPlaceholder: string;
+  apply: string;
+  applying: string;
+  remove: string;
+  freePublish: string;
+  publishedTitle: string;
+  publishedBody: string;
+  paidQuestion: string;
+  uploadReceipt: string;
+  sendViaWhatsapp: string;
+  checking: string;
+  confirmed: string;
+  sentForReview: string;
+  reviewBannerTitle: string;
+  reviewBannerBody: string;
+  openInvite: string;
+  whatsappMessage: (ref: string, amount: number) => string;
+}
+
+const T: Record<Lang, PaymentFlowStrings> = {
   kk: {
     pendingTitle: "Төлем расталуда",
     pendingBody: "Admin 1-24 сағат ішінде растайды. Расталғаннан кейін шақыру автоматты түрде жарияланады.",
@@ -70,6 +117,17 @@ const T = {
     freePublish: "Тегін жариялау",
     publishedTitle: "Сәтті жарияланды! 🎉",
     publishedBody: "Шақыру промокодпен толығымен жабылды және енді жарияланды.",
+    paidQuestion: "Төлем жасадыңыз ба?",
+    uploadReceipt: "Чекті жүктеу",
+    sendViaWhatsapp: "WhatsApp арқылы жіберу",
+    checking: "Чек тексерілуде...",
+    confirmed: "Төлем расталды",
+    sentForReview: "Чек қосымша тексеруге жіберілді",
+    reviewBannerTitle: "Чек қабылданды.",
+    reviewBannerBody: "Төлем қосымша тексеруге жіберілді.",
+    openInvite: "Шақыруды ашу →",
+    whatsappMessage: (ref: string, amount: number) =>
+      `Сәлеметсіз бе!\nШақыру төлемінің чегін жіберемін.\n\nТөлем коды: ${ref}\nСома: ${amount.toLocaleString("kk-KZ")} ₸`,
   },
   ru: {
     pendingTitle: "Платёж подтверждается",
@@ -93,10 +151,35 @@ const T = {
     freePublish: "Опубликовать бесплатно",
     publishedTitle: "Успешно опубликовано! 🎉",
     publishedBody: "Приглашение полностью оплачено промокодом и уже опубликовано.",
+    paidQuestion: "Уже оплатили?",
+    uploadReceipt: "Загрузить чек",
+    sendViaWhatsapp: "Отправить через WhatsApp",
+    checking: "Чек проверяется...",
+    confirmed: "Платёж подтверждён",
+    sentForReview: "Чек отправлен на дополнительную проверку",
+    reviewBannerTitle: "Чек получен.",
+    reviewBannerBody: "Платёж отправлен на дополнительную проверку.",
+    openInvite: "Открыть приглашение →",
+    whatsappMessage: (ref: string, amount: number) =>
+      `Здравствуйте!\nОтправляю чек оплаты приглашения.\n\nКод платежа: ${ref}\nСумма: ${amount.toLocaleString("ru-RU")} ₸`,
   },
-} as const;
+};
 
-export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang, providers }: Props) {
+export function PaymentFlow({
+  inviteId,
+  inviteTitle,
+  currentStatus,
+  price,
+  lang,
+  providers,
+  receiptVerificationEnabled,
+  whatsapp,
+  pendingPaymentId,
+  pendingPaymentReference,
+  pendingPaymentAmount,
+  latestReceiptStatus,
+}: Props) {
+  const router = useRouter();
   const [loadingId, setLoadingId] = useState<ProviderId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [paymentData, setPaymentData] = useState<PaymentResponse | null>(null);
@@ -107,13 +190,36 @@ export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang,
   const t = T[lang];
 
   if (currentStatus === "PENDING_PAYMENT" && !paymentData) {
+    const hasReceiptInFlight = latestReceiptStatus != null;
     return (
-      <div className="rounded-2xl bg-amber-50 border border-amber-100 p-5 flex items-start gap-3">
-        <span className="text-2xl shrink-0">⏳</span>
-        <div>
-          <p className="font-semibold text-amber-800">{t.pendingTitle}</p>
-          <p className="text-sm text-amber-700 mt-0.5 leading-relaxed">{t.pendingBody}</p>
+      <div className="flex flex-col gap-4">
+        <div className="rounded-2xl bg-amber-50 border border-amber-100 p-5 flex items-start gap-3">
+          <span className="text-2xl shrink-0">⏳</span>
+          <div>
+            <p className="font-semibold text-amber-800">{t.pendingTitle}</p>
+            <p className="text-sm text-amber-700 mt-0.5 leading-relaxed">{t.pendingBody}</p>
+          </div>
         </div>
+
+        {hasReceiptInFlight ? (
+          <div className="rounded-2xl bg-blue-50 border border-blue-100 p-4">
+            <p className="text-sm font-semibold text-blue-800">{t.reviewBannerTitle}</p>
+            <p className="text-sm text-blue-700 mt-0.5">{t.reviewBannerBody}</p>
+          </div>
+        ) : (
+          pendingPaymentId &&
+          pendingPaymentReference &&
+          pendingPaymentAmount != null && (
+            <ReceiptSubmitBlock
+              lang={lang}
+              t={t}
+              receiptVerificationEnabled={receiptVerificationEnabled}
+              whatsappNumber={whatsapp}
+              getPaymentContext={async () => ({ id: pendingPaymentId, reference: pendingPaymentReference, amount: pendingPaymentAmount })}
+              onVerified={() => router.refresh()}
+            />
+          )
+        )}
       </div>
     );
   }
@@ -175,6 +281,31 @@ export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang,
       setError(e instanceof Error ? e.message : t.genericError);
     } finally {
       setLoadingId(null);
+    }
+  };
+
+  // Lazily creates the PENDING payment on first receipt-upload attempt from
+  // the initial (no-payment-yet) screen — exactly the same request handlePay
+  // makes for a provider button, just triggered by "Чекті жүктеу" instead.
+  // A customer who already paid (e.g. scanned a static Kaspi QR elsewhere)
+  // shouldn't have to click a provider button first just to attach a receipt.
+  const ensurePayment = async (): Promise<{ id: string; reference: string; amount: number } | null> => {
+    const providerId = providers[0]?.id ?? "KASPI_LINK";
+    try {
+      const res = await fetch("/api/payments/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteId, provider: providerId, lang, ...(appliedPromo ? { promoCode: appliedPromo.code } : {}) }),
+      });
+      const data: PaymentResponse & { error?: string } = await res.json();
+      if (!res.ok) return null;
+      if (data.status === "PAID" && data.published) {
+        router.refresh();
+        return null;
+      }
+      return { id: data.paymentId, reference: formatPaymentReference(data.paymentId), amount: data.amount };
+    } catch {
+      return null;
     }
   };
 
@@ -290,6 +421,17 @@ export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang,
         <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>
       )}
 
+      {finalAmount > 0 && (
+        <ReceiptSubmitBlock
+          lang={lang}
+          t={t}
+          receiptVerificationEnabled={receiptVerificationEnabled}
+          whatsappNumber={whatsapp}
+          getPaymentContext={ensurePayment}
+          onVerified={() => router.refresh()}
+        />
+      )}
+
       <div className="flex flex-col gap-2">
         {finalAmount === 0 ? (
           <Button
@@ -315,6 +457,126 @@ export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang,
           ))
         )}
       </div>
+    </div>
+  );
+}
+
+type Translations = PaymentFlowStrings;
+
+interface PaymentContext {
+  id: string;
+  reference: string;
+  amount: number;
+}
+
+interface ReceiptSubmitBlockProps {
+  lang: Lang;
+  t: Translations;
+  receiptVerificationEnabled: boolean;
+  whatsappNumber: string;
+  /** Returns the Payment to attach the receipt/message to, creating one first if none exists yet. */
+  getPaymentContext: () => Promise<PaymentContext | null>;
+  onVerified: () => void;
+}
+
+const buttonBase =
+  "inline-flex h-10 items-center justify-center gap-1.5 rounded-xl px-4 text-sm font-semibold transition-colors disabled:opacity-50";
+
+function ReceiptSubmitBlock({ lang, t, receiptVerificationEnabled, whatsappNumber, getPaymentContext, onVerified }: ReceiptSubmitBlockProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [whatsappLoading, setWhatsappLoading] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const openWhatsapp = (ctx: PaymentContext) => {
+    const phone = whatsappNumber.replace(/\D/g, "");
+    const href = `https://wa.me/${phone}?text=${encodeURIComponent(t.whatsappMessage(ctx.reference, ctx.amount))}`;
+    window.open(href, "_blank");
+  };
+
+  const handleWhatsapp = async () => {
+    setWhatsappLoading(true);
+    try {
+      const ctx = await getPaymentContext();
+      if (ctx) openWhatsapp(ctx);
+    } finally {
+      setWhatsappLoading(false);
+    }
+  };
+
+  const handleFilePicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setUploading(true);
+    setResult(null);
+    try {
+      const ctx = await getPaymentContext();
+      if (!ctx) {
+        setUploading(false);
+        return;
+      }
+      const form = new FormData();
+      form.append("paymentId", ctx.id);
+      form.append("lang", lang);
+      form.append("file", file);
+      const res = await fetch("/api/payments/receipts/upload", { method: "POST", body: form });
+      const data: { status?: string; message?: string; error?: string } = await res.json();
+
+      if (!res.ok) {
+        setResult({ ok: false, message: data.error ?? t.genericError });
+        return;
+      }
+      if (data.status === "AUTO_VERIFIED" || data.status === "ALREADY_PAID") {
+        setResult({ ok: true, message: t.confirmed });
+        onVerified();
+      } else {
+        setResult({ ok: true, message: t.sentForReview });
+      }
+    } catch {
+      setResult({ ok: false, message: t.genericError });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  if (result) {
+    return (
+      <div className={`rounded-2xl p-4 ${result.ok ? "bg-blue-50 border border-blue-100" : "bg-red-50 border border-red-100"}`}>
+        <p className={`text-sm font-semibold ${result.ok ? "text-blue-800" : "text-red-700"}`}>{result.message}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-zinc-100 bg-zinc-50 p-4 flex flex-col gap-2.5">
+      <p className="text-sm font-semibold text-zinc-700">{t.paidQuestion}</p>
+      {uploading ? (
+        <p className="text-sm text-zinc-500">{t.checking}</p>
+      ) : (
+        <div className="flex gap-2 flex-wrap">
+          {receiptVerificationEnabled && (
+            <button onClick={() => fileInputRef.current?.click()} className={`${buttonBase} bg-zinc-900 text-white hover:bg-zinc-800`}>
+              {t.uploadReceipt}
+            </button>
+          )}
+          <button
+            onClick={handleWhatsapp}
+            disabled={whatsappLoading}
+            className={`${buttonBase} border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50`}
+          >
+            {t.sendViaWhatsapp}
+          </button>
+        </div>
+      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,application/pdf"
+        className="hidden"
+        onChange={handleFilePicked}
+      />
     </div>
   );
 }

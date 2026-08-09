@@ -78,6 +78,23 @@ export async function POST(req: NextRequest) {
         meta: { rejectedBy: session.email },
       },
     });
+
+    const pendingReceipt = await tx.paymentReceipt.findFirst({
+      where: { paymentId, status: { in: ["REVIEW_REQUIRED", "FAILED"] } },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    if (pendingReceipt) {
+      await tx.auditLog.create({
+        data: {
+          action: "RECEIPT_MANUALLY_REJECTED",
+          entity: "PaymentReceipt",
+          entityId: pendingReceipt.id,
+          userId: session.userId,
+          meta: { paymentId },
+        },
+      });
+    }
   });
 
   return NextResponse.json({ success: true, inviteId: payment.inviteId });

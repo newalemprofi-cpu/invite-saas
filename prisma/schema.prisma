@@ -90,6 +90,26 @@ enum PromoUsageStatus {
   RELEASED
 }
 
+enum ReceiptSource {
+  WEBSITE
+  WHATSAPP
+}
+
+// Lifecycle of one uploaded receipt attempt (see PaymentReceipt). Separate
+// from PaymentStatus on purpose — a receipt can fail/be rejected/be stuck
+// in review while the underlying Payment simply stays PENDING throughout;
+// Payment.status only ever changes when a receipt reaches AUTO_VERIFIED
+// (via the shared successful-payment lifecycle) or an admin manually
+// approves/rejects from the review queue.
+enum ReceiptStatus {
+  UPLOADED
+  PROCESSING
+  AUTO_VERIFIED
+  REVIEW_REQUIRED
+  REJECTED
+  FAILED
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -104,6 +124,7 @@ model User {
   payments        Payment[]
   auditLogs       AuditLog[]
   aiConversations AiConversation[]
+  paymentReceipts PaymentReceipt[]
 
   @@index([email])
 }
@@ -195,13 +216,57 @@ model Payment {
   inviteId String
   invite   Invite @relation(fields: [inviteId], references: [id], onDelete: Restrict)
 
-  usage PromoCodeUsage?
+  usage   PromoCodeUsage?
+  receipts PaymentReceipt[]
 
   @@index([userId])
   @@index([inviteId])
   @@index([status])
   @@index([externalId])
   @@index([promoCodeId])
+}
+
+// One row per uploaded/submitted receipt attempt for a Payment. A Payment
+// can have several (a blurry first attempt, a clearer retry) — this is
+// deliberately NOT unique on paymentId. `receiptId` (the bank/Kaspi
+// transaction id extracted from the receipt itself, NOT this row's own
+// `id`) IS unique when present: Postgres unique constraints allow any
+// number of NULLs, which is exactly the "unique when known, unenforced
+// when the extractor couldn't read one" behavior required — see
+// src/lib/receipts/verify.ts for how a NULL receiptId is handled instead
+// (never silently treated as "safe").
+//
+// Payment.amount is the single authoritative expected amount (see the
+// comment on that field) — verification always reads it fresh from the
+// Payment row, never a value cached here or sent by the client.
+model PaymentReceipt {
+  id               String        @id @default(uuid())
+  paymentId        String
+  payment          Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  uploadedByUserId String
+  uploadedBy       User          @relation(fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  source           ReceiptSource @default(WEBSITE)
+  mediaKey         String
+
+  receiptId          String?   @unique
+  extractedAmount    Decimal?  @db.Decimal(10, 2)
+  extractedCurrency  String?
+  extractedRecipient String?
+  extractedSender    String?
+  extractedBank      String?
+  extractedPaidAt    DateTime?
+  confidence         Float?
+  rawExtractionJson  Json?
+
+  status        ReceiptStatus @default(UPLOADED)
+  failureReason String?
+  checksJson    Json?
+
+  createdAt  DateTime  @default(now())
+  verifiedAt DateTime?
+
+  @@index([paymentId])
+  @@index([status])
 }
 
 // Admin-managed discount codes for the single existing invitation product
