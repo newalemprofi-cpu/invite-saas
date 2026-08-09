@@ -37,6 +37,7 @@ export default async function EditPage({ params, searchParams }: Props) {
   return (
     <EditorClient
       inviteId={invite.id}
+      inviteSlug={invite.slug}
       template={tmpl ?? null}
       inviteStatus={invite.status}
       lang={lang}

@@ -22,6 +22,8 @@ export type { EditorData, Section };
 interface Props {
   /** null = anonymous/pre-account draft (no Invite row yet); string = editing a real invite. */
   inviteId: string | null;
+  /** Public slug for the "Қарау ↗" link — /i/[slug] is keyed by slug, never by id. */
+  inviteSlug?: string | null;
   initialData: EditorData;
   template: Template | null;
   inviteStatus?: string;
@@ -225,7 +227,7 @@ function migrateSections(legacy: string[], existing: Section[]): Section[] {
   return DEFAULT_SECTIONS;
 }
 
-export function EditorClient({ inviteId, initialData, template, inviteStatus, lang: initialLang, recommendedTracks = [] }: Props) {
+export function EditorClient({ inviteId, inviteSlug, initialData, template, inviteStatus, lang: initialLang, recommendedTracks = [] }: Props) {
   const preview = useSingleAudioPreview();
   const isDraftMode = inviteId === null;
   const [lang, setLang] = useState<Lang>(initialLang);
@@ -371,9 +373,9 @@ export function EditorClient({ inviteId, initialData, template, inviteStatus, la
             {saving ? t.saving : saveState === "saved" ? t.saved : saveState === "error" ? t.saveError : "."}
           </span>
 
-          {!isDraftMode && inviteStatus === "PUBLISHED" && (
+          {!isDraftMode && inviteStatus === "PUBLISHED" && inviteSlug && (
             <Link
-              href={`/i/${inviteId}`}
+              href={`/i/${inviteSlug}`}
               target="_blank"
               className="text-sm font-medium px-3 py-1.5 rounded-lg"
               style={{ background: "rgba(255,255,255,0.08)", color: "#FAF8F3" }}
