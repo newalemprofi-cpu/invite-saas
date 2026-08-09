@@ -181,6 +181,29 @@ model Media {
   @@index([inviteId])
 }
 
+// Admin-curated background-music catalog offered to customers in the
+// constructor's "recommended songs" list. Deliberately its own model (not
+// squeezed into the generic SiteSettings JSON blob): it needs multiple,
+// orderable, individually-deletable rows — the same reason InviteTemplate
+// below is its own model rather than a settings key. Every row must point
+// at a real object the admin actually uploaded (see /admin/music) — never
+// a title-only placeholder with no audio behind it.
+model RecommendedTrack {
+  id        String   @id @default(uuid())
+  title     String
+  artist    String?
+  key       String   @unique
+  mimeType  String
+  size      Int
+  duration  Int?
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([enabled, sortOrder])
+}
+
 model AuditLog {
   id        String   @id @default(uuid())
   action    String

@@ -56,11 +56,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (provider === "MANUAL_KASPI") {
-    const kaspiConfig = await getKaspiLinkConfig();
-    if (!kaspiConfig.enabled) {
-      return NextResponse.json({ error: "PROVIDER_DISABLED" }, { status: 409 });
-    }
+  // Only MANUAL_KASPI has a working create-payment path today (see
+  // src/lib/payment-providers.ts's NOT_IMPLEMENTED_PROVIDERS doc comment).
+  // Without this check, requesting APIPAY/CLOUDPAYMENTS would silently
+  // create a Payment tagged with that provider but show Kaspi instructions
+  // anyway — a real, misleading bug, not a hypothetical one.
+  if (provider !== "MANUAL_KASPI") {
+    return NextResponse.json({ error: "PROVIDER_NOT_IMPLEMENTED" }, { status: 409 });
+  }
+  const kaspiConfig = await getKaspiLinkConfig();
+  if (!kaspiConfig.enabled) {
+    return NextResponse.json({ error: "PROVIDER_DISABLED" }, { status: 409 });
   }
 
   const product = await getProductSettings();

@@ -3,6 +3,7 @@ import { getDbTemplate } from "@/lib/db-templates";
 import { getTemplate } from "@/lib/templates";
 import { buildFreshEditorData } from "@/lib/invite-editor-data";
 import { resolveLang } from "@/lib/i18n";
+import { getEnabledRecommendedTracks } from "@/lib/recommended-tracks";
 import { EditorClient } from "@/app/edit/[inviteId]/EditorClient";
 
 export const dynamic = "force-dynamic";
@@ -28,12 +29,15 @@ export default async function NewInvitationPage({ searchParams }: Props) {
   const tmpl = (await getDbTemplate(template)) ?? getTemplate(template);
   if (!tmpl) redirect(`/templates?lang=${lang}`);
 
+  const recommendedTracks = await getEnabledRecommendedTracks();
+
   return (
     <EditorClient
       inviteId={null}
       template={tmpl}
       lang={lang}
       initialData={buildFreshEditorData(tmpl)}
+      recommendedTracks={recommendedTracks}
     />
   );
 }

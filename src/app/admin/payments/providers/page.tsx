@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
-import { getPaymentProviders, type StubProviderId } from "@/lib/payment-providers";
+import { getPaymentProviders, NOT_IMPLEMENTED_PROVIDERS } from "@/lib/payment-providers";
 import { KaspiProviderForm } from "./KaspiProviderForm";
 
 export const metadata: Metadata = { title: "Провайдерлер — Admin" };
 export const dynamic = "force-dynamic";
 
-const STUB_LABELS: Record<StubProviderId, string> = {
-  APIPAY: "ApiPay",
-  FREEDOM_PAY: "Freedom Pay",
-  HALYK_EPAY: "Halyk ePay",
-  WOOPPAY: "Wooppay",
-};
-
 export default async function ProvidersPage() {
   const providers = await getPaymentProviders();
+  const kaspi = providers.KASPI_LINK;
+  const kaspiConfigured = Boolean(kaspi.config.paymentUrl);
+  const kaspiStatus = !kaspi.enabled
+    ? { label: "Өшірулі", cls: "bg-zinc-100 text-zinc-500" }
+    : kaspiConfigured
+      ? { label: "Қолжетімді / Бапталған", cls: "bg-emerald-100 text-emerald-700" }
+      : { label: "Қолжетімді / Баптау қажет", cls: "bg-amber-100 text-amber-700" };
 
   return (
     <div className="space-y-6">
@@ -25,24 +25,34 @@ export default async function ProvidersPage() {
       </div>
 
       <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-6">
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
           <h2 className="text-base font-bold text-zinc-900">Kaspi (сілтеме + қолмен растау)</h2>
-          <span className="rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider">
-            Негізгі
+          <span className={`rounded-full text-[10px] font-bold px-2.5 py-1 uppercase tracking-wider ${kaspiStatus.cls}`}>
+            {kaspiStatus.label}
           </span>
         </div>
-        <KaspiProviderForm provider={providers.KASPI_LINK} />
+        <KaspiProviderForm provider={kaspi} />
       </div>
 
       <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-6">
         <h2 className="text-base font-bold text-zinc-900 mb-1">Басқа провайдерлер</h2>
-        <p className="text-xs text-zinc-400 mb-4">Әзірге қосылмаған — келешекте іске асырылады</p>
+        <p className="text-xs text-zinc-400 mb-4">
+          Бұларға интеграция коды жазылмаған — сондықтан баптау формасы жоқ. Тек Kaspi ғана нақты
+          төлемдерді өңдей алады.
+        </p>
         <div className="divide-y divide-zinc-50">
-          {(Object.keys(STUB_LABELS) as StubProviderId[]).map((id) => (
-            <div key={id} className="flex items-center justify-between py-3">
-              <span className="text-sm font-medium text-zinc-700">{STUB_LABELS[id]}</span>
-              <span className="rounded-full bg-zinc-100 text-zinc-400 text-[10px] font-bold px-2.5 py-1 uppercase tracking-wider">
-                {providers[id].enabled ? "Қосулы" : "Қосылмаған"}
+          {NOT_IMPLEMENTED_PROVIDERS.map((p) => (
+            <div key={p.id} className="flex items-center justify-between py-3 gap-3 flex-wrap">
+              <div>
+                <span className="text-sm font-medium text-zinc-700">{p.label}</span>
+                {p.envVars.length > 0 && (
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    Болашақта қажет болатын: {p.envVars.join(", ")}
+                  </p>
+                )}
+              </div>
+              <span className="rounded-full bg-zinc-100 text-zinc-500 text-[10px] font-bold px-2.5 py-1 uppercase tracking-wider shrink-0">
+                Интеграция жасалмаған
               </span>
             </div>
           ))}

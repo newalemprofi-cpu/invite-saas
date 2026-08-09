@@ -241,6 +241,24 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
         </div>
       )}
 
+      {/* Background invitation audio — a small floating control, never an
+          in-page section (see MusicPlayer.tsx). Positioned here so it sits
+          above every section via fixed positioning regardless of scroll.
+          Gated on musicEnabled alone (not a "music" section/block id — see
+          the comment by BLOCK_META in EditorClient.tsx for why that
+          previously-separate toggle was removed as a source of bugs). */}
+      {d.musicEnabled && d.musicUrl && (
+        <MusicPlayer
+          url={d.musicUrl}
+          title={d.musicTitle ?? undefined}
+          accent={accent}
+          isDark={isDark}
+          textMuted={textMuted}
+          loop={d.musicLoop ?? true}
+          autoplay={d.musicAutoplay ?? false}
+        />
+      )}
+
       {/* ── Hero ── */}
       <section className="relative min-h-screen flex flex-col items-center justify-center px-6 py-20 overflow-hidden">
         {/* Background layers */}
@@ -382,21 +400,6 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
             <p className="label-caps mb-5" style={{ color: "var(--gold)" }}>Біздің тарих</p>
             <p className="text-base leading-relaxed" style={{ color: "var(--charcoal)" }}>{d.loveStory}</p>
           </div>
-        </section>
-      )}
-
-      {/* ── Music ── */}
-      {has("music") && d.musicEnabled && d.musicUrl && (
-        <section className="py-6" style={{ background: isDark ? "#141110" : "var(--ivory)" }}>
-          <MusicPlayer
-            url={d.musicUrl}
-            title={d.musicTitle ?? undefined}
-            accent={accent}
-            isDark={isDark}
-            textMuted={textMuted}
-            loop={d.musicLoop ?? true}
-            autoplay={d.musicAutoplay ?? false}
-          />
         </section>
       )}
 

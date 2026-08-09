@@ -5,10 +5,11 @@ import { getObjectStream, statFile, isStorageConfigured } from "@/lib/storage";
 export const runtime = "nodejs";
 
 // Only these top-level prefixes are ever created by this app (see
-// /api/uploads, /api/uploads/anonymous, lib/data/invites.ts). Restricting
-// the proxy to them means it can never be used to fetch some unrelated
-// object that happens to also live in the bucket.
-const ALLOWED_PREFIXES = ["temp/", "invites/"];
+// /api/uploads, /api/uploads/anonymous, lib/data/invites.ts, and
+// music/recommended/ from /admin/music — src/lib/recommended-tracks.ts).
+// Restricting the proxy to them means it can never be used to fetch some
+// unrelated object that happens to also live in the bucket.
+const ALLOWED_PREFIXES = ["temp/", "invites/", "music/"];
 
 /**
  * Reconstructs and validates the object key from a catch-all route's path
@@ -39,9 +40,12 @@ function resolveObjectKey(segments: string[]): string | null {
 }
 
 function cacheControlFor(key: string): string {
-  if (key.startsWith("invites/")) {
+  if (key.startsWith("invites/") || key.startsWith("music/")) {
     // Filenames are random (uuid-based) and never overwritten in place —
-    // safe to cache forever once fetched.
+    // safe to cache forever once fetched. Deleting a RecommendedTrack row
+    // removes the DB reference immediately; the (now-orphaned) object may
+    // stay cached briefly, which is harmless since nothing links to it
+    // anymore.
     return "public, max-age=31536000, immutable";
   }
   // temp/* is a pre-account draft's own upload: not meant to be cached by

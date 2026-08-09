@@ -10,6 +10,7 @@ const NAV = [
   { href: "/admin/payments", label: "Төлемдер" },
   { href: "/admin/analytics", label: "Аналитика" },
   { href: "/admin/templates", label: "Шаблондар" },
+  { href: "/admin/music", label: "Музыка" },
   { href: "/admin/site", label: "Сайт CMS" },
   { href: "/admin/settings", label: "Баптаулар" },
 ];

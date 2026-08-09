@@ -62,7 +62,8 @@ export const DEFAULT_SECTIONS: Section[] = [
   { id: "map", enabled: true },
   { id: "rsvp", enabled: true },
   { id: "whatsapp", enabled: false },
-  { id: "music", enabled: false },
+  // No "music" section id here on purpose — see the matching comment next
+  // to BLOCK_META in EditorClient.tsx. musicEnabled is the sole toggle.
   { id: "love_story", enabled: false },
   { id: "video_section", enabled: false },
   { id: "dress_code", enabled: false },

@@ -4,6 +4,7 @@ import { getInvite } from "@/lib/data/invites";
 import { getTemplate } from "@/lib/templates";
 import { parseEditorData } from "@/lib/invite-editor-data";
 import { resolveLang } from "@/lib/i18n";
+import { getEnabledRecommendedTracks } from "@/lib/recommended-tracks";
 import { EditorClient } from "./EditorClient";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +32,7 @@ export default async function EditPage({ params, searchParams }: Props) {
   const d = (invite.data ?? {}) as Record<string, unknown>;
   const initialData = parseEditorData(d, "wedding-rose");
   const tmpl = getTemplate(initialData.templateSlug);
+  const recommendedTracks = await getEnabledRecommendedTracks();
 
   return (
     <EditorClient
@@ -39,6 +41,7 @@ export default async function EditPage({ params, searchParams }: Props) {
       inviteStatus={invite.status}
       lang={lang}
       initialData={initialData}
+      recommendedTracks={recommendedTracks}
     />
   );
 }

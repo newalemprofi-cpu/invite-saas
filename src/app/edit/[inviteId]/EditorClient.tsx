@@ -13,7 +13,9 @@ import { loadAnonymousDraft, saveAnonymousDraft, createDraftToken } from "@/lib/
 import type { UploadTarget } from "@/lib/useUpload";
 import { InvitePreview } from "./InvitePreview";
 import { ImageUploadField, GalleryUploader, MusicUploader } from "./uploads";
+import { useSingleAudioPreview } from "./useSingleAudioPreview";
 import type { Lang } from "@/lib/i18n";
+import type { PlayableTrack } from "@/lib/recommended-tracks";
 
 export type { EditorData, Section };
 
@@ -24,6 +26,8 @@ interface Props {
   template: Template | null;
   inviteStatus?: string;
   lang: Lang;
+  /** Admin-curated, actually-playable songs — see src/lib/recommended-tracks.ts. Empty until an admin uploads some. */
+  recommendedTracks?: PlayableTrack[];
 }
 
 const BLOCK_META: { id: string; icon: string; kk: string; ru: string }[] = [
@@ -41,18 +45,12 @@ const BLOCK_META: { id: string; icon: string; kk: string; ru: string }[] = [
   { id: "contacts", icon: "📞", kk: "Байланыс", ru: "Контакты" },
   { id: "gift_info", icon: "🎁", kk: "Сыйлық ақпараты", ru: "Информация о подарках" },
   { id: "whatsapp", icon: "💬", kk: "WhatsApp", ru: "WhatsApp" },
-  { id: "music", icon: "🎵", kk: "Музыка", ru: "Музыка" },
-];
-
-const ROMANTIC_PLAYLIST = [
-  { title: "A Thousand Years — Christina Perri" },
-  { title: "Perfect — Ed Sheeran" },
-  { title: "Can't Help Falling in Love — Elvis Presley" },
-  { title: "Thinking Out Loud — Ed Sheeran" },
-  { title: "All of Me — John Legend" },
-  { title: "Қалам — Imanbek" },
-  { title: "Менің жарым — Кайрат Нуртас" },
-  { title: "Жаным — Dos Mukasan" },
+  // Deliberately no "music" entry here: music is a floating background
+  // control, not an orderable content section — it's controlled solely by
+  // the Media tab's own "Музыканы қосу" toggle (musicEnabled). Keeping it
+  // in this list too caused a real bug: a customer could enable music in
+  // the Media tab and have it silently never appear on the public page
+  // because this separate Blocks-tab checkbox defaulted off.
 ];
 
 const FONTS = [
@@ -133,6 +131,9 @@ const T = {
     musicTitleLabel: "Атауы",
     musicTitlePlaceholder: "Ән атауы — Орындаушы",
     predefinedSongs: "Ұсынылған әндер",
+    noRecommendedTracks: "Әзірге ұсынылған ән жоқ. Өз әніңізді жүктей аласыз.",
+    playPreview: "Тыңдап көру",
+    pausePreview: "Тоқтату",
     uploadOwnMusic: "Өз әніңізді жүктеу",
     musicSettings: "Параметрлер",
     repeat: "🔁 Қайталау",
@@ -203,6 +204,9 @@ const T = {
     musicTitleLabel: "Название",
     musicTitlePlaceholder: "Название — Исполнитель",
     predefinedSongs: "Готовые песни",
+    noRecommendedTracks: "Пока нет готовых песен. Вы можете загрузить свою музыку.",
+    playPreview: "Прослушать",
+    pausePreview: "Остановить",
     uploadOwnMusic: "Загрузить свою музыку",
     musicSettings: "Настройки",
     repeat: "🔁 Повтор",
@@ -221,7 +225,8 @@ function migrateSections(legacy: string[], existing: Section[]): Section[] {
   return DEFAULT_SECTIONS;
 }
 
-export function EditorClient({ inviteId, initialData, template, inviteStatus, lang: initialLang }: Props) {
+export function EditorClient({ inviteId, initialData, template, inviteStatus, lang: initialLang, recommendedTracks = [] }: Props) {
+  const preview = useSingleAudioPreview();
   const isDraftMode = inviteId === null;
   const [lang, setLang] = useState<Lang>(initialLang);
   const t = T[lang];
@@ -252,6 +257,14 @@ export function EditorClient({ inviteId, initialData, template, inviteStatus, la
   // On first client paint, resume a matching localStorage draft (same
   // template) if one exists, or persist the fresh one so its token/template
   // stay stable across reloads. Skipped entirely outside draft mode.
+  // Stop any track preview playing when the constructor unmounts (e.g.
+  // navigating away) — the shared audio element otherwise keeps playing
+  // since it lives outside this component's own lifecycle. `preview.stop`
+  // operates on module-level state, not component state, so it's safe to
+  // capture once at mount rather than re-subscribing every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => () => preview.stop(), []);
+
   useEffect(() => {
     if (!isDraftMode || hydratedRef.current) return;
     hydratedRef.current = true;
@@ -773,25 +786,51 @@ export function EditorClient({ inviteId, initialData, template, inviteStatus, la
                         </p>
                       )}
 
-                      {/* Predefined playlist */}
+                      {/* Recommended tracks — admin-curated, real audio only (see /admin/music) */}
                       <div>
                         <p className="text-xs font-medium mb-2" style={{ color: "var(--muted)" }}>{t.predefinedSongs}</p>
-                        <div className="flex flex-col gap-1">
-                          {ROMANTIC_PLAYLIST.map((song) => (
-                            <button
-                              key={song.title}
-                              onClick={() => update({ musicTitle: song.title, musicUrl: "" })}
-                              className="text-left px-3 py-2 rounded-lg text-xs transition-all"
-                              style={{
-                                background: !data.musicUrl && data.musicTitle === song.title ? "rgba(196,150,62,0.1)" : "var(--cream)",
-                                border: `1px solid ${!data.musicUrl && data.musicTitle === song.title ? "rgba(196,150,62,0.3)" : "var(--border)"}`,
-                                color: "var(--charcoal)",
-                              }}
-                            >
-                              🎵 {song.title}
-                            </button>
-                          ))}
-                        </div>
+                        {recommendedTracks.length === 0 ? (
+                          <p className="text-xs" style={{ color: "var(--muted)" }}>{t.noRecommendedTracks}</p>
+                        ) : (
+                          <div className="flex flex-col gap-1">
+                            {recommendedTracks.map((track) => {
+                              const label = track.artist ? `${track.title} — ${track.artist}` : track.title;
+                              const isSelected = !!data.musicUrl && data.musicUrl === track.url;
+                              const isPlaying = preview.playingUrl === track.url;
+                              return (
+                                <div
+                                  key={track.id}
+                                  className="flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all"
+                                  style={{
+                                    background: isSelected ? "rgba(196,150,62,0.1)" : "var(--cream)",
+                                    border: `1px solid ${isSelected ? "rgba(196,150,62,0.3)" : "var(--border)"}`,
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => preview.toggle(track.url)}
+                                    className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs text-white"
+                                    style={{ background: accent }}
+                                    aria-label={isPlaying ? t.pausePreview : t.playPreview}
+                                  >
+                                    {isPlaying ? "⏸" : "▶"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => update({ musicTitle: label, musicUrl: track.url })}
+                                    className="flex-1 min-w-0 text-left text-xs truncate"
+                                    style={{ color: "var(--charcoal)" }}
+                                  >
+                                    {label}
+                                  </button>
+                                  {isSelected && (
+                                    <span className="text-xs shrink-0" style={{ color: "var(--gold-dark)" }}>✓</span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
 
                       {/* Own upload */}

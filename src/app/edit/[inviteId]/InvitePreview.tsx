@@ -2,6 +2,7 @@
 
 import type { Template } from "@/lib/templates";
 import type { EditorData } from "./EditorClient";
+import { useSingleAudioPreview } from "./useSingleAudioPreview";
 
 interface Props {
   data: EditorData;
@@ -17,6 +18,7 @@ function fmt(s: string) {
 }
 
 export function InvitePreview({ data, template }: Props) {
+  const preview = useSingleAudioPreview();
   const accent = data.accentColor || template?.accent || "#C4963E";
   const textDark = template?.textDark || "#1C1917";
   const textMuted = template?.textMuted || "#78716C";
@@ -221,17 +223,32 @@ export function InvitePreview({ data, template }: Props) {
             </div>
           );
 
-          if (id === "music" && data.musicEnabled && data.musicUrl) return (
-            <div key="music" className="mx-4 my-2 p-3 rounded-xl flex items-center gap-2 shrink-0"
-              style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}>
-              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: accent }} />
-              <p className="text-[10px] truncate" style={{ color: textMuted }}>{data.musicTitle || "Музыка"}</p>
-            </div>
-          );
-
           return null;
         })}
       </div>
+
+      {/* Background audio — floating, not part of the scrolling section
+          list (matches the public page's own floating control). Gated on
+          musicEnabled alone, same as /i/[slug]/page.tsx. */}
+      {data.musicEnabled && data.musicUrl && (
+        <button
+          type="button"
+          onClick={() => preview.toggle(data.musicUrl)}
+          className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-full pl-1 pr-2.5 py-1 max-w-[85%]"
+          style={{
+            background: isDark ? "rgba(20,17,16,0.85)" : "rgba(255,255,255,0.9)",
+            border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}`,
+          }}
+        >
+          <span
+            className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[9px] text-white"
+            style={{ background: accent }}
+          >
+            {preview.playingUrl === data.musicUrl ? "⏸" : "▶"}
+          </span>
+          <span className="text-[9px] truncate" style={{ color: textMuted }}>{data.musicTitle || "Музыка"}</span>
+        </button>
+      )}
     </div>
   );
 }
