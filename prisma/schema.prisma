@@ -55,6 +55,9 @@ enum PaymentProvider {
   MANUAL_KASPI
   APIPAY
   CLOUDPAYMENTS
+  FREEDOM_PAY
+  HALYK_EPAY
+  WOOPPAY
 }
 
 enum PaymentStatus {

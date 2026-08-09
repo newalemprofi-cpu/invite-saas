@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     "";
 
   // 1 — Verify signature
-  const isValid = verifyWebhookSignature(provider, rawBody, signature);
+  const isValid = await verifyWebhookSignature(provider, rawBody, signature);
   if (!isValid) {
     console.warn(`[webhook] Invalid signature for provider ${provider}`);
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
@@ -37,7 +37,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // 3 — Dispatch to provider parser
+  // 3 — Dispatch to provider parser. FREEDOM_PAY/HALYK_EPAY/WOOPPAY have no
+  // parser here on purpose — there's no real API documentation to build
+  // one against without fabricating a payload contract, so a webhook from
+  // those providers safely falls through to the generic ack below and is
+  // a no-op rather than a guess. Every provider is still fully payable via
+  // the manual admin-approval flow regardless (see /admin/payments/manual).
   if (provider === "APIPAY") {
     return handleParsedWebhook(apipayProvider.parseWebhookPayload(body), body);
   }

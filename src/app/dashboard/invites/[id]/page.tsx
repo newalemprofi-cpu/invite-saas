@@ -13,7 +13,7 @@ import { EVENT_TYPES, THEMES, TEMPLATES } from "@/types/invite";
 import { buildLoginUrl } from "@/lib/auth-redirect";
 import { getAppOrigin } from "@/lib/site-url";
 import { resolveLang, type Lang } from "@/lib/i18n";
-import { getKaspiLinkConfig } from "@/lib/payment-providers";
+import { getCheckoutProviders } from "@/lib/payment-providers";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -136,10 +136,10 @@ export default async function InviteDetailPage({ params, searchParams }: Props) 
   const session = await getSession();
   if (!session) redirect(buildLoginUrl({ from: `/dashboard/invites/${id}?lang=${lang}`, lang }));
 
-  const [invite, product, kaspiConfig] = await Promise.all([
+  const [invite, product, checkoutProviders] = await Promise.all([
     getInvite(id, session.userId, session.role),
     getProductSettings(),
-    getKaspiLinkConfig(),
+    getCheckoutProviders(),
   ]);
   if (!invite) notFound();
 
@@ -363,9 +363,7 @@ export default async function InviteDetailPage({ params, searchParams }: Props) 
             currentStatus={invite.status}
             price={product.price}
             lang={lang}
-            kaspiEnabled={kaspiConfig.enabled}
-            contactEmail={kaspiConfig.config.adminEmail}
-            contactPhone={kaspiConfig.config.adminPhone}
+            providers={checkoutProviders}
           />
         </div>
       ) : invite.status === "PUBLISHED" ? (

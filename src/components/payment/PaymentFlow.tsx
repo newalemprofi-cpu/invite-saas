@@ -4,8 +4,9 @@ import { useState } from "react";
 import { KaspiInstructions } from "./KaspiInstructions";
 import { Button } from "@/components/ui/Button";
 import type { Lang } from "@/lib/i18n";
+import type { ProviderId } from "@/lib/payment-providers";
 
-interface KaspiData {
+interface InstructionsData {
   kaspiLink?: string;
   phone?: string;
   amount: number;
@@ -16,7 +17,12 @@ interface KaspiData {
 interface PaymentResponse {
   paymentId: string;
   amount: number;
-  instructions: KaspiData;
+  instructions: InstructionsData;
+}
+
+export interface CheckoutProviderOption {
+  id: ProviderId;
+  label: string;
 }
 
 interface Props {
@@ -25,50 +31,43 @@ interface Props {
   currentStatus: string;
   price: number;
   lang: Lang;
-  /** Whether the Kaspi Link provider is currently enabled (admin setting). */
-  kaspiEnabled: boolean;
-  /** Contact shown when Kaspi is disabled — sourced from admin config, never hardcoded. */
-  contactPhone?: string;
-  contactEmail?: string;
+  /** Providers the customer may actually choose — already filtered to enabled + fully configured. */
+  providers: CheckoutProviderOption[];
 }
 
 const T = {
   kk: {
     pendingTitle: "Төлем расталуда",
     pendingBody: "Admin 1-24 сағат ішінде растайды. Расталғаннан кейін шақыру автоматты түрде жарияланады.",
-    payTitle: "Kaspi арқылы төлеу",
+    payTitle: "Төлем",
     back: "← Артқа",
     publishTitle: (title: string) => `«${title}» жариялау`,
-    payVia: "Kaspi арқылы төлем жасаңыз",
+    choosePayVia: "Төлем әдісін таңдаңыз",
     oneTime: "Бір рет төлем",
     features: ["RSVP жинау", "Бөлісу сілтемесі", "Қонақтар тізімі"],
-    payButton: "Kaspi арқылы төлеу →",
     genericError: "Қате орын алды",
     planName: "Шақыру",
     unavailableTitle: "Төлем уақытша қолжетімсіз",
-    unavailableBody: (c: string) => `Өтінеміз, admin-мен байланысыңыз: ${c}`,
-    unavailableNoContact: "Өтінеміз, кейінірек қайталап көріңіз.",
+    unavailableBody: "Өтінеміз, кейінірек қайталап көріңіз.",
   },
   ru: {
     pendingTitle: "Платёж подтверждается",
     pendingBody: "Администратор подтвердит в течение 1-24 часов. После подтверждения приглашение будет опубликовано автоматически.",
-    payTitle: "Оплата через Kaspi",
+    payTitle: "Оплата",
     back: "← Назад",
     publishTitle: (title: string) => `Опубликовать «${title}»`,
-    payVia: "Совершите оплату через Kaspi",
+    choosePayVia: "Выберите способ оплаты",
     oneTime: "Разовый платёж",
     features: ["Сбор RSVP", "Ссылка для отправки", "Список гостей"],
-    payButton: "Оплатить через Kaspi →",
     genericError: "Произошла ошибка",
     planName: "Приглашение",
     unavailableTitle: "Оплата временно недоступна",
-    unavailableBody: (c: string) => `Пожалуйста, свяжитесь с администратором: ${c}`,
-    unavailableNoContact: "Пожалуйста, попробуйте позже.",
+    unavailableBody: "Пожалуйста, попробуйте позже.",
   },
 } as const;
 
-export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang, kaspiEnabled, contactPhone, contactEmail }: Props) {
-  const [loading, setLoading] = useState(false);
+export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang, providers }: Props) {
+  const [loadingId, setLoadingId] = useState<ProviderId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [paymentData, setPaymentData] = useState<PaymentResponse | null>(null);
   const t = T[lang];
@@ -85,26 +84,23 @@ export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang,
     );
   }
 
-  if (!kaspiEnabled) {
-    const contact = contactEmail || contactPhone || "";
+  if (providers.length === 0) {
     return (
       <div className="rounded-2xl bg-zinc-50 border border-zinc-100 p-5">
         <p className="font-semibold text-zinc-800">{t.unavailableTitle}</p>
-        <p className="text-sm text-zinc-500 mt-0.5 leading-relaxed">
-          {contact ? t.unavailableBody(contact) : t.unavailableNoContact}
-        </p>
+        <p className="text-sm text-zinc-500 mt-0.5 leading-relaxed">{t.unavailableBody}</p>
       </div>
     );
   }
 
-  const handlePay = async () => {
-    setLoading(true);
+  const handlePay = async (providerId: ProviderId) => {
+    setLoadingId(providerId);
     setError(null);
     try {
       const res = await fetch("/api/payments/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteId, provider: "MANUAL_KASPI", lang }),
+        body: JSON.stringify({ inviteId, provider: providerId, lang }),
       });
       const data: PaymentResponse & { error?: string } = await res.json();
       if (!res.ok) throw new Error(data.error ?? t.genericError);
@@ -112,7 +108,7 @@ export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang,
     } catch (e) {
       setError(e instanceof Error ? e.message : t.genericError);
     } finally {
-      setLoading(false);
+      setLoadingId(null);
     }
   };
 
@@ -137,7 +133,7 @@ export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang,
     <div className="flex flex-col gap-5">
       <div>
         <h3 className="font-bold text-zinc-900">{t.publishTitle(inviteTitle)}</h3>
-        <p className="text-sm text-zinc-500 mt-0.5">{t.payVia}</p>
+        <p className="text-sm text-zinc-500 mt-0.5">{t.choosePayVia}</p>
       </div>
 
       <div className="rounded-2xl border-2 border-rose-300 bg-rose-50 p-5 text-center">
@@ -160,9 +156,20 @@ export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang,
         <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>
       )}
 
-      <Button size="lg" loading={loading} onClick={handlePay} className="w-full">
-        {t.payButton}
-      </Button>
+      <div className="flex flex-col gap-2">
+        {providers.map((p) => (
+          <Button
+            key={p.id}
+            size="lg"
+            loading={loadingId === p.id}
+            disabled={loadingId !== null && loadingId !== p.id}
+            onClick={() => handlePay(p.id)}
+            className="w-full"
+          >
+            {p.label} →
+          </Button>
+        ))}
+      </div>
     </div>
   );
 }

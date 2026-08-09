@@ -1,62 +1,52 @@
 import type { Metadata } from "next";
-import { getPaymentProviders, NOT_IMPLEMENTED_PROVIDERS } from "@/lib/payment-providers";
-import { KaspiProviderForm } from "./KaspiProviderForm";
+import Link from "next/link";
+import { getPaymentProviders, ALL_PROVIDER_IDS, PROVIDER_LABELS, getMissingRequiredFields } from "@/lib/payment-providers";
 
 export const metadata: Metadata = { title: "Провайдерлер — Admin" };
 export const dynamic = "force-dynamic";
 
-export default async function ProvidersPage() {
+export default async function ProvidersListPage() {
   const providers = await getPaymentProviders();
-  const kaspi = providers.KASPI_LINK;
-  const kaspiConfigured = Boolean(kaspi.config.paymentUrl);
-  const kaspiStatus = !kaspi.enabled
-    ? { label: "Өшірулі", cls: "bg-zinc-100 text-zinc-500" }
-    : kaspiConfigured
-      ? { label: "Қолжетімді / Бапталған", cls: "bg-emerald-100 text-emerald-700" }
-      : { label: "Қолжетімді / Баптау қажет", cls: "bg-amber-100 text-amber-700" };
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">Төлем провайдерлері</h1>
         <p className="text-sm text-zinc-500 mt-1">
-          Kaspi сілтемесі мен байланыс деректерін осы жерден өзгертіңіз — деплой қажет емес.
+          Әр провайдерді жеке баптап, қосу/өшіру осы жерден жасалады — деплой қажет емес.
         </p>
       </div>
 
-      <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-6">
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <h2 className="text-base font-bold text-zinc-900">Kaspi (сілтеме + қолмен растау)</h2>
-          <span className={`rounded-full text-[10px] font-bold px-2.5 py-1 uppercase tracking-wider ${kaspiStatus.cls}`}>
-            {kaspiStatus.label}
-          </span>
-        </div>
-        <KaspiProviderForm provider={kaspi} />
-      </div>
+      <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm divide-y divide-zinc-50">
+        {ALL_PROVIDER_IDS.map((id) => {
+          const entry = providers[id];
+          const missing = getMissingRequiredFields(id, entry.config);
+          const configured = missing.length === 0;
+          const statusLabel = entry.enabled ? "Қосулы" : "Өшірулі";
+          const statusCls = entry.enabled ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-500";
 
-      <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-6">
-        <h2 className="text-base font-bold text-zinc-900 mb-1">Басқа провайдерлер</h2>
-        <p className="text-xs text-zinc-400 mb-4">
-          Бұларға интеграция коды жазылмаған — сондықтан баптау формасы жоқ. Тек Kaspi ғана нақты
-          төлемдерді өңдей алады.
-        </p>
-        <div className="divide-y divide-zinc-50">
-          {NOT_IMPLEMENTED_PROVIDERS.map((p) => (
-            <div key={p.id} className="flex items-center justify-between py-3 gap-3 flex-wrap">
+          return (
+            <div key={id} className="flex items-center justify-between gap-3 p-4 flex-wrap">
               <div>
-                <span className="text-sm font-medium text-zinc-700">{p.label}</span>
-                {p.envVars.length > 0 && (
-                  <p className="text-[11px] text-zinc-400 mt-0.5">
-                    Болашақта қажет болатын: {p.envVars.join(", ")}
-                  </p>
+                <p className="text-sm font-semibold text-zinc-800">{PROVIDER_LABELS[id]}</p>
+                {!configured && (
+                  <p className="text-[11px] text-amber-600 mt-0.5">Баптау аяқталмаған</p>
                 )}
               </div>
-              <span className="rounded-full bg-zinc-100 text-zinc-500 text-[10px] font-bold px-2.5 py-1 uppercase tracking-wider shrink-0">
-                Интеграция жасалмаған
-              </span>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className={`rounded-full text-[10px] font-bold px-2.5 py-1 uppercase tracking-wider ${statusCls}`}>
+                  {entry.enabled ? `ON  ${statusLabel}` : `OFF  ${statusLabel}`}
+                </span>
+                <Link
+                  href={`/admin/payments/providers/${id}`}
+                  className="inline-flex h-8 items-center rounded-lg border border-zinc-200 px-3 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+                >
+                  Баптау
+                </Link>
+              </div>
             </div>
-          ))}
-        </div>
+          );
+        })}
       </div>
     </div>
   );

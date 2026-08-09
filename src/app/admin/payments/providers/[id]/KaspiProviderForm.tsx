@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { updateKaspiLinkAction } from "./actions";
+import { saveKaspiProviderAction } from "./actions";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
@@ -9,9 +9,10 @@ import type { ProviderEntry, KaspiLinkConfig } from "@/lib/payment-providers";
 
 interface Props {
   provider: ProviderEntry<KaspiLinkConfig>;
+  webhookUrl: string;
 }
 
-export function KaspiProviderForm({ provider }: Props) {
+export function KaspiProviderForm({ provider, webhookUrl }: Props) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -23,7 +24,7 @@ export function KaspiProviderForm({ provider }: Props) {
     setSuccess(false);
     const fd = new FormData(e.currentTarget);
     startTransition(async () => {
-      const result = await updateKaspiLinkAction(fd);
+      const result = await saveKaspiProviderAction(fd);
       if (result.error) setError(result.error);
       else setSuccess(true);
     });
@@ -33,8 +34,8 @@ export function KaspiProviderForm({ provider }: Props) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div className="flex items-center justify-between rounded-xl bg-zinc-50 px-4 py-3">
         <div>
-          <p className="text-sm font-semibold text-zinc-800">Қосулы</p>
-          <p className="text-xs text-zinc-400">Өшірулі болса, пайдаланушылар төлей алмайды</p>
+          <p className="text-sm font-semibold text-zinc-800">Провайдерді қосу</p>
+          <p className="text-xs text-zinc-400">Өшірулі болса, пайдаланушыларға көрсетілмейді</p>
         </div>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
@@ -59,12 +60,7 @@ export function KaspiProviderForm({ provider }: Props) {
         </select>
       </div>
 
-      <Input
-        label="Валюта"
-        value="KZT"
-        disabled
-        hint="Қазіргі уақытта тек KZT қолдау көрсетіледі"
-      />
+      <Input label="Валюта" value="KZT" disabled hint="Қазіргі уақытта тек KZT қолдау көрсетіледі" />
 
       <Input
         label="Kaspi төлем сілтемесі"
@@ -123,12 +119,11 @@ export function KaspiProviderForm({ provider }: Props) {
         min={0}
       />
 
+      <Input label="Webhook URL" value={webhookUrl} disabled hint="Kaspi-де webhook жоқ — растау қолмен жасалады" />
       <Input label="Растау режимі" value="MANUAL_APPROVAL" disabled />
 
       {error && (
-        <p className="rounded-xl bg-red-50 border border-red-100 px-4 py-2.5 text-sm text-red-600">
-          {error}
-        </p>
+        <p className="rounded-xl bg-red-50 border border-red-100 px-4 py-2.5 text-sm text-red-600">{error}</p>
       )}
       {success && (
         <p className="rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-2.5 text-sm text-emerald-700">
