@@ -13,7 +13,7 @@ const SUB_NAV = [
   { href: "/admin/payments/manual", label: "Қолмен төлемдер" },
   { href: "/admin/payments/providers", label: "Провайдерлер" },
   { href: "/admin/payments/refunds", label: "Қайтарымдар" },
-  { href: "/admin/payments/promo", label: "Промокодтар" },
+  { href: "/admin/payments/promocodes", label: "Промокодтар" },
   { href: "/admin/payments/stats", label: "Статистика" },
 ];
 

@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { COMMON } from "@/lib/i18n";
+import { buildLoginUrl } from "@/lib/auth-redirect";
 
 type Step = 1 | 2 | 3;
 type Lang = "kk" | "ru";
@@ -23,11 +26,17 @@ const EVENTS: EventOpt[] = [
   { label: "Корпоратив", cat: "corporate", emoji: "🏢" },
 ];
 
-export function OnboardingQuiz({ adminPhone }: { adminPhone: string }) {
+interface Props {
+  adminPhone: string;
+  authenticated: boolean;
+  initialLang?: Lang;
+}
+
+export function OnboardingQuiz({ adminPhone, authenticated, initialLang = "kk" }: Props) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
   const [visible, setVisible] = useState(true);
-  const [lang, setLang] = useState<Lang>("kk");
+  const [lang, setLang] = useState<Lang>(initialLang);
   const [event, setEvent] = useState<EventOpt | null>(null);
 
   function go(fn: () => void) {
@@ -64,6 +73,10 @@ export function OnboardingQuiz({ adminPhone }: { adminPhone: string }) {
       {/* ── Header ──────────────────────────────────── */}
       <header className="relative z-10 shrink-0 px-5 sm:px-8 pt-5">
         <div className="max-w-[420px] mx-auto">
+          <div className="flex items-center justify-end mb-3">
+            <AuthLink lang={lang} authenticated={authenticated} />
+          </div>
+
           <div className="flex items-center justify-between mb-4">
 
             {/* Brand */}
@@ -218,6 +231,20 @@ export function OnboardingQuiz({ adminPhone }: { adminPhone: string }) {
 }
 
 /* ── Shared inline primitives ────────────────────── */
+
+function AuthLink({ lang, authenticated }: { lang: Lang; authenticated: boolean }) {
+  const label = authenticated ? COMMON[lang].myInvitations : COMMON[lang].login;
+  const href = authenticated ? `/dashboard?lang=${lang}` : buildLoginUrl({ lang });
+  return (
+    <Link
+      href={href}
+      className="text-xs font-medium tracking-wide"
+      style={{ color: "var(--gold-dark)" }}
+    >
+      {label}
+    </Link>
+  );
+}
 
 function StepLabel({ text }: { text: string }) {
   return (

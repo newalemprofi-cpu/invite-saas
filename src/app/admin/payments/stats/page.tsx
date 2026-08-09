@@ -36,6 +36,15 @@ export default async function PaymentStatsPage() {
     _sum: { amount: true },
   });
 
+  // Promo summary: CONFIRMED usages only — a PENDING reservation or a
+  // RELEASED (failed/rejected) attempt was never an actual redemption.
+  const promoStats = await db.promoCodeUsage.aggregate({
+    where: { status: "CONFIRMED" },
+    _count: { _all: true },
+    _sum: { discountAmount: true },
+  });
+  const activePromoCount = await db.promoCode.count({ where: { enabled: true } });
+
   return (
     <div className="space-y-6">
       <div>
@@ -48,6 +57,12 @@ export default async function PaymentStatsPage() {
         <Card label="Расталды" value={String(paid.count)} />
         <Card label="Күтуде" value={String(pending.count)} />
         <Card label="Сәтсіз/қабылданбады" value={String(failed.count)} />
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <Card label="Белсенді промокодтар" value={String(activePromoCount)} />
+        <Card label="Промокодпен төленген" value={String(promoStats._count._all)} />
+        <Card label="Берілген жеңілдік жалпы" value={`${Number(promoStats._sum.discountAmount ?? 0).toLocaleString("kk-KZ")} ₸`} />
       </div>
 
       <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm overflow-hidden">

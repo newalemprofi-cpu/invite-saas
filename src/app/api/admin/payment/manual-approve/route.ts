@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { addPlanDays } from "@/lib/payment/plans";
+import { markPaymentPaidAndPublish } from "@/lib/payment/lifecycle";
 
 const schema = z.object({
   paymentId: z.string().uuid(),
@@ -63,33 +63,20 @@ export async function POST(req: NextRequest) {
     plan?: string;
     isExtension?: boolean;
   };
-  const now = new Date();
 
   // For extensions: extend from current expiresAt (if still in future), not from now.
   // For initial publish: always start from now.
   const isExtension = rawMeta.isExtension === true;
-  const currentExpiry = payment.invite.expiresAt;
-  const base =
-    isExtension && currentExpiry && currentExpiry > now ? currentExpiry : now;
-  const expiresAt = addPlanDays(base, rawMeta.plan ?? "BASIC");
 
-  // Only change invite status if it is not already PUBLISHED (avoid re-publishing extensions)
-  const inviteAlreadyPublished = payment.invite.status === "PUBLISHED";
-
-  await db.$transaction(async (tx) => {
-    await tx.payment.update({
-      where: { id: paymentId },
-      data: { status: "PAID", paidAt: now, approvedAt: now, approvedBy: session.userId },
-    });
-
-    await tx.invite.update({
-      where: { id: payment.inviteId },
-      data: {
-        expiresAt,
-        ...(inviteAlreadyPublished
-          ? {}
-          : { status: "PUBLISHED", publishedAt: now }),
-      },
+  const { expiresAt } = await db.$transaction(async (tx) => {
+    const result = await markPaymentPaidAndPublish(tx, {
+      paymentId,
+      inviteId: payment.inviteId,
+      inviteStatus: payment.invite.status,
+      inviteExpiresAt: payment.invite.expiresAt,
+      plan: rawMeta.plan ?? "BASIC",
+      isExtension,
+      paymentUpdateExtra: { approvedAt: new Date(), approvedBy: session.userId },
     });
 
     await tx.auditLog.create({
@@ -101,11 +88,13 @@ export async function POST(req: NextRequest) {
         meta: {
           approvedBy: session.email,
           plan: rawMeta.plan,
-          expiresAt: expiresAt.toISOString(),
+          expiresAt: result.expiresAt.toISOString(),
           inviteTitle: payment.invite.title,
         },
       },
     });
+
+    return result;
   });
 
   return NextResponse.json({

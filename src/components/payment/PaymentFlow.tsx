@@ -16,8 +16,20 @@ interface InstructionsData {
 
 interface PaymentResponse {
   paymentId: string;
+  status: "PENDING" | "PAID";
+  published?: boolean;
   amount: number;
-  instructions: InstructionsData;
+  originalAmount: number | null;
+  discountAmount: number;
+  promoCode: string | null;
+  instructions?: InstructionsData;
+}
+
+interface AppliedPromo {
+  code: string;
+  originalAmount: number;
+  discountAmount: number;
+  finalAmount: number;
 }
 
 export interface CheckoutProviderOption {
@@ -49,6 +61,15 @@ const T = {
     planName: "Шақыру",
     unavailableTitle: "Төлем уақытша қолжетімсіз",
     unavailableBody: "Өтінеміз, кейінірек қайталап көріңіз.",
+    priceLabel: "Шақыру бағасы",
+    payableLabel: "Төлем сомасы",
+    promoPlaceholder: "Промокод",
+    apply: "Қолдану",
+    applying: "...",
+    remove: "Алып тастау",
+    freePublish: "Тегін жариялау",
+    publishedTitle: "Сәтті жарияланды! 🎉",
+    publishedBody: "Шақыру промокодпен толығымен жабылды және енді жарияланды.",
   },
   ru: {
     pendingTitle: "Платёж подтверждается",
@@ -63,6 +84,15 @@ const T = {
     planName: "Приглашение",
     unavailableTitle: "Оплата временно недоступна",
     unavailableBody: "Пожалуйста, попробуйте позже.",
+    priceLabel: "Стоимость приглашения",
+    payableLabel: "К оплате",
+    promoPlaceholder: "Промокод",
+    apply: "Применить",
+    applying: "...",
+    remove: "Удалить",
+    freePublish: "Опубликовать бесплатно",
+    publishedTitle: "Успешно опубликовано! 🎉",
+    publishedBody: "Приглашение полностью оплачено промокодом и уже опубликовано.",
   },
 } as const;
 
@@ -70,6 +100,10 @@ export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang,
   const [loadingId, setLoadingId] = useState<ProviderId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [paymentData, setPaymentData] = useState<PaymentResponse | null>(null);
+  const [promoInput, setPromoInput] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
   const t = T[lang];
 
   if (currentStatus === "PENDING_PAYMENT" && !paymentData) {
@@ -84,14 +118,41 @@ export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang,
     );
   }
 
-  if (providers.length === 0) {
-    return (
-      <div className="rounded-2xl bg-zinc-50 border border-zinc-100 p-5">
-        <p className="font-semibold text-zinc-800">{t.unavailableTitle}</p>
-        <p className="text-sm text-zinc-500 mt-0.5 leading-relaxed">{t.unavailableBody}</p>
-      </div>
-    );
-  }
+  const finalAmount = appliedPromo ? appliedPromo.finalAmount : price;
+
+  const applyPromo = async () => {
+    if (!promoInput.trim()) return;
+    setPromoLoading(true);
+    setPromoError(null);
+    try {
+      const res = await fetch("/api/payments/promo/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteId, code: promoInput, lang }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setPromoError(data.error ?? t.genericError);
+        return;
+      }
+      setAppliedPromo({
+        code: data.code,
+        originalAmount: data.originalAmount,
+        discountAmount: data.discountAmount,
+        finalAmount: data.finalAmount,
+      });
+    } catch {
+      setPromoError(t.genericError);
+    } finally {
+      setPromoLoading(false);
+    }
+  };
+
+  const removePromo = () => {
+    setAppliedPromo(null);
+    setPromoInput("");
+    setPromoError(null);
+  };
 
   const handlePay = async (providerId: ProviderId) => {
     setLoadingId(providerId);
@@ -100,7 +161,12 @@ export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang,
       const res = await fetch("/api/payments/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteId, provider: providerId, lang }),
+        body: JSON.stringify({
+          inviteId,
+          provider: providerId,
+          lang,
+          ...(appliedPromo ? { promoCode: appliedPromo.code } : {}),
+        }),
       });
       const data: PaymentResponse & { error?: string } = await res.json();
       if (!res.ok) throw new Error(data.error ?? t.genericError);
@@ -112,7 +178,16 @@ export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang,
     }
   };
 
-  if (paymentData) {
+  if (paymentData?.status === "PAID" && paymentData.published) {
+    return (
+      <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-5 text-center">
+        <p className="font-bold text-emerald-800">{t.publishedTitle}</p>
+        <p className="text-sm text-emerald-700 mt-1 leading-relaxed">{t.publishedBody}</p>
+      </div>
+    );
+  }
+
+  if (paymentData?.instructions) {
     return (
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
@@ -129,6 +204,17 @@ export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang,
     );
   }
 
+  const showProviders = finalAmount > 0;
+
+  if (showProviders && providers.length === 0) {
+    return (
+      <div className="rounded-2xl bg-zinc-50 border border-zinc-100 p-5">
+        <p className="font-semibold text-zinc-800">{t.unavailableTitle}</p>
+        <p className="text-sm text-zinc-500 mt-0.5 leading-relaxed">{t.unavailableBody}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -136,39 +222,98 @@ export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang,
         <p className="text-sm text-zinc-500 mt-0.5">{t.choosePayVia}</p>
       </div>
 
-      <div className="rounded-2xl border-2 border-rose-300 bg-rose-50 p-5 text-center">
-        <p className="text-3xl font-black text-zinc-900">
-          {price.toLocaleString(lang === "ru" ? "ru-RU" : "kk-KZ")}
-          <span className="text-lg font-semibold text-zinc-400"> ₸</span>
-        </p>
-        <p className="text-sm text-zinc-500 mt-1">{t.oneTime}</p>
-        <ul className="mt-3 flex flex-col gap-1 text-left max-w-xs mx-auto">
-          {t.features.map((f) => (
-            <li key={f} className="flex items-center gap-2 text-xs text-zinc-600">
-              <span className="text-emerald-500 shrink-0">✓</span>
-              {f}
-            </li>
-          ))}
-        </ul>
+      <div className="rounded-2xl border-2 border-rose-300 bg-rose-50 p-5">
+        {appliedPromo ? (
+          <div className="flex flex-col gap-1.5 mb-3">
+            <div className="flex items-center justify-between text-sm text-zinc-500">
+              <span>{t.priceLabel}</span>
+              <span>{price.toLocaleString(lang === "ru" ? "ru-RU" : "kk-KZ")} ₸</span>
+            </div>
+            <div className="flex items-center justify-between text-sm text-emerald-600 font-medium">
+              <span>Промокод {appliedPromo.code}</span>
+              <span>-{appliedPromo.discountAmount.toLocaleString(lang === "ru" ? "ru-RU" : "kk-KZ")} ₸</span>
+            </div>
+            <div className="h-px bg-rose-200 my-1" />
+            <div className="flex items-center justify-between text-sm font-bold text-zinc-800">
+              <span>{t.payableLabel}</span>
+              <span>{finalAmount.toLocaleString(lang === "ru" ? "ru-RU" : "kk-KZ")} ₸</span>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="text-center">
+          <p className="text-3xl font-black text-zinc-900">
+            {finalAmount.toLocaleString(lang === "ru" ? "ru-RU" : "kk-KZ")}
+            <span className="text-lg font-semibold text-zinc-400"> ₸</span>
+          </p>
+          <p className="text-sm text-zinc-500 mt-1">{t.oneTime}</p>
+          <ul className="mt-3 flex flex-col gap-1 text-left max-w-xs mx-auto">
+            {t.features.map((f) => (
+              <li key={f} className="flex items-center gap-2 text-xs text-zinc-600">
+                <span className="text-emerald-500 shrink-0">✓</span>
+                {f}
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
+
+      {appliedPromo ? (
+        <div className="flex items-center justify-between rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-2.5">
+          <span className="text-sm font-semibold text-emerald-700">{appliedPromo.code}</span>
+          <button onClick={removePromo} className="text-xs font-medium text-emerald-600 hover:text-emerald-800 transition-colors">
+            {t.remove}
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex gap-2">
+            <input
+              value={promoInput}
+              onChange={(e) => setPromoInput(e.target.value)}
+              placeholder={t.promoPlaceholder}
+              className="flex-1 rounded-xl border border-zinc-200 px-3.5 py-2.5 text-sm text-zinc-800 uppercase focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-400"
+            />
+            <button
+              onClick={applyPromo}
+              disabled={promoLoading || !promoInput.trim()}
+              className="shrink-0 rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50 transition-colors"
+            >
+              {promoLoading ? t.applying : t.apply}
+            </button>
+          </div>
+          {promoError && <p className="text-xs text-red-500">{promoError}</p>}
+        </div>
+      )}
 
       {error && (
         <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>
       )}
 
       <div className="flex flex-col gap-2">
-        {providers.map((p) => (
+        {finalAmount === 0 ? (
           <Button
-            key={p.id}
             size="lg"
-            loading={loadingId === p.id}
-            disabled={loadingId !== null && loadingId !== p.id}
-            onClick={() => handlePay(p.id)}
+            loading={loadingId !== null}
+            onClick={() => handlePay(providers[0]?.id ?? "KASPI_LINK")}
             className="w-full"
           >
-            {p.label} →
+            {t.freePublish} →
           </Button>
-        ))}
+        ) : (
+          providers.map((p) => (
+            <Button
+              key={p.id}
+              size="lg"
+              loading={loadingId === p.id}
+              disabled={loadingId !== null && loadingId !== p.id}
+              onClick={() => handlePay(p.id)}
+              className="w-full"
+            >
+              {p.label} →
+            </Button>
+          ))
+        )}
       </div>
     </div>
   );

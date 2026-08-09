@@ -28,6 +28,8 @@ export default async function AdminInvitesPage() {
   const serializedPending = pendingPayments.map((p) => ({
     id: p.id,
     amount: Number(p.amount),
+    originalAmount: p.originalAmount != null ? Number(p.originalAmount) : null,
+    promoCode: p.promoCode,
     createdAt: p.createdAt.toISOString(),
     rawPayload: p.rawPayload as Record<string, unknown> | null,
     user: p.user,

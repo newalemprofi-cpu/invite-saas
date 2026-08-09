@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { markPaymentFailedAndRevert } from "@/lib/payment/lifecycle";
 
 const schema = z.object({
   paymentId: z.string().uuid(),
@@ -61,17 +62,12 @@ export async function POST(req: NextRequest) {
   const now = new Date();
 
   await db.$transaction(async (tx) => {
-    await tx.payment.update({
-      where: { id: paymentId },
-      data: { status: "FAILED", approvedAt: now, approvedBy: session.userId },
+    await markPaymentFailedAndRevert(tx, {
+      paymentId,
+      inviteId: payment.inviteId,
+      inviteStatus: payment.invite.status,
+      paymentUpdateExtra: { approvedAt: now, approvedBy: session.userId },
     });
-
-    if (payment.invite.status === "PENDING_PAYMENT") {
-      await tx.invite.update({
-        where: { id: payment.inviteId },
-        data: { status: "DRAFT" },
-      });
-    }
 
     await tx.auditLog.create({
       data: {

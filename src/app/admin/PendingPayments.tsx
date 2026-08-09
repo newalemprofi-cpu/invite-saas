@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 interface PendingPayment {
   id: string;
   amount: number;
+  originalAmount: number | null;
+  promoCode: string | null;
   createdAt: string;
   rawPayload: Record<string, unknown> | null;
   user: { name: string | null; email: string };
@@ -144,6 +146,12 @@ export function PendingPayments({
               <p className="text-lg font-bold text-zinc-900">
                 {p.amount.toLocaleString("kk-KZ")} ₸
               </p>
+              {p.promoCode && (
+                <p className="text-[11px] text-zinc-400">
+                  <span className="line-through">{(p.originalAmount ?? p.amount).toLocaleString("kk-KZ")} ₸</span>{" "}
+                  · {p.promoCode}
+                </p>
+              )}
               <p className="text-[11px] font-mono text-zinc-400 mt-0.5">
                 {p.id.slice(-8).toUpperCase()}
               </p>

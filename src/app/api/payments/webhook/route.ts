@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { verifyWebhookSignature } from "@/lib/payment/signature";
-import { addPlanDays } from "@/lib/payment/plans";
+import { markPaymentPaidAndPublish, markPaymentFailedAndRevert } from "@/lib/payment/lifecycle";
 import { apipayProvider } from "@/lib/payment/providers/apipay";
 import { cloudpaymentsProvider } from "@/lib/payment/providers/cloudpayments";
 
@@ -91,50 +91,32 @@ async function handleParsedWebhook(
     return NextResponse.json({ received: true, idempotent: true });
   }
 
+  const currentInvite = await db.invite.findUnique({
+    where: { id: payment.inviteId },
+    select: { status: true, expiresAt: true },
+  });
+
+  const appendedRawPayload = {
+    ...(payment.rawPayload as object),
+    webhookPayload: raw,
+  } as Prisma.InputJsonValue;
+
   if (parsed.status === "PAID") {
     const rawMeta = (payment.rawPayload ?? {}) as {
       plan?: string;
       isExtension?: boolean;
     };
-    const now = new Date();
-
-    // For extensions: extend from current expiresAt (if still in future), same as manual-approve.
     const isExtension = rawMeta.isExtension === true;
-    const currentInvite = isExtension
-      ? await db.invite.findUnique({
-          where: { id: payment.inviteId },
-          select: { status: true, expiresAt: true },
-        })
-      : null;
-    const base =
-      isExtension && currentInvite?.expiresAt && currentInvite.expiresAt > now
-        ? currentInvite.expiresAt
-        : now;
-    const expiresAt = addPlanDays(base, rawMeta.plan ?? "BASIC");
-    const inviteAlreadyPublished = currentInvite?.status === "PUBLISHED";
 
     await db.$transaction(async (tx) => {
-      await tx.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: "PAID",
-          paidAt: now,
-          // Append raw provider payload alongside existing metadata
-          rawPayload: {
-            ...(payment.rawPayload as object),
-            webhookPayload: raw,
-          } as Prisma.InputJsonValue,
-        },
-      });
-
-      await tx.invite.update({
-        where: { id: payment.inviteId },
-        data: {
-          expiresAt,
-          ...(inviteAlreadyPublished
-            ? {}
-            : { status: "PUBLISHED", publishedAt: now }),
-        },
+      await markPaymentPaidAndPublish(tx, {
+        paymentId: payment.id,
+        inviteId: payment.inviteId,
+        inviteStatus: currentInvite?.status ?? "DRAFT",
+        inviteExpiresAt: currentInvite?.expiresAt ?? null,
+        plan: rawMeta.plan ?? "BASIC",
+        isExtension,
+        paymentUpdateExtra: { rawPayload: appendedRawPayload },
       });
 
       await tx.auditLog.create({
@@ -148,15 +130,13 @@ async function handleParsedWebhook(
     });
   } else {
     // FAILED
-    await db.payment.update({
-      where: { id: payment.id },
-      data: {
-        status: "FAILED",
-        rawPayload: {
-          ...(payment.rawPayload as object),
-          webhookPayload: raw,
-        } as Prisma.InputJsonValue,
-      },
+    await db.$transaction(async (tx) => {
+      await markPaymentFailedAndRevert(tx, {
+        paymentId: payment.id,
+        inviteId: payment.inviteId,
+        inviteStatus: currentInvite?.status ?? "DRAFT",
+        paymentUpdateExtra: { rawPayload: appendedRawPayload },
+      });
     });
   }
 

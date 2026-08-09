@@ -72,8 +72,16 @@ export default async function AdminPaymentsPage() {
                           {p.status}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-zinc-800 tabular-nums">
-                        {Number(p.amount).toLocaleString("kk-KZ")} ₸
+                      <td className="px-4 py-3 text-right">
+                        <p className="text-sm font-bold text-zinc-800 tabular-nums">
+                          {Number(p.amount).toLocaleString("kk-KZ")} ₸
+                        </p>
+                        {p.promoCode && (
+                          <p className="text-[10px] text-zinc-400 tabular-nums">
+                            <span className="line-through">{Number(p.originalAmount ?? p.amount).toLocaleString("kk-KZ")} ₸</span>{" "}
+                            · {p.promoCode}
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right text-xs text-zinc-400 tabular-nums hidden sm:table-cell">
                         {p.createdAt.toLocaleDateString("kk-KZ", { day: "numeric", month: "short" })}

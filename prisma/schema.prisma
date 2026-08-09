@@ -73,6 +73,23 @@ enum MediaType {
   AUDIO
 }
 
+enum PromoType {
+  PERCENT
+  FIXED
+}
+
+// Lifecycle of a single promo-code usage attempt, tracked per Payment (see
+// PromoCodeUsage). RESERVED is created atomically alongside the Payment at
+// checkout (this is what makes the global usage limit concurrency-safe —
+// see PromoCode.usedCount); CONFIRMED once that Payment reaches PAID;
+// RELEASED if the Payment is instead rejected/fails, so an abandoned
+// attempt never permanently consumes a usage slot.
+enum PromoUsageStatus {
+  RESERVED
+  CONFIRMED
+  RELEASED
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -143,6 +160,8 @@ model Guest {
 
 model Payment {
   id            String          @id @default(uuid())
+  // `amount` remains the authoritative amount actually charged/payable
+  // (= finalAmount) — every existing read site keeps working unchanged.
   amount        Decimal         @db.Decimal(10, 2)
   currency      String          @default("KZT")
   provider      PaymentProvider
@@ -157,16 +176,83 @@ model Payment {
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
+  // Immutable pricing snapshot, set once at creation and never touched
+  // again — a later edit (or deletion) of the PromoCode row must never
+  // change what a historical Payment says it charged. `originalAmount`/
+  // `discountAmount` are null/0 for payments with no promo (and for rows
+  // created before this migration). `promoCode` is the *text* of the code
+  // at the time of use, independent of the FK, so it still displays
+  // correctly even if the PromoCode row is later deleted.
+  originalAmount Decimal?  @db.Decimal(10, 2)
+  discountAmount Decimal   @default(0) @db.Decimal(10, 2)
+  promoCode      String?
+  promoCodeId    String?
+  promoCodeRef   PromoCode? @relation(fields: [promoCodeId], references: [id], onDelete: Restrict)
+
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   inviteId String
   invite   Invite @relation(fields: [inviteId], references: [id], onDelete: Restrict)
 
+  usage PromoCodeUsage?
+
   @@index([userId])
   @@index([inviteId])
   @@index([status])
   @@index([externalId])
+  @@index([promoCodeId])
+}
+
+// Admin-managed discount codes for the single existing invitation product
+// (see src/lib/product.ts — there is only one priced product today, so
+// this deliberately has no per-plan "scope" field; add one only if a
+// second priced product is ever introduced). `usedCount` is the
+// concurrency-safe counter — always mutated via a single guarded UPDATE
+// (see src/lib/promo-codes.ts), never a read-then-write pair.
+model PromoCode {
+  id           String    @id @default(uuid())
+  code         String    @unique
+  type         PromoType
+  value        Decimal   @db.Decimal(10, 2)
+  minAmount    Decimal?  @db.Decimal(10, 2)
+  maxDiscount  Decimal?  @db.Decimal(10, 2)
+  usageLimit   Int?
+  usagePerUser Int?
+  usedCount    Int       @default(0)
+  startsAt     DateTime?
+  expiresAt    DateTime?
+  enabled      Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  payments Payment[]
+  usages   PromoCodeUsage[]
+
+  @@index([enabled])
+}
+
+// One row per Payment that used a promo — tracks per-user usage counts and
+// the reserve/confirm/release lifecycle described on PromoUsageStatus.
+// Deliberately separate from Payment's own snapshot fields: this table is
+// bookkeeping for *enforcement* (limits), Payment's own columns are the
+// permanent financial *record*, and the two are allowed to diverge (e.g.
+// this row can cascade away with the PromoCode; Payment's snapshot never
+// does).
+model PromoCodeUsage {
+  id             String           @id @default(uuid())
+  promoCodeId    String
+  promoCode      PromoCode        @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  userId         String
+  paymentId      String           @unique
+  payment        Payment          @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  status         PromoUsageStatus @default(RESERVED)
+  discountAmount Decimal          @db.Decimal(10, 2)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([promoCodeId, userId])
+  @@index([promoCodeId, status])
 }
 
 model Media {

@@ -6,11 +6,14 @@ import { getProductSettings } from "@/lib/product";
 import { kaspiProvider } from "@/lib/payment/providers/kaspi";
 import { getGenericGatewayInstructions } from "@/lib/payment/providers/generic-gateway";
 import { isProviderUsable, PROVIDER_TO_PAYMENT_ENUM, ALL_PROVIDER_IDS, type ProviderId } from "@/lib/payment-providers";
+import { validateAndCalculatePromo, reservePromoUsage, getPromoErrorMessage, PromoReservationFailedError } from "@/lib/promo-codes";
+import { markPaymentPaidAndPublish } from "@/lib/payment/lifecycle";
 
 const schema = z.object({
   inviteId: z.string().uuid(),
   provider: z.enum(ALL_PROVIDER_IDS as [ProviderId, ...ProviderId[]]).default("KASPI_LINK"),
   lang: z.enum(["kk", "ru"]).default("kk"),
+  promoCode: z.string().trim().min(1).max(64).optional(),
 });
 
 const PAYABLE_STATUSES = new Set(["DRAFT", "PENDING_PAYMENT", "EXPIRED"]);
@@ -41,7 +44,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { inviteId, provider: providerId, lang } = parsed.data;
+  const { inviteId, provider: providerId, lang, promoCode } = parsed.data;
 
   const invite = await db.invite.findUnique({
     where: { id: inviteId },
@@ -60,23 +63,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // A provider is only selectable at checkout if an admin has both enabled
-  // it AND filled in its required configuration (re-checked here, not just
-  // trusted from the client — see src/lib/payment-providers.ts's isUsable).
-  // This is also what makes disabling a provider immediately effective:
-  // it never touches existing Payment rows, it just blocks NEW ones here.
-  if (!(await isProviderUsable(providerId))) {
-    return NextResponse.json({ error: "PROVIDER_UNAVAILABLE" }, { status: 409 });
-  }
-
-  const provider = PROVIDER_TO_PAYMENT_ENUM[providerId];
-  const product = await getProductSettings();
-  const price = product.price;
-
-  // Return existing PENDING payment instead of creating a duplicate
+  // Return existing PENDING payment instead of creating a duplicate. The
+  // promo (if any) was already resolved and reserved when that payment was
+  // first created — a later, possibly different, promoCode on this retry
+  // request is intentionally ignored, exactly like `provider` already is.
   const existing = await db.payment.findFirst({
     where: { inviteId, status: "PENDING" },
-    select: { id: true, amount: true, provider: true },
+    select: { id: true, amount: true, provider: true, originalAmount: true, discountAmount: true, promoCode: true },
   });
   if (existing) {
     const instructions = await buildInstructions(providerId, Number(existing.amount), existing.id, lang);
@@ -84,59 +77,154 @@ export async function POST(req: NextRequest) {
       paymentId: existing.id,
       status: "PENDING",
       amount: Number(existing.amount),
+      originalAmount: existing.originalAmount != null ? Number(existing.originalAmount) : null,
+      discountAmount: Number(existing.discountAmount),
+      promoCode: existing.promoCode,
       currency: "KZT",
       provider: existing.provider,
       instructions,
     });
   }
 
-  const payment = await db.$transaction(async (tx) => {
-    const p = await tx.payment.create({
-      data: {
-        amount: price,
+  const product = await getProductSettings();
+  const originalPrice = product.price;
+
+  // Server-authoritative promo resolution — the browser only ever supplies
+  // the code text; every amount below is computed here, never trusted from
+  // the client (see src/lib/promo-codes.ts).
+  let discountAmount = 0;
+  let finalAmount = originalPrice;
+  let resolvedPromoId: string | null = null;
+  let resolvedPromoCode: string | null = null;
+
+  if (promoCode) {
+    const result = await validateAndCalculatePromo({
+      code: promoCode,
+      amount: originalPrice,
+      userId: session.userId,
+      lang,
+    });
+    if (!result.ok) {
+      return NextResponse.json({ error: result.message, code: result.code }, { status: 400 });
+    }
+    discountAmount = result.discountAmount;
+    finalAmount = result.finalAmount;
+    resolvedPromoId = result.promo.id;
+    resolvedPromoCode = result.promo.code;
+  }
+
+  // A fully-discounted (0 ₸) payment never touches an external provider —
+  // it's published directly through the same shared successful-payment
+  // lifecycle a manually-approved payment uses (see lib/payment/lifecycle).
+  // A provider must still be configured/enabled for every OTHER case.
+  if (finalAmount > 0 && !(await isProviderUsable(providerId))) {
+    return NextResponse.json({ error: "PROVIDER_UNAVAILABLE" }, { status: 409 });
+  }
+
+  const provider = PROVIDER_TO_PAYMENT_ENUM[providerId];
+
+  try {
+    const payment = await db.$transaction(async (tx) => {
+      const p = await tx.payment.create({
+        data: {
+          amount: finalAmount,
+          currency: "KZT",
+          provider,
+          status: "PENDING",
+          userId: session.userId,
+          inviteId,
+          originalAmount: resolvedPromoId ? originalPrice : null,
+          discountAmount,
+          promoCode: resolvedPromoCode,
+          promoCodeId: resolvedPromoId,
+          notes: finalAmount === 0 ? `Промокод ${resolvedPromoCode} арқылы толығымен жабылды` : null,
+          rawPayload: {
+            productKey: product.productKey,
+            activeDays: product.activeDays,
+            provider,
+            createdBy: session.userId,
+          },
+        },
+      });
+
+      if (resolvedPromoId) {
+        await reservePromoUsage(tx, {
+          promoId: resolvedPromoId,
+          paymentId: p.id,
+          userId: session.userId,
+          discountAmount,
+        });
+      }
+
+      if (finalAmount === 0) {
+        await markPaymentPaidAndPublish(tx, {
+          paymentId: p.id,
+          inviteId,
+          inviteStatus: invite.status,
+          inviteExpiresAt: null,
+          plan: "BASIC",
+          isExtension: false,
+        });
+      } else {
+        await tx.invite.update({
+          where: { id: inviteId },
+          data: { status: "PENDING_PAYMENT" },
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          action: "PAYMENT_CREATED",
+          entity: "Payment",
+          entityId: p.id,
+          userId: session.userId,
+          meta: { amount: finalAmount, provider, promoCode: resolvedPromoCode, discountAmount },
+        },
+      });
+
+      return p;
+    });
+
+    if (finalAmount === 0) {
+      return NextResponse.json(
+        {
+          paymentId: payment.id,
+          status: "PAID",
+          published: true,
+          amount: 0,
+          originalAmount: originalPrice,
+          discountAmount,
+          promoCode: resolvedPromoCode,
+          currency: "KZT",
+          provider,
+        },
+        { status: 201 }
+      );
+    }
+
+    const instructions = await buildInstructions(providerId, finalAmount, payment.id, lang);
+
+    return NextResponse.json(
+      {
+        paymentId: payment.id,
+        status: "PENDING",
+        amount: finalAmount,
+        originalAmount: resolvedPromoId ? originalPrice : null,
+        discountAmount,
+        promoCode: resolvedPromoCode,
         currency: "KZT",
         provider,
-        status: "PENDING",
-        userId: session.userId,
-        inviteId,
-        rawPayload: {
-          productKey: product.productKey,
-          activeDays: product.activeDays,
-          provider,
-          createdBy: session.userId,
-        },
+        instructions,
       },
-    });
-
-    await tx.invite.update({
-      where: { id: inviteId },
-      data: { status: "PENDING_PAYMENT" },
-    });
-
-    await tx.auditLog.create({
-      data: {
-        action: "PAYMENT_CREATED",
-        entity: "Payment",
-        entityId: p.id,
-        userId: session.userId,
-        meta: { amount: price, provider },
-      },
-    });
-
-    return p;
-  });
-
-  const instructions = await buildInstructions(providerId, price, payment.id, lang);
-
-  return NextResponse.json(
-    {
-      paymentId: payment.id,
-      status: "PENDING",
-      amount: price,
-      currency: "KZT",
-      provider,
-      instructions,
-    },
-    { status: 201 }
-  );
+      { status: 201 }
+    );
+  } catch (err) {
+    if (err instanceof PromoReservationFailedError) {
+      return NextResponse.json(
+        { error: getPromoErrorMessage(err.code, lang), code: err.code },
+        { status: 409 }
+      );
+    }
+    throw err;
+  }
 }
