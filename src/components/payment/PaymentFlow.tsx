@@ -24,8 +24,12 @@ interface Props {
   inviteTitle: string;
   currentStatus: string;
   price: number;
-  kaspiLink?: string | null;
   lang: Lang;
+  /** Whether the Kaspi Link provider is currently enabled (admin setting). */
+  kaspiEnabled: boolean;
+  /** Contact shown when Kaspi is disabled — sourced from admin config, never hardcoded. */
+  contactPhone?: string;
+  contactEmail?: string;
 }
 
 const T = {
@@ -41,6 +45,9 @@ const T = {
     payButton: "Kaspi арқылы төлеу →",
     genericError: "Қате орын алды",
     planName: "Шақыру",
+    unavailableTitle: "Төлем уақытша қолжетімсіз",
+    unavailableBody: (c: string) => `Өтінеміз, admin-мен байланысыңыз: ${c}`,
+    unavailableNoContact: "Өтінеміз, кейінірек қайталап көріңіз.",
   },
   ru: {
     pendingTitle: "Платёж подтверждается",
@@ -54,10 +61,13 @@ const T = {
     payButton: "Оплатить через Kaspi →",
     genericError: "Произошла ошибка",
     planName: "Приглашение",
+    unavailableTitle: "Оплата временно недоступна",
+    unavailableBody: (c: string) => `Пожалуйста, свяжитесь с администратором: ${c}`,
+    unavailableNoContact: "Пожалуйста, попробуйте позже.",
   },
 } as const;
 
-export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang }: Props) {
+export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang, kaspiEnabled, contactPhone, contactEmail }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentData, setPaymentData] = useState<PaymentResponse | null>(null);
@@ -75,6 +85,18 @@ export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang 
     );
   }
 
+  if (!kaspiEnabled) {
+    const contact = contactEmail || contactPhone || "";
+    return (
+      <div className="rounded-2xl bg-zinc-50 border border-zinc-100 p-5">
+        <p className="font-semibold text-zinc-800">{t.unavailableTitle}</p>
+        <p className="text-sm text-zinc-500 mt-0.5 leading-relaxed">
+          {contact ? t.unavailableBody(contact) : t.unavailableNoContact}
+        </p>
+      </div>
+    );
+  }
+
   const handlePay = async () => {
     setLoading(true);
     setError(null);
@@ -82,7 +104,7 @@ export function PaymentFlow({ inviteId, inviteTitle, currentStatus, price, lang 
       const res = await fetch("/api/payments/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteId, provider: "MANUAL_KASPI" }),
+        body: JSON.stringify({ inviteId, provider: "MANUAL_KASPI", lang }),
       });
       const data: PaymentResponse & { error?: string } = await res.json();
       if (!res.ok) throw new Error(data.error ?? t.genericError);

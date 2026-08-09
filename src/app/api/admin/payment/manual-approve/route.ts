@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
   await db.$transaction(async (tx) => {
     await tx.payment.update({
       where: { id: paymentId },
-      data: { status: "PAID", paidAt: now },
+      data: { status: "PAID", paidAt: now, approvedAt: now, approvedBy: session.userId },
     });
 
     await tx.invite.update({

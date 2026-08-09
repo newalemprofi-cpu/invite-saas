@@ -13,24 +13,26 @@ interface PendingPayment {
   invite: { id: string; title: string; slug: string };
 }
 
-function ApproveButton({ paymentId }: { paymentId: string }) {
+function ApproveRejectButtons({ paymentId }: { paymentId: string }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [done, setDone] = useState(false);
+  const [action, setAction] = useState<"approve" | "reject" | null>(null);
+  const [done, setDone] = useState<"approved" | "rejected" | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const handleApprove = () => {
+  const run = (kind: "approve" | "reject") => {
+    setAction(kind);
     startTransition(async () => {
       setErr(null);
       try {
-        const res = await fetch("/api/admin/payment/manual-approve", {
+        const res = await fetch(`/api/admin/payment/manual-${kind}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ paymentId }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Қате орын алды");
-        setDone(true);
+        setDone(kind === "approve" ? "approved" : "rejected");
         router.refresh();
       } catch (e) {
         setErr(e instanceof Error ? e.message : "Қате орын алды");
@@ -38,36 +40,55 @@ function ApproveButton({ paymentId }: { paymentId: string }) {
     });
   };
 
-  if (done) {
+  if (done === "approved") {
     return (
       <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700">
         ✓ Расталды
       </span>
     );
   }
+  if (done === "rejected") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-lg bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-500">
+        Қабылданбады
+      </span>
+    );
+  }
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <button
-        onClick={handleApprove}
-        disabled={isPending}
-        className={cn(
-          "inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors",
-          "hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
-        )}
-      >
-        {isPending ? (
-          <>
-            <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-            </svg>
-            Растауда...
-          </>
-        ) : (
-          "✓ Растау"
-        )}
-      </button>
+      <div className="flex gap-2">
+        <button
+          onClick={() => run("reject")}
+          disabled={isPending}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-600 transition-colors",
+            "hover:bg-zinc-50 disabled:opacity-60 disabled:cursor-not-allowed"
+          )}
+        >
+          {isPending && action === "reject" ? "..." : "Қабылдамау"}
+        </button>
+        <button
+          onClick={() => run("approve")}
+          disabled={isPending}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors",
+            "hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
+          )}
+        >
+          {isPending && action === "approve" ? (
+            <>
+              <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+              </svg>
+              Растауда...
+            </>
+          ) : (
+            "✓ Растау"
+          )}
+        </button>
+      </div>
       {err && <p className="text-xs text-red-500">{err}</p>}
     </div>
   );
@@ -130,7 +151,7 @@ export function PendingPayments({
 
             {/* Action */}
             <div className="sm:pl-4">
-              <ApproveButton paymentId={p.id} />
+              <ApproveRejectButtons paymentId={p.id} />
             </div>
           </div>
         );

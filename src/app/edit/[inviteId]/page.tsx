@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { getInvite } from "@/lib/data/invites";
 import { getTemplate } from "@/lib/templates";
@@ -13,6 +13,13 @@ interface Props {
   searchParams: Promise<{ lang?: string }>;
 }
 
+// Editing content and billing status are separate concerns: DRAFT,
+// PENDING_PAYMENT, PUBLISHED, and EXPIRED invites are all editable here.
+// The PATCH route this editor autosaves through only ever writes `title`
+// and `data` — it never touches status, slug, expiresAt, payments, or
+// guests — so opening the constructor on a PUBLISHED invite can never
+// re-trigger payment, change the public slug, or clear RSVP/payment
+// history. See /dashboard/invites/[id] (Manage) for those concerns.
 export default async function EditPage({ params, searchParams }: Props) {
   const { inviteId } = await params;
   const { lang: langParam } = await searchParams;
@@ -20,10 +27,6 @@ export default async function EditPage({ params, searchParams }: Props) {
   const session = await requireAuth();
   const invite = await getInvite(inviteId, session.userId, session.role);
   if (!invite) notFound();
-
-  if (invite.status === "PUBLISHED") {
-    redirect(`/dashboard/invites/${invite.id}`);
-  }
 
   const d = (invite.data ?? {}) as Record<string, unknown>;
   const initialData = parseEditorData(d, "wedding-rose");

@@ -4,12 +4,14 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { getProductSettings } from "@/lib/product";
 import { kaspiProvider } from "@/lib/payment/providers/kaspi";
+import { getKaspiLinkConfig } from "@/lib/payment-providers";
 
 const schema = z.object({
   inviteId: z.string().uuid(),
   provider: z
     .enum(["MANUAL_KASPI", "APIPAY", "CLOUDPAYMENTS"])
     .default("MANUAL_KASPI"),
+  lang: z.enum(["kk", "ru"]).default("kk"),
 });
 
 const PAYABLE_STATUSES = new Set(["DRAFT", "PENDING_PAYMENT", "EXPIRED"]);
@@ -35,7 +37,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { inviteId, provider } = parsed.data;
+  const { inviteId, provider, lang } = parsed.data;
 
   const invite = await db.invite.findUnique({
     where: { id: inviteId },
@@ -54,6 +56,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (provider === "MANUAL_KASPI") {
+    const kaspiConfig = await getKaspiLinkConfig();
+    if (!kaspiConfig.enabled) {
+      return NextResponse.json({ error: "PROVIDER_DISABLED" }, { status: 409 });
+    }
+  }
+
   const product = await getProductSettings();
   const price = product.price;
 
@@ -63,7 +72,7 @@ export async function POST(req: NextRequest) {
     select: { id: true, amount: true },
   });
   if (existing) {
-    const instructions = kaspiProvider.getInstructions(Number(existing.amount), existing.id);
+    const instructions = await kaspiProvider.getInstructions(Number(existing.amount), existing.id, lang);
     return NextResponse.json({
       paymentId: existing.id,
       status: "PENDING",
@@ -109,7 +118,7 @@ export async function POST(req: NextRequest) {
     return p;
   });
 
-  const instructions = kaspiProvider.getInstructions(price, payment.id);
+  const instructions = await kaspiProvider.getInstructions(price, payment.id, lang);
 
   return NextResponse.json(
     {

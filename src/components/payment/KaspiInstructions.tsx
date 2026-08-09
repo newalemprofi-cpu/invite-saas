@@ -42,11 +42,9 @@ const T = {
   },
 } as const;
 
-// Note: `data.steps` comes from the Kaspi provider layer
-// (src/lib/payment/providers/kaspi.ts) and is currently Kazakh-only —
-// localizing it would mean changing the provider's public interface,
-// which is out of scope here (lifecycle integration only, not provider
-// internals). Everything else on this screen is fully bilingual.
+// `data.steps` is built server-side by the Kaspi provider layer
+// (src/lib/payment/providers/kaspi.ts) from the admin-configured settings
+// AND the request's `lang` — already localized by the time it gets here.
 export function KaspiInstructions({ data, planName, lang }: Props) {
   const t = T[lang];
   return (

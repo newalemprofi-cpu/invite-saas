@@ -1,4 +1,4 @@
-import { THEMES, TEMPLATES, EVENT_TYPES } from "@/types/invite";
+import { THEMES, TEMPLATES } from "@/types/invite";
 import { cn } from "@/lib/utils";
 
 export interface InviteCardData {
@@ -43,8 +43,6 @@ export function StaticInviteCard({ data }: { data: InviteCardData }) {
   const textColor = tmpl?.textColor ?? legacyTheme?.textColor ?? THEMES[0].textColor;
   const dark = tmpl?.dark ?? legacyTheme?.dark ?? false;
 
-  const eventType = EVENT_TYPES.find((e) => e.value === data.eventType);
-
   // Support both new and old name fields
   const displayName =
     data.groomName
@@ -84,8 +82,6 @@ export function StaticInviteCard({ data }: { data: InviteCardData }) {
       )}
 
       <div className="relative h-full flex flex-col items-center justify-center px-5 py-10 text-center gap-3">
-        <span className="text-4xl leading-none">{eventType?.emoji ?? "✨"}</span>
-
         <p
           className="text-[9px] tracking-[0.35em] uppercase font-semibold"
           style={{
@@ -130,7 +126,6 @@ export function StaticInviteCard({ data }: { data: InviteCardData }) {
             className="flex items-start gap-1 text-[10px] font-medium leading-snug"
             style={{ color: textColor }}
           >
-            <span className="mt-0.5 shrink-0">📍</span>
             <span className="break-words">{locationText}</span>
           </div>
         )}

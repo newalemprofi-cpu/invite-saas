@@ -194,7 +194,6 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
   const textDark = tmpl?.textDark || legacy.textColor;
   const textMuted = tmpl?.textMuted || (tmpl?.dark ?? legacy.dark ? "rgba(255,255,255,0.55)" : "#78716C");
   const isDark = tmpl?.dark ?? legacy.dark;
-  const emoji = tmpl?.emoji || "✨";
   const isZaurePremium = newSlug === "zaure-premium";
   const fontFamily = d.fontFamily === "sans" ? "var(--font-sans)" : "var(--font-serif)";
 
@@ -295,7 +294,6 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
         <div className="relative z-10 w-full max-w-md mx-auto text-center flex flex-col items-center gap-6">
           {has("hero") && (
             <>
-              <span className="text-7xl sm:text-8xl drop-shadow-lg leading-none animate-float">{emoji}</span>
               <p className="label-caps" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.35)" }}>
                 Сізді шақырамыз
               </p>
@@ -308,12 +306,18 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
           <div className="flex items-center gap-4 w-full px-4">
             <div className="flex-1 h-px opacity-25" style={{ background: accent }} />
             <span className="opacity-40" style={{ color: accent, fontSize: isZaurePremium ? "0.7rem" : "0.875rem", letterSpacing: isZaurePremium ? "0.35em" : undefined }}>
-              {isZaurePremium ? "❀ ✦ ❀" : "◆"}
+              {isZaurePremium ? "◆ ◆ ◆" : "◆"}
             </span>
             <div className="flex-1 h-px opacity-25" style={{ background: accent }} />
           </div>
 
-          {has("date") && d.date && (
+          {/* Not gated on has("date") — "date" was never a real toggleable
+              section id (see DEFAULT_SECTIONS in invite-editor-data.ts), so
+              that guard could never be true and this line never rendered.
+              The constructor's own live preview (InvitePreview.tsx) already
+              shows date/time unconditionally whenever the hero has data;
+              this matches that and actually reflects saved changes. */}
+          {d.date && (
             <div className="flex flex-col items-center gap-1.5">
               <p className="font-serif text-xl sm:text-2xl font-semibold" style={{ color: textDark }}>{fmt(d.date)}</p>
               {d.time && <p className="text-sm" style={{ color: textMuted }}>Сағат {d.time}</p>}
@@ -322,7 +326,7 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
 
           {location && (
             <div className="flex flex-col items-center gap-1.5">
-              <p className="font-semibold text-base" style={{ color: textDark }}>📍 {location}</p>
+              <p className="font-semibold text-base" style={{ color: textDark }}>{location}</p>
               {mapUrl && (
                 <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="text-sm underline underline-offset-2 hover:opacity-80" style={{ color: accent }}>
                   Картада ашу ↗
@@ -354,7 +358,7 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
       {isZaurePremium && (
         <div className="py-3 flex items-center justify-center gap-3" style={{ background: "#F3EDE3" }}>
           <div className="h-px w-12 opacity-20" style={{ background: "#B8925A" }} />
-          <p className="text-xs tracking-[0.35em] opacity-30" style={{ color: "#B8925A" }}>✿  ✦  ✿</p>
+          <p className="text-xs tracking-[0.35em] opacity-30" style={{ color: "#B8925A" }}>◆ ◆ ◆</p>
           <div className="h-px w-12 opacity-20" style={{ background: "#B8925A" }} />
         </div>
       )}
@@ -375,7 +379,7 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
       {has("love_story") && d.loveStory && (
         <section className="py-14 px-4" style={{ background: "var(--ivory)" }}>
           <div className="max-w-md mx-auto text-center">
-            <p className="label-caps mb-5" style={{ color: "var(--gold)" }}>💑 Біздің тарих</p>
+            <p className="label-caps mb-5" style={{ color: "var(--gold)" }}>Біздің тарих</p>
             <p className="text-base leading-relaxed" style={{ color: "var(--charcoal)" }}>{d.loveStory}</p>
           </div>
         </section>
@@ -417,7 +421,7 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
       {has("video_section") && d.videoUrl && (
         <section className="py-14 px-4" style={{ background: "var(--cream)" }}>
           <div className="max-w-2xl mx-auto">
-            <p className="label-caps text-center mb-6" style={{ color: "var(--gold)" }}>🎬 Бейне</p>
+            <p className="label-caps text-center mb-6" style={{ color: "var(--gold)" }}>Бейне</p>
             <div className="aspect-video rounded-2xl overflow-hidden">
               <iframe
                 src={d.videoUrl.includes("youtube") ? d.videoUrl.replace("watch?v=", "embed/") : d.videoUrl}
@@ -457,7 +461,7 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
       {has("dress_code") && d.dressCode && (
         <section className="py-12 px-4" style={{ background: "var(--ivory)" }}>
           <div className="max-w-md mx-auto text-center">
-            <p className="label-caps mb-4" style={{ color: "var(--gold)" }}>👗 Dress Code</p>
+            <p className="label-caps mb-4" style={{ color: "var(--gold)" }}>Dress Code</p>
             <div className="rounded-2xl p-6" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
               <p className="text-base" style={{ color: "var(--charcoal)" }}>{d.dressCode}</p>
             </div>
@@ -470,7 +474,7 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
         <section className="py-10 px-4" style={{ background: "var(--ivory)" }}>
           <div className="max-w-md mx-auto text-center">
             <p className="label-caps mb-5" style={{ color: "var(--gold)" }}>Орын</p>
-            {location && <p className="text-base font-semibold mb-3" style={{ color: "var(--charcoal)" }}>📍 {location}</p>}
+            {location && <p className="text-base font-semibold mb-3" style={{ color: "var(--charcoal)" }}>{location}</p>}
             <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="btn-outline inline-flex">
               Картада ашу ↗
             </a>
@@ -508,7 +512,7 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
       {has("wishes") && (
         <section className="py-12 px-4" style={{ background: "var(--ivory)" }}>
           <div className="max-w-md mx-auto text-center">
-            <p className="label-caps mb-4" style={{ color: "var(--gold)" }}>💌 Тілектер</p>
+            <p className="label-caps mb-4" style={{ color: "var(--gold)" }}>Тілектер</p>
             <div className="rounded-2xl p-6" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
               <p className="text-sm leading-relaxed" style={{ color: "var(--charcoal)" }}>
                 {d.wishesText || "Тілектеріңізді жазыңыз..."}
@@ -522,7 +526,7 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
       {has("gift_info") && d.giftInfo && (
         <section className="py-12 px-4" style={{ background: "var(--cream)" }}>
           <div className="max-w-md mx-auto text-center">
-            <p className="label-caps mb-4" style={{ color: "var(--gold)" }}>🎁 Сыйлық ақпараты</p>
+            <p className="label-caps mb-4" style={{ color: "var(--gold)" }}>Сыйлық ақпараты</p>
             <div className="rounded-2xl p-6" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
               <p className="text-sm leading-relaxed font-mono" style={{ color: "var(--charcoal)" }}>{d.giftInfo}</p>
             </div>

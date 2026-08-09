@@ -21,7 +21,6 @@ export function InvitePreview({ data, template }: Props) {
   const textDark = template?.textDark || "#1C1917";
   const textMuted = template?.textMuted || "#78716C";
   const isDark = template?.dark || false;
-  const emoji = template?.emoji || "✨";
 
   // Ordered sections (enabled only)
   const orderedEnabled = data.sections.filter((s) => s.enabled).map((s) => s.id);
@@ -89,18 +88,17 @@ export function InvitePreview({ data, template }: Props) {
             <div key="hero" className="relative flex flex-col items-center justify-center gap-3 p-5 text-center min-h-[180px]">
               {template?.slug === "zaure-premium" && (
                 <>
-                  <span className="absolute top-1 left-1 text-[9px] pointer-events-none" style={{ color: accent, opacity: 0.25 }}>✿</span>
-                  <span className="absolute top-1 right-1 text-[9px] pointer-events-none" style={{ color: accent, opacity: 0.25 }}>✿</span>
-                  <span className="absolute bottom-1 left-1 text-[8px] pointer-events-none" style={{ color: accent, opacity: 0.2 }}>❀</span>
-                  <span className="absolute bottom-1 right-1 text-[8px] pointer-events-none" style={{ color: accent, opacity: 0.2 }}>❀</span>
+                  <span className="absolute top-2 left-2 w-1.5 h-1.5 rounded-full pointer-events-none" style={{ background: accent, opacity: 0.25 }} />
+                  <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full pointer-events-none" style={{ background: accent, opacity: 0.25 }} />
+                  <span className="absolute bottom-2 left-2 w-1.5 h-1.5 rounded-full pointer-events-none" style={{ background: accent, opacity: 0.2 }} />
+                  <span className="absolute bottom-2 right-2 w-1.5 h-1.5 rounded-full pointer-events-none" style={{ background: accent, opacity: 0.2 }} />
                 </>
               )}
-              <span className="text-4xl">{emoji}</span>
               <p className="label-caps text-[9px]" style={{ color: textMuted }}>Іс-шараға шақырамыз</p>
               <p className="font-serif text-xl font-semibold leading-tight" style={{ color: textColor }}>{name}</p>
               <div className="w-full h-px opacity-20 my-1" style={{ background: `linear-gradient(90deg,transparent,${accent},transparent)` }} />
               {data.date && <p className="font-serif text-sm" style={{ color: textMuted }}>{fmt(data.date)}{data.time && ` · ${data.time}`}</p>}
-              {data.location && <p className="text-xs" style={{ color: textMuted }}>📍 {data.location}</p>}
+              {data.location && <p className="text-xs" style={{ color: textMuted }}>{data.location}</p>}
             </div>
           );
 
@@ -125,7 +123,7 @@ export function InvitePreview({ data, template }: Props) {
           if (id === "love_story") return (
             <div key="love_story" className="mx-4 my-2 p-3 rounded-xl shrink-0"
               style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}>
-              <p className="text-[10px] font-semibold mb-1" style={{ color: textMuted }}>💑 Біздің тарих</p>
+              <p className="text-[10px] font-semibold mb-1" style={{ color: textMuted }}>Біздің тарих</p>
               <p className="text-[10px] leading-relaxed" style={{ color: textMuted }}>
                 {data.loveStory || "Сүйіспеншілік тарихымыз..."}
               </p>
@@ -145,9 +143,9 @@ export function InvitePreview({ data, template }: Props) {
 
           if (id === "video_section" && data.videoUrl) return (
             <div key="video_section" className="mx-4 my-2 shrink-0">
-              <div className="w-full h-20 rounded-xl flex items-center justify-center text-xl"
-                style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }}>
-                🎬
+              <div className="w-full h-20 rounded-xl flex items-center justify-center text-[10px] font-semibold uppercase tracking-wider"
+                style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", color: textMuted }}>
+                Бейне
               </div>
             </div>
           );
@@ -155,7 +153,7 @@ export function InvitePreview({ data, template }: Props) {
           if (id === "program") return (
             <div key="program" className="mx-4 my-2 p-3 rounded-xl shrink-0"
               style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}>
-              <p className="text-[10px] font-semibold mb-2" style={{ color: textMuted }}>📋 Бағдарлама</p>
+              <p className="text-[10px] font-semibold mb-2" style={{ color: textMuted }}>Бағдарлама</p>
               {(data.programItems.length > 0 ? data.programItems : [
                 { time: "18:00", label: "Қонақтарды қарсы алу" },
                 { time: "19:00", label: "Той басталады" },
@@ -172,7 +170,7 @@ export function InvitePreview({ data, template }: Props) {
           if (id === "dress_code") return (
             <div key="dress_code" className="mx-4 my-1 p-2 rounded-lg shrink-0"
               style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}>
-              <p className="text-[10px] font-semibold mb-0.5" style={{ color: textMuted }}>👗 Dress Code</p>
+              <p className="text-[10px] font-semibold mb-0.5" style={{ color: textMuted }}>Dress Code</p>
               <p className="text-[9px]" style={{ color: textMuted }}>{data.dressCode || "Ақ-алтын түстер"}</p>
             </div>
           );
@@ -180,14 +178,14 @@ export function InvitePreview({ data, template }: Props) {
           if (id === "wishes") return (
             <div key="wishes" className="mx-4 my-1 p-2 rounded-lg shrink-0"
               style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}>
-              <p className="text-[10px] font-semibold" style={{ color: textMuted }}>💌 Тілектер</p>
+              <p className="text-[10px] font-semibold" style={{ color: textMuted }}>Тілектер</p>
             </div>
           );
 
           if (id === "map" && data.mapLink) return (
             <div key="map" className="mx-4 my-1 p-2 rounded-lg text-center text-[10px] shrink-0"
               style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", color: textMuted }}>
-              📍 Картада қарау ↗
+              Картада қарау ↗
             </div>
           );
 
@@ -202,7 +200,7 @@ export function InvitePreview({ data, template }: Props) {
           if (id === "contacts") return (
             <div key="contacts" className="mx-4 my-1 p-2 rounded-lg shrink-0"
               style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}>
-              <p className="text-[10px] font-semibold mb-0.5" style={{ color: textMuted }}>📞 Байланыс</p>
+              <p className="text-[10px] font-semibold mb-0.5" style={{ color: textMuted }}>Байланыс</p>
               <p className="text-[9px]" style={{ color: textMuted }}>{data.contactsText || data.organizerPhone || "+7 700 000 0000"}</p>
             </div>
           );
@@ -210,7 +208,7 @@ export function InvitePreview({ data, template }: Props) {
           if (id === "gift_info") return (
             <div key="gift_info" className="mx-4 my-1 p-2 rounded-lg shrink-0"
               style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}>
-              <p className="text-[10px] font-semibold mb-0.5" style={{ color: textMuted }}>🎁 Сыйлық</p>
+              <p className="text-[10px] font-semibold mb-0.5" style={{ color: textMuted }}>Сыйлық</p>
               <p className="text-[9px]" style={{ color: textMuted }}>{data.giftInfo || "Kaspi карта..."}</p>
             </div>
           );
@@ -218,7 +216,7 @@ export function InvitePreview({ data, template }: Props) {
           if (id === "whatsapp" && data.whatsapp) return (
             <div key="whatsapp" className="px-4 py-1 shrink-0">
               <div className="py-2 rounded-full text-[10px] font-semibold text-white text-center" style={{ background: "#25D366" }}>
-                💬 WhatsApp
+                WhatsApp
               </div>
             </div>
           );
@@ -226,7 +224,7 @@ export function InvitePreview({ data, template }: Props) {
           if (id === "music" && data.musicEnabled && data.musicUrl) return (
             <div key="music" className="mx-4 my-2 p-3 rounded-xl flex items-center gap-2 shrink-0"
               style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}>
-              <span className="text-base">🎵</span>
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: accent }} />
               <p className="text-[10px] truncate" style={{ color: textMuted }}>{data.musicTitle || "Музыка"}</p>
             </div>
           );

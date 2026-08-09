@@ -158,7 +158,6 @@ export default async function TemplateDetailPage({ params, searchParams }: Props
               <div className="phone-screen" style={{ height: 520 }}>
                 <div className={`h-full bg-gradient-to-br ${tmpl.gradient} flex flex-col`}>
                   <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
-                    <span className="text-5xl">{tmpl.emoji}</span>
                     <div>
                       <p className="label-caps mb-2" style={{ color: tmpl.textMuted }}>
                         {heroLine}
@@ -278,7 +277,6 @@ export default async function TemplateDetailPage({ params, searchParams }: Props
                     <span className="text-xl font-normal" style={{ color: "var(--gold)" }}>₸</span>
                   </p>
                 </div>
-                <span className="text-3xl">{tmpl.emoji}</span>
               </div>
 
               <TemplateCreateButton templateSlug={tmpl.slug} lang={lang} />

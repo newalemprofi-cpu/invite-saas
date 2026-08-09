@@ -13,6 +13,7 @@ import { EVENT_TYPES, THEMES, TEMPLATES } from "@/types/invite";
 import { buildLoginUrl } from "@/lib/auth-redirect";
 import { getAppOrigin } from "@/lib/site-url";
 import { resolveLang, type Lang } from "@/lib/i18n";
+import { getKaspiLinkConfig } from "@/lib/payment-providers";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -135,9 +136,10 @@ export default async function InviteDetailPage({ params, searchParams }: Props) 
   const session = await getSession();
   if (!session) redirect(buildLoginUrl({ from: `/dashboard/invites/${id}?lang=${lang}`, lang }));
 
-  const [invite, product] = await Promise.all([
+  const [invite, product, kaspiConfig] = await Promise.all([
     getInvite(id, session.userId, session.role),
     getProductSettings(),
+    getKaspiLinkConfig(),
   ]);
   if (!invite) notFound();
 
@@ -350,16 +352,20 @@ export default async function InviteDetailPage({ params, searchParams }: Props) 
         )}
       </section>
 
-      {/* Payment / publish flow */}
-      {invite.status === "DRAFT" || invite.status === "PENDING_PAYMENT" ? (
+      {/* Payment / publish flow — EXPIRED is included because it's still a
+          PAYABLE_STATUS server-side (see /api/payments/create): renewing
+          simply pays again the same way an unpaid DRAFT does. */}
+      {invite.status === "DRAFT" || invite.status === "PENDING_PAYMENT" || invite.status === "EXPIRED" ? (
         <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-5">
           <PaymentFlow
             inviteId={invite.id}
             inviteTitle={invite.title}
             currentStatus={invite.status}
             price={product.price}
-            kaspiLink={product.kaspiPaymentLink}
             lang={lang}
+            kaspiEnabled={kaspiConfig.enabled}
+            contactEmail={kaspiConfig.config.adminEmail}
+            contactPhone={kaspiConfig.config.adminPhone}
           />
         </div>
       ) : invite.status === "PUBLISHED" ? (
