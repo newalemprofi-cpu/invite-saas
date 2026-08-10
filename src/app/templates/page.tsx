@@ -123,17 +123,22 @@ export default async function TemplatesPage({
                 className="group relative overflow-hidden rounded-3xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
                 style={{ background: tmpl.bg, boxShadow: "0 2px 16px rgba(28,25,23,0.06)" }}
               >
-                <div
-                  className={`h-48 bg-gradient-to-br ${tmpl.gradient} flex flex-col items-center justify-center gap-3 p-5`}
-                >
-                  <div className="w-8 h-px opacity-40" style={{ background: tmpl.accent }} />
-                  <div className="text-center">
-                    <p className="font-serif text-xl font-semibold leading-tight" style={{ color: tmpl.textDark }}>
-                      {tmpl.demoName1}{tmpl.demoName2 ? ` & ${tmpl.demoName2}` : ""}
-                    </p>
+                {tmpl.previewImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={tmpl.previewImage} alt={localized.name} className="h-48 w-full object-cover" loading="lazy" />
+                ) : (
+                  <div
+                    className={`h-48 bg-gradient-to-br ${tmpl.gradient} flex flex-col items-center justify-center gap-3 p-5`}
+                  >
+                    <div className="w-8 h-px opacity-40" style={{ background: tmpl.accent }} />
+                    <div className="text-center">
+                      <p className="font-serif text-xl font-semibold leading-tight" style={{ color: tmpl.textDark }}>
+                        {tmpl.demoName1}{tmpl.demoName2 ? ` & ${tmpl.demoName2}` : ""}
+                      </p>
+                    </div>
+                    <div className="w-8 h-px opacity-40" style={{ background: tmpl.accent }} />
                   </div>
-                  <div className="w-8 h-px opacity-40" style={{ background: tmpl.accent }} />
-                </div>
+                )}
 
                 <div className="p-4" style={{ background: tmpl.bg }}>
                   <div className="flex items-start justify-between gap-2 mb-2">

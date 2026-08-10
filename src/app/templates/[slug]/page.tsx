@@ -118,7 +118,7 @@ export default async function TemplateDetailPage({ params, searchParams }: Props
   const waText = encodeURIComponent(
     `Сәлем! Онлайн шақыру жасатқым келеді. Тіл: ${langLabel}. Мереке: ${categoryLabel}. Шаблон: ${localized.name}.`
   );
-  const waPhone = config.whatsapp.replace(/\D/g, "");
+  const waPhone = config.orderWhatsapp.replace(/\D/g, "");
   const waHref = `https://wa.me/${waPhone}?text=${waText}`;
 
   const heroLine =

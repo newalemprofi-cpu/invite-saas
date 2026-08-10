@@ -24,10 +24,10 @@ const T = {
 
 /**
  * Real templates from the DB (same source /templates itself reads) — no
- * fabricated records. Previews reuse the same gradient/emoji/demo-name card
- * style already used on /templates, since no template currently has a real
- * photo thumbnail (see InviteTemplate.previewImage — present in the schema,
- * unpopulated).
+ * fabricated records. Shows the admin-uploaded previewImage when a
+ * template has one; falls back to the gradient/emoji/demo-name card
+ * otherwise (see InviteTemplate.previewImage — admin-manageable via
+ * /admin/templates).
  */
 export function FeaturedTemplates({ lang, templates }: Props) {
   const t = T[lang];
@@ -49,12 +49,17 @@ export function FeaturedTemplates({ lang, templates }: Props) {
                 className="rounded-3xl overflow-hidden flex flex-col"
                 style={{ background: "white", boxShadow: "0 2px 16px rgba(28,25,23,0.06)" }}
               >
-                <div className={`h-40 bg-gradient-to-br ${tmpl.gradient} flex flex-col items-center justify-center gap-2.5 p-5`}>
-                  <span className="text-3xl leading-none">{tmpl.emoji}</span>
-                  <p className="font-serif text-lg font-semibold leading-tight text-center" style={{ color: tmpl.textDark }}>
-                    {tmpl.demoName1}{tmpl.demoName2 ? ` & ${tmpl.demoName2}` : ""}
-                  </p>
-                </div>
+                {tmpl.previewImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={tmpl.previewImage} alt={localized.name} className="h-40 w-full object-cover" loading="lazy" />
+                ) : (
+                  <div className={`h-40 bg-gradient-to-br ${tmpl.gradient} flex flex-col items-center justify-center gap-2.5 p-5`}>
+                    <span className="text-3xl leading-none">{tmpl.emoji}</span>
+                    <p className="font-serif text-lg font-semibold leading-tight text-center" style={{ color: tmpl.textDark }}>
+                      {tmpl.demoName1}{tmpl.demoName2 ? ` & ${tmpl.demoName2}` : ""}
+                    </p>
+                  </div>
+                )}
                 <div className="p-4 flex flex-col gap-3 flex-1">
                   <div>
                     <div className="flex items-center gap-2">

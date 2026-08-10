@@ -50,8 +50,8 @@ interface Props {
   providers: CheckoutProviderOption[];
   /** Whether admin has enabled the receipt-upload/auto-verification feature at all. */
   receiptVerificationEnabled: boolean;
-  /** Admin's WhatsApp contact number (E.164-ish), reused from existing admin config. */
-  whatsapp: string;
+  /** Admin's RECEIPT WhatsApp number (getAdminConfig().receiptWhatsapp) — deliberately separate from the order-WhatsApp number used elsewhere in the app. */
+  receiptWhatsapp: string;
   /** Id/reference/amount of the current PENDING payment, if one exists — never recomputed client-side. */
   pendingPaymentId: string | null;
   pendingPaymentReference: string | null;
@@ -263,7 +263,7 @@ export function PaymentFlow({
   lang,
   providers,
   receiptVerificationEnabled,
-  whatsapp,
+  receiptWhatsapp,
   pendingPaymentId,
   pendingPaymentReference,
   pendingPaymentAmount,
@@ -311,7 +311,7 @@ export function PaymentFlow({
         lang={lang}
         t={t}
         receiptVerificationEnabled={receiptVerificationEnabled}
-        whatsappNumber={whatsapp}
+        whatsappNumber={receiptWhatsapp}
         paymentContext={{ id: activePaymentId, reference: activePaymentReference, amount: activePaymentAmount }}
         onClose={() => setShowReturnModal(false)}
         onSettled={() => router.refresh()}

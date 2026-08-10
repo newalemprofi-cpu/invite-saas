@@ -30,8 +30,13 @@ export async function PATCH(req: NextRequest) {
     if (isNaN(p) || p < 0) return NextResponse.json({ error: "Жарамды баға" }, { status: 400 });
     patch.price = p;
   }
-  if (body.whatsapp !== undefined) patch.whatsapp = String(body.whatsapp).trim();
+  if (body.orderWhatsapp !== undefined) patch.orderWhatsapp = String(body.orderWhatsapp).trim();
+  if (body.receiptWhatsapp !== undefined) patch.receiptWhatsapp = String(body.receiptWhatsapp).trim();
   if (body.kaspiLink !== undefined) patch.kaspiLink = String(body.kaspiLink).trim();
+  if (body.companyPhone !== undefined) patch.companyPhone = String(body.companyPhone).trim();
+  if (body.companyEmail !== undefined) patch.companyEmail = String(body.companyEmail).trim();
+  if (body.instagramUrl !== undefined) patch.instagramUrl = String(body.instagramUrl).trim();
+  if (body.tiktokUrl !== undefined) patch.tiktokUrl = String(body.tiktokUrl).trim();
 
   const updated = await updateAdminConfig(patch);
   return NextResponse.json(updated);

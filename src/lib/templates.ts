@@ -25,6 +25,13 @@ export interface Template {
   // Demo names shown on landing / template card
   demoName1: string;
   demoName2?: string;
+  // Real photo overrides for the gradient/emoji card, admin-uploaded via
+  // /admin/templates — already resolved to a loadable URL (see
+  // lib/storage.ts's resolveStoredImage()), null when not set. Absent from
+  // the hardcoded seed TEMPLATES below; only ever populated by
+  // rowToTemplate() in db-templates.ts from real DB rows.
+  previewImage?: string | null;
+  demoImage?: string | null;
 }
 
 export type TemplateCategory =

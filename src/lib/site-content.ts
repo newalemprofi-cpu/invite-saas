@@ -23,6 +23,10 @@ export interface SiteContent {
   heroCtaSecondary: string;
   heroCtaSecondaryRu: string;
 
+  /** Short marketing blurb shown in the footer — operational contact channels (phone/email/social) live in admin-config.ts instead, this is copy. */
+  companyDescriptionKk: string;
+  companyDescriptionRu: string;
+
   /** Event-category id (see lib/event-categories.ts) -> uploaded cover image storage key. */
   categoryCovers: Record<string, string>;
   /** Event-category ids to hide from the homepage gallery entirely. */
@@ -34,12 +38,14 @@ export interface SiteContent {
 
   // Pre-existing fields, unchanged shape — kept here so this module remains
   // the single read/write path for the whole "site_content" blob.
+  // (contactWhatsapp/contactEmail/kaspiLink were removed here — they were
+  // never read anywhere on the customer-facing site and duplicated
+  // admin-config.ts's orderWhatsapp/receiptWhatsapp/companyEmail/kaspiLink,
+  // which are now the one source of truth for that operational contact
+  // data. See the task this was cleaned up for.)
   pricingAmount: string;
   pricingPeriod: string;
   pricingFeatures: string[];
-  contactWhatsapp: string;
-  contactEmail: string;
-  kaspiLink: string;
   seoTitle: string;
   seoDescription: string;
   footerText: string;
@@ -60,6 +66,9 @@ export function defaultSiteContent(): SiteContent {
     heroCtaSecondary: "Шаблондарды көру",
     heroCtaSecondaryRu: "Смотреть шаблоны",
 
+    companyDescriptionKk: "Shaqyru — заманауи цифрлық шақыру жасау сервисі. Дайын үлгіні таңдап, бірнеше минут ішінде шақыруыңызды дайындаңыз.",
+    companyDescriptionRu: "Shaqyru — современный сервис создания цифровых приглашений. Выберите готовый шаблон и подготовьте приглашение за пару минут.",
+
     categoryCovers: {},
     hiddenCategories: [],
     categoryOrder: [],
@@ -75,9 +84,6 @@ export function defaultSiteContent(): SiteContent {
       "WhatsApp интеграциясы",
       "Картадан орынды қосу",
     ],
-    contactWhatsapp: "",
-    contactEmail: "",
-    kaspiLink: "",
     seoTitle: "Шақыру — Премиум цифрлы шақырулар",
     seoDescription: "Элегантты цифрлы шақырулар. Үйлену той, ұзату, туылған күн үшін.",
     footerText: "Қазақстандық премиум цифрлы шақыру сервисі",

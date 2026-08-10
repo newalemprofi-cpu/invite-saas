@@ -13,6 +13,8 @@ interface SiteContent {
   heroCtaPrimaryRu?: string;
   heroCtaSecondary?: string;
   heroCtaSecondaryRu?: string;
+  companyDescriptionKk?: string;
+  companyDescriptionRu?: string;
   categoryCovers?: Record<string, string>;
   hiddenCategories?: string[];
   categoryOrder?: string[];
@@ -20,9 +22,6 @@ interface SiteContent {
   pricingAmount?: string;
   pricingPeriod?: string;
   pricingFeatures?: string[];
-  contactWhatsapp?: string;
-  contactEmail?: string;
-  kaspiLink?: string;
   seoTitle?: string;
   seoDescription?: string;
   footerText?: string;
@@ -47,6 +46,8 @@ const DEFAULTS: SiteContent = {
   heroCtaPrimaryRu: "Создать приглашение",
   heroCtaSecondary: "Шаблондарды көру",
   heroCtaSecondaryRu: "Смотреть шаблоны",
+  companyDescriptionKk: "Shaqyru — заманауи цифрлық шақыру жасау сервисі. Дайын үлгіні таңдап, бірнеше минут ішінде шақыруыңызды дайындаңыз.",
+  companyDescriptionRu: "Shaqyru — современный сервис создания цифровых приглашений. Выберите готовый шаблон и подготовьте приглашение за пару минут.",
   categoryCovers: {},
   hiddenCategories: [],
   categoryOrder: [],
@@ -61,9 +62,6 @@ const DEFAULTS: SiteContent = {
     "WhatsApp интеграциясы",
     "Картадан орынды қосу",
   ],
-  contactWhatsapp: "",
-  contactEmail: "",
-  kaspiLink: "",
   seoTitle: "Шақыру — Премиум цифрлы шақырулар",
   seoDescription: "Элегантты цифрлы шақырулар. Үйлену той, ұзату, туылған күн үшін.",
   footerText: "Қазақстандық премиум цифрлы шақыру сервисі",
@@ -272,11 +270,27 @@ export default function AdminSitePage() {
         />
       </Card>
 
-      {/* Contact */}
-      <Card title="Байланыс">
-        <TextField label="WhatsApp нөмірі" value={content.contactWhatsapp ?? ""} onChange={(v) => up({ contactWhatsapp: v })} placeholder="+7 700 000 0000" />
-        <TextField label="Email" value={content.contactEmail ?? ""} onChange={(v) => up({ contactEmail: v })} placeholder="hello@shakiru.kz" />
-        <TextField label="Kaspi төлем сілтемесі" value={content.kaspiLink ?? ""} onChange={(v) => up({ kaspiLink: v })} placeholder="https://kaspi.kz/pay/..." />
+      {/* Company description — marketing copy shown in the footer. Operational
+          contact channels (phone/email/Instagram/TikTok/WhatsApp) moved to
+          Admin → Баптаулар, so this page only holds text content. */}
+      <Card title="Компания туралы">
+        <p className="text-xs" style={{ color: "var(--muted)" }}>
+          Footer-де көрсетілетін қысқа сипаттама. Телефон, email, Instagram, TikTok — Баптаулар бетінде.
+        </p>
+        <TextArea
+          label="Қысқа сипаттама (қазақша)"
+          value={content.companyDescriptionKk ?? ""}
+          onChange={(v) => up({ companyDescriptionKk: v })}
+          rows={3}
+          placeholder="Shaqyru — заманауи цифрлық шақыру жасау сервисі..."
+        />
+        <TextArea
+          label="Краткое описание (русский)"
+          value={content.companyDescriptionRu ?? ""}
+          onChange={(v) => up({ companyDescriptionRu: v })}
+          rows={3}
+          placeholder="Shaqyru — современный сервис создания цифровых приглашений..."
+        />
       </Card>
 
       {/* SEO */}

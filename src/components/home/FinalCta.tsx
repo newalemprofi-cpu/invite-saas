@@ -3,8 +3,8 @@ import type { Lang } from "@/lib/i18n";
 
 interface Props {
   lang: Lang;
-  /** Admin-configured WhatsApp number, reused from getAdminConfig() — never hardcoded. */
-  whatsapp: string;
+  /** Admin's order WhatsApp number (getAdminConfig().orderWhatsapp) — this is an "I want to order" flow, never the receipt-submission number. */
+  orderWhatsapp: string;
 }
 
 const T = {
@@ -22,9 +22,9 @@ const T = {
   },
 } as const;
 
-export function FinalCta({ lang, whatsapp }: Props) {
+export function FinalCta({ lang, orderWhatsapp }: Props) {
   const t = T[lang];
-  const phone = whatsapp.replace(/\D/g, "");
+  const phone = orderWhatsapp.replace(/\D/g, "");
   const waHref = `https://wa.me/${phone}?text=${encodeURIComponent(t.waMessage)}`;
 
   return (

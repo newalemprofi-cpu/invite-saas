@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useTransition, useRef } from "react";
 import type { InviteTemplate } from "@prisma/client";
+import { uploadTemplateImageAction, removeTemplateImageAction } from "./actions";
 
 interface FormState {
   title: string;
@@ -305,8 +306,20 @@ export function TemplatesManager() {
                 <FI label="Emoji" value={form.emoji} onChange={(v) => set("emoji", v)} placeholder="✨" />
                 <FI label="1-есім (demoName1)" value={form.demoName1} onChange={(v) => set("demoName1", v)} />
                 <FI label="2-есім (demoName2)" value={form.demoName2} onChange={(v) => set("demoName2", v)} />
-                <FI label="Preview сурет URL" value={form.previewImage} onChange={(v) => set("previewImage", v)} />
-                <FI label="Demo сурет URL" value={form.demoImage} onChange={(v) => set("demoImage", v)} />
+                <ImageUploadField
+                  label="Preview сурет"
+                  templateId={panel === "create" || panel === "none" ? null : panel}
+                  field="previewImage"
+                  value={form.previewImage}
+                  onChange={(v) => set("previewImage", v)}
+                />
+                <ImageUploadField
+                  label="Demo сурет"
+                  templateId={panel === "create" || panel === "none" ? null : panel}
+                  field="demoImage"
+                  value={form.demoImage}
+                  onChange={(v) => set("demoImage", v)}
+                />
               </Section>
 
               {/* Visual tokens */}
@@ -365,6 +378,109 @@ function Section({ label, children }: { label: string; children: React.ReactNode
         {label}
       </p>
       {children}
+    </div>
+  );
+}
+
+/** Mirrors lib/storage.ts's resolveStoredImage()/getPublicUrl() — kept local since storage.ts pulls in the AWS SDK, which must never reach a client bundle. */
+function resolveImageSrc(value: string): string {
+  if (/^https?:\/\//i.test(value) || value.startsWith("/")) return value;
+  return `/api/media/${value.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+function ImageUploadField({
+  label, templateId, field, value, onChange,
+}: {
+  label: string;
+  templateId: string | null;
+  field: "previewImage" | "demoImage";
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (file: File) => {
+    if (!templateId) return;
+    setError(null);
+    const form = new FormData();
+    form.append("templateId", templateId);
+    form.append("field", field);
+    form.append("file", file);
+    startTransition(async () => {
+      const result = await uploadTemplateImageAction(form);
+      if (result.error) setError(result.error);
+      else if (result.key) onChange(result.key);
+    });
+  };
+
+  const handleRemove = () => {
+    if (!templateId) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await removeTemplateImageAction(templateId, field);
+      if (result.error) setError(result.error);
+      else onChange("");
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-xs font-medium" style={{ color: "var(--muted)" }}>{label}</label>
+      {!templateId ? (
+        <p className="text-xs italic" style={{ color: "var(--muted)" }}>
+          Алдымен шаблонды сақтаңыз, содан кейін сурет қосасыз.
+        </p>
+      ) : (
+        <div className="flex items-center gap-3">
+          <div
+            className="w-16 h-16 rounded-lg overflow-hidden shrink-0 flex items-center justify-center"
+            style={{ background: "var(--cream)", border: "1px solid var(--border)" }}
+          >
+            {value ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={resolveImageSrc(value)} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-xl" style={{ opacity: 0.3 }}>🖼️</span>
+            )}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isPending}
+              className="text-xs font-medium text-left"
+              style={{ color: "var(--gold-dark)" }}
+            >
+              {isPending ? "Жүктелуде..." : value ? "Ауыстыру" : "Суретті жүктеу"}
+            </button>
+            {value && (
+              <button
+                type="button"
+                onClick={handleRemove}
+                disabled={isPending}
+                className="text-xs text-left"
+                style={{ color: "var(--muted)" }}
+              >
+                Өшіру
+              </button>
+            )}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) handleFile(f);
+            }}
+          />
+        </div>
+      )}
+      {error && <p className="text-[11px] text-red-500">{error}</p>}
     </div>
   );
 }

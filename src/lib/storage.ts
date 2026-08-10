@@ -250,6 +250,19 @@ export function getPublicUrl(key: string): string {
 }
 
 /**
+ * Resolves a value that might be either a storage key (the current upload
+ * flow) or an already-usable URL (legacy admin-pasted external link, from
+ * before an upload UI existed for that field) into something a browser can
+ * load directly. Needed for fields like InviteTemplate.previewImage/
+ * demoImage that predate their own upload UI and may still hold raw URLs.
+ */
+export function resolveStoredImage(value: string | null | undefined): string | null {
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value) || value.startsWith("/")) return value;
+  return getPublicUrl(value);
+}
+
+/**
  * Inverse of getPublicUrl. Recognizes two formats so already-stored data
  * keeps working across this change:
  *   A) current:  <anything>/api/media/<encoded-key>  — matched by the

@@ -84,8 +84,16 @@ export default async function HomePage({ searchParams }: Props) {
       <FeaturedTemplates lang={lang} templates={featuredTemplates} />
       <HowItWorks lang={lang} />
       <Benefits lang={lang} />
-      <FinalCta lang={lang} whatsapp={config.whatsapp} />
-      <SiteFooter lang={lang} footerText={content.footerText} />
+      <FinalCta lang={lang} orderWhatsapp={config.orderWhatsapp} />
+      <SiteFooter
+        lang={lang}
+        companyDescription={lang === "ru" ? content.companyDescriptionRu : content.companyDescriptionKk}
+        companyPhone={config.companyPhone}
+        companyEmail={config.companyEmail}
+        orderWhatsapp={config.orderWhatsapp}
+        instagramUrl={config.instagramUrl}
+        tiktokUrl={config.tiktokUrl}
+      />
     </div>
   );
 }

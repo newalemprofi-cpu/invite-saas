@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { TEMPLATES } from "@/lib/templates";
 import type { Template, TemplateCategory } from "@/lib/templates";
 import type { InviteTemplate } from "@prisma/client";
+import { resolveStoredImage } from "@/lib/storage";
 
 function rowToTemplate(t: InviteTemplate, price: number): Template {
   return {
@@ -29,6 +30,8 @@ function rowToTemplate(t: InviteTemplate, price: number): Template {
     emoji: t.emoji,
     demoName1: t.demoName1,
     demoName2: t.demoName2 ?? undefined,
+    previewImage: resolveStoredImage(t.previewImage),
+    demoImage: resolveStoredImage(t.demoImage),
   };
 }
 

@@ -9,10 +9,18 @@ interface Props {
   price: number;
   activeDays: number;
   kaspiPaymentLink: string;
-  whatsapp: string;
+  orderWhatsapp: string;
+  receiptWhatsapp: string;
+  companyPhone: string;
+  companyEmail: string;
+  instagramUrl: string;
+  tiktokUrl: string;
 }
 
-export function SettingsForm({ price, activeDays, kaspiPaymentLink, whatsapp }: Props) {
+export function SettingsForm({
+  price, activeDays, kaspiPaymentLink, orderWhatsapp, receiptWhatsapp,
+  companyPhone, companyEmail, instagramUrl, tiktokUrl,
+}: Props) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -30,38 +38,44 @@ export function SettingsForm({ price, activeDays, kaspiPaymentLink, whatsapp }: 
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <Input
-        label="Баға (₸)"
-        type="number"
-        name="price"
-        defaultValue={price}
-        min={0}
-        required
-      />
-      <Input
-        label="Белсенді күн саны"
-        type="number"
-        name="activeDays"
-        defaultValue={activeDays}
-        min={1}
-        required
-      />
-      <Input
-        label="WhatsApp нөмірі (заказ алу үшін)"
-        type="tel"
-        name="whatsapp"
-        defaultValue={whatsapp}
-        placeholder="+77010000000"
-        required
-      />
-      <Input
-        label="Kaspi сілтемесі (міндетті емес)"
-        type="url"
-        name="kaspiPaymentLink"
-        defaultValue={kaspiPaymentLink}
-        placeholder="https://kaspi.kz/pay/..."
-      />
+    <form onSubmit={handleSubmit} className="flex flex-col gap-8">
+      <FormSection title="Сайт баптаулары">
+        <Input label="Баға (₸)" type="number" name="price" defaultValue={price} min={0} required />
+        <Input label="Белсенді күн саны" type="number" name="activeDays" defaultValue={activeDays} min={1} required />
+        <Input
+          label="Kaspi сілтемесі (міндетті емес)"
+          type="url"
+          name="kaspiPaymentLink"
+          defaultValue={kaspiPaymentLink}
+          placeholder="https://kaspi.kz/pay/..."
+        />
+      </FormSection>
+
+      <FormSection title="WhatsApp">
+        <Input
+          label="Шақыруға тапсырыс беру WhatsApp нөмірі"
+          type="tel"
+          name="orderWhatsapp"
+          defaultValue={orderWhatsapp}
+          placeholder="+77010000000"
+          required
+        />
+        <Input
+          label="Чек жіберетін WhatsApp нөмірі"
+          type="tel"
+          name="receiptWhatsapp"
+          defaultValue={receiptWhatsapp}
+          placeholder="+77010000000"
+          required
+        />
+      </FormSection>
+
+      <FormSection title="Контактілер">
+        <Input label="Негізгі телефон" type="tel" name="companyPhone" defaultValue={companyPhone} placeholder="+77010000000" />
+        <Input label="Email" type="email" name="companyEmail" defaultValue={companyEmail} placeholder="hello@shaqyru.kz" />
+        <Input label="Instagram сілтемесі" type="url" name="instagramUrl" defaultValue={instagramUrl} placeholder="https://instagram.com/shaqyru" />
+        <Input label="TikTok сілтемесі" type="url" name="tiktokUrl" defaultValue={tiktokUrl} placeholder="https://tiktok.com/@shaqyru" />
+      </FormSection>
 
       {error && (
         <p className="rounded-xl bg-red-50 border border-red-100 px-4 py-2.5 text-sm text-red-600">
@@ -78,5 +92,14 @@ export function SettingsForm({ price, activeDays, kaspiPaymentLink, whatsapp }: 
         Сақтау
       </Button>
     </form>
+  );
+}
+
+function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="label-caps" style={{ color: "var(--gold)" }}>{title}</p>
+      {children}
+    </div>
   );
 }
