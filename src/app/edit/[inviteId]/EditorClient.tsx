@@ -128,7 +128,8 @@ const T = {
     rsvpButtonPlaceholder: "Қатысуымды растаймын ✓",
     gallerySection: "Галерея (макс. 8 сурет)",
     musicSection: "Музыка",
-    musicToggle: "Музыканы қосу",
+    musicEnableBtn: "Қосу",
+    musicDisableBtn: "Өшіру",
     musicSelected: (title: string) => `Таңдалды: ${title}`,
     musicTitleLabel: "Атауы",
     musicTitlePlaceholder: "Ән атауы — Орындаушы",
@@ -201,7 +202,8 @@ const T = {
     rsvpButtonPlaceholder: "Я приду ✓",
     gallerySection: "Галерея (макс. 8 фото)",
     musicSection: "Музыка",
-    musicToggle: "Добавить музыку",
+    musicEnableBtn: "Включить",
+    musicDisableBtn: "Выключить",
     musicSelected: (title: string) => `Выбрано: ${title}`,
     musicTitleLabel: "Название",
     musicTitlePlaceholder: "Название — Исполнитель",
@@ -769,15 +771,24 @@ export function EditorClient({ inviteId, inviteSlug, initialData, template, invi
                 </Section>
 
                 <Section label={t.musicSection}>
-                  <div className="flex items-center justify-between p-3 rounded-xl" style={{ background: "var(--cream)", border: "1px solid var(--border)" }}>
-                    <p className="text-sm font-medium" style={{ color: "var(--charcoal)" }}>{t.musicToggle}</p>
-                    <div
-                      className={`toggle-track ${data.musicEnabled ? "active" : ""}`}
-                      style={data.musicEnabled ? { background: accent } : {}}
+                  {/* Deliberately just one small button, not a toggle switch —
+                      disabling must never clear the selected/uploaded track
+                      below, only stop playback, so there's nothing here to
+                      confirm and no reason for a bigger control. */}
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium" style={{ color: "var(--charcoal)" }}>{t.musicSection}</p>
+                    <button
+                      type="button"
                       onClick={() => update({ musicEnabled: !data.musicEnabled })}
+                      className="px-3 py-1 rounded-lg text-xs font-semibold transition-colors shrink-0"
+                      style={
+                        data.musicEnabled
+                          ? { background: "rgba(28,25,23,0.06)", color: "var(--charcoal)" }
+                          : { background: accent, color: "white" }
+                      }
                     >
-                      <div className="toggle-thumb" />
-                    </div>
+                      {data.musicEnabled ? t.musicDisableBtn : t.musicEnableBtn}
+                    </button>
                   </div>
 
                   {data.musicEnabled && (

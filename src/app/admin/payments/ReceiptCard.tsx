@@ -3,11 +3,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { reprocessReceiptAction } from "./actions";
+import { formatPaymentReference } from "@/lib/payment/reference";
 import type { ReceiptCheckKey } from "@/lib/receipts/verify";
-import type { ReceiptStatus, ReceiptVerificationResult } from "@prisma/client";
+import type { ReceiptStatus, ReceiptVerificationResult, PaymentStatus } from "@prisma/client";
 
-interface ReceiptCheckView {
+export interface ReceiptCheckView {
   key: ReceiptCheckKey;
   enabled: boolean;
   passed: boolean;
@@ -15,7 +15,7 @@ interface ReceiptCheckView {
   found?: string;
 }
 
-interface ReceiptView {
+export interface ReceiptCardView {
   id: string;
   status: ReceiptStatus;
   verificationResult: ReceiptVerificationResult | null;
@@ -26,7 +26,8 @@ interface ReceiptView {
   extractedIin: string | null;
   extractedMethodOfPayment: string | null;
   extractedDatetimeRaw: string | null;
-  extractedPaidAt: string | null;
+  /** Astana-local, already formatted for display (e.g. "09.08.2026 22:30 (Астана уақыты)") — see lib/receipts/display.ts. */
+  extractedPaidAtDisplay: string | null;
   extractedRecipient: string | null;
   extractedSender: string | null;
   confidence: number | null;
@@ -34,11 +35,28 @@ interface ReceiptView {
   createdAt: string;
   payment: {
     id: string;
+    status: PaymentStatus;
     amount: number;
     user: { name: string | null; email: string };
     invite: { id: string; title: string; slug: string };
   };
 }
+
+// Reason codes shown human-readable, per the task's exact examples — the
+// machine code stays available (data-* / console) for anyone who needs it,
+// never the only thing an admin sees.
+const RESULT_LABELS: Record<ReceiptVerificationResult, string> = {
+  VERIFIED: "Расталды",
+  AMOUNT_MISMATCH: "Сома сәйкес емес",
+  PAYMENT_METHOD_MISMATCH: "Төлем әдісі сәйкес емес",
+  IIN_MISMATCH: "ЖСН сәйкес емес",
+  RECEIPT_TOO_OLD: "Чек мерзімі сәйкес емес",
+  DUPLICATE_RECEIPT: "Қайталанған чек",
+  EXTRACTION_FAILED: "Чекті оқу мүмкін болмады",
+  INVALID_RECEIPT: "Жарамсыз чек",
+  NOT_CONFIGURED: "Баптау жеткіліксіз",
+  MANUAL_REVIEW_REQUIRED: "Қолмен тексеру қажет",
+};
 
 const CHECK_LABELS: Record<ReceiptCheckKey, string> = {
   AMOUNT: "Сома",
@@ -48,17 +66,11 @@ const CHECK_LABELS: Record<ReceiptCheckKey, string> = {
   DUPLICATE: "Қайталанбауы",
 };
 
-const RESULT_LABELS: Record<ReceiptVerificationResult, string> = {
-  VERIFIED: "Расталды",
-  AMOUNT_MISMATCH: "Сома сәйкес емес",
-  PAYMENT_METHOD_MISMATCH: "Төлем әдісі сәйкес емес",
-  IIN_MISMATCH: "ЖСН сәйкес емес",
-  RECEIPT_TOO_OLD: "Чек жасы/уақыты жарамсыз",
-  DUPLICATE_RECEIPT: "Қайталанған чек",
-  EXTRACTION_FAILED: "Оқу қатесі",
-  INVALID_RECEIPT: "Жарамсыз чек",
-  NOT_CONFIGURED: "Баптау жеткіліксіз",
-  MANUAL_REVIEW_REQUIRED: "Барлық тексеру өтті — растау керек",
+const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
+  PENDING: "Күтілуде",
+  PAID: "Төленді",
+  FAILED: "Қабылданбады",
+  EXPIRED: "Мерзімі өтті",
 };
 
 function CheckRow({ check }: { check: ReceiptCheckView }) {
@@ -73,7 +85,14 @@ function CheckRow({ check }: { check: ReceiptCheckView }) {
   );
 }
 
-function ReceiptCard({ receipt }: { receipt: ReceiptView }) {
+interface Props {
+  receipt: ReceiptCardView;
+  /** Whether Растау/Қабылдамау/Қайта тексеру apply here — false once the underlying Payment is no longer PENDING (already resolved). */
+  actionable: boolean;
+  onReprocess: (receiptId: string) => Promise<{ error?: string; status?: string }>;
+}
+
+export function ReceiptCard({ receipt, actionable, onReprocess }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [action, setAction] = useState<"approve" | "reject" | "reprocess" | null>(null);
@@ -104,7 +123,7 @@ function ReceiptCard({ receipt }: { receipt: ReceiptView }) {
     setAction("reprocess");
     startTransition(async () => {
       setErr(null);
-      const result = await reprocessReceiptAction(receipt.id);
+      const result = await onReprocess(receipt.id);
       if (result.error) setErr(result.error);
       else router.refresh();
     });
@@ -128,14 +147,18 @@ function ReceiptCard({ receipt }: { receipt: ReceiptView }) {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <p className="font-semibold text-zinc-900">{receipt.payment.invite.title}</p>
+          <p className="text-xs text-zinc-400 font-mono">{formatPaymentReference(receipt.payment.id)}</p>
           <p className="text-xs text-zinc-400">{receipt.payment.user.name ?? receipt.payment.user.email}</p>
-          <p className="text-[11px] text-zinc-400">{new Date(receipt.createdAt).toLocaleString("kk-KZ")}</p>
+          <p className="text-[11px] text-zinc-400">Жүктелген: {new Date(receipt.createdAt).toLocaleString("kk-KZ")}</p>
         </div>
         <div className="text-right">
           <p className="text-lg font-bold text-zinc-900 tabular-nums">{receipt.payment.amount.toLocaleString("kk-KZ")} ₸</p>
           <span className={cn("text-[10px] font-bold rounded-full px-2 py-0.5", resultIsClean ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")}>
             {resultLabel}
           </span>
+          {!actionable && (
+            <p className="text-[10px] text-zinc-400 mt-1">Төлем: {PAYMENT_STATUS_LABELS[receipt.payment.status]}</p>
+          )}
         </div>
       </div>
 
@@ -164,7 +187,7 @@ function ReceiptCard({ receipt }: { receipt: ReceiptView }) {
         <p>Банк: <span className="text-zinc-800 font-medium">{receipt.extractedBank ?? "—"}</span></p>
         <p>Төлем әдісі: <span className="text-zinc-800 font-medium">{receipt.extractedMethodOfPayment ?? "—"}</span></p>
         <p>ЖСН: <span className="text-zinc-800 font-medium">{receipt.extractedIin ?? "—"}</span></p>
-        <p>Уақыты: <span className="text-zinc-800 font-medium">{receipt.extractedPaidAt ? new Date(receipt.extractedPaidAt).toLocaleString("kk-KZ") : (receipt.extractedDatetimeRaw ?? "—")}</span></p>
+        <p className="col-span-2">Чек уақыты: <span className="text-zinc-800 font-medium">{receipt.extractedPaidAtDisplay ?? receipt.extractedDatetimeRaw ?? "—"}</span></p>
         {(receipt.extractedRecipient || receipt.extractedSender || receipt.confidence != null) && (
           <p className="col-span-2 text-zinc-400 italic">
             Ескі жазба: {receipt.extractedRecipient ?? "—"} / {receipt.extractedSender ?? "—"}
@@ -175,48 +198,31 @@ function ReceiptCard({ receipt }: { receipt: ReceiptView }) {
 
       {err && <p className="text-xs text-red-500">{err}</p>}
 
-      <div className="flex gap-2 justify-end flex-wrap">
-        <button
-          onClick={reprocess}
-          disabled={isPending}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 disabled:opacity-60 transition-colors"
-        >
-          {isPending && action === "reprocess" ? "..." : "Қайта тексеру"}
-        </button>
-        <button
-          onClick={() => run("reject")}
-          disabled={isPending}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-600 hover:bg-zinc-50 disabled:opacity-60 transition-colors"
-        >
-          {isPending && action === "reject" ? "..." : "Қабылдамау"}
-        </button>
-        <button
-          onClick={() => run("approve")}
-          disabled={isPending}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60 transition-colors"
-        >
-          {isPending && action === "approve" ? "..." : "✓ Растау"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-export function ReceiptReviewList({ receipts }: { receipts: ReceiptView[] }) {
-  if (receipts.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-14 text-center gap-3 bg-white rounded-2xl border border-zinc-100">
-        <span className="text-4xl">✅</span>
-        <p className="text-sm text-zinc-500">Тексеруді қажет ететін чек жоқ</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      {receipts.map((r) => (
-        <ReceiptCard key={r.id} receipt={r} />
-      ))}
+      {actionable && (
+        <div className="flex gap-2 justify-end flex-wrap">
+          <button
+            onClick={reprocess}
+            disabled={isPending}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 disabled:opacity-60 transition-colors"
+          >
+            {isPending && action === "reprocess" ? "..." : "Қайта тексеру"}
+          </button>
+          <button
+            onClick={() => run("reject")}
+            disabled={isPending}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-600 hover:bg-zinc-50 disabled:opacity-60 transition-colors"
+          >
+            {isPending && action === "reject" ? "..." : "Қабылдамау"}
+          </button>
+          <button
+            onClick={() => run("approve")}
+            disabled={isPending}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60 transition-colors"
+          >
+            {isPending && action === "approve" ? "..." : "✓ Растау"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

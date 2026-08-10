@@ -13,6 +13,8 @@ interface Props {
   data: KaspiInstructionsData;
   planName: string;
   lang: Lang;
+  /** Fired when the customer actually clicks through to Kaspi — this is the ONLY moment we know they intended to pay, never earlier. */
+  onOpenKaspi?: () => void;
 }
 
 const T = {
@@ -45,7 +47,7 @@ const T = {
 // `data.steps` is built server-side by the Kaspi provider layer
 // (src/lib/payment/providers/kaspi.ts) from the admin-configured settings
 // AND the request's `lang` — already localized by the time it gets here.
-export function KaspiInstructions({ data, planName, lang }: Props) {
+export function KaspiInstructions({ data, planName, lang, onOpenKaspi }: Props) {
   const t = T[lang];
   return (
     <div className="flex flex-col gap-5">
@@ -89,6 +91,7 @@ export function KaspiInstructions({ data, planName, lang }: Props) {
           href={data.kaspiLink}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={onOpenKaspi}
           className="flex h-12 items-center justify-center gap-2 rounded-xl bg-[#F14635] text-white text-sm font-bold transition-opacity hover:opacity-90"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">

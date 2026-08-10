@@ -1,70 +1,37 @@
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
-import { ReceiptReviewList } from "./ReceiptReviewList";
-import type { ReceiptCheck } from "@/lib/receipts/verify";
+import { ReceiptHistoryList } from "./ReceiptHistoryList";
+import { RECEIPT_WITH_PAYMENT_INCLUDE, serializeReceiptForAdmin } from "../serialize-receipt";
 
 export const metadata: Metadata = { title: "Чектерді тексеру — Admin" };
 export const dynamic = "force-dynamic";
 
-export default async function ReceiptsReviewPage() {
-  // FAILED is included for backward compat — older rows from before the
-  // extractor migration may still carry that status; they must remain
-  // visible here (task: "existing manual-review records ... must remain
-  // viewable"), not silently disappear from the queue.
+/**
+ * The broader receipt history/manual-review view — every PaymentReceipt
+ * row ever created, regardless of status or the underlying Payment's
+ * current state. Distinct from /admin/payments/verification-failures
+ * ("Автоматты өтпегендер"), which is deliberately narrow: only the
+ * currently-active failures needing attention right now. A receipt whose
+ * Payment has already been resolved (PAID, rejected, expired) drops out of
+ * that active queue but stays visible here — "historical data remains
+ * elsewhere" per the task's own framing.
+ */
+export default async function ReceiptsHistoryPage() {
   const receipts = await db.paymentReceipt.findMany({
-    where: { status: { in: ["REVIEW_REQUIRED", "FAILED"] }, payment: { status: "PENDING" } },
-    orderBy: { createdAt: "asc" },
-    include: {
-      payment: {
-        select: {
-          id: true,
-          amount: true,
-          status: true,
-          user: { select: { name: true, email: true } },
-          invite: { select: { id: true, title: true, slug: true } },
-        },
-      },
-    },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+    include: RECEIPT_WITH_PAYMENT_INCLUDE,
   });
 
-  const serialized = receipts.map((r) => ({
-    id: r.id,
-    status: r.status,
-    verificationResult: r.verificationResult,
-    failureReason: r.failureReason,
-    receiptId: r.receiptId,
-    extractedAmount: r.extractedAmount != null ? Number(r.extractedAmount) : null,
-    extractedBank: r.extractedBank,
-    extractedIin: r.extractedIin,
-    extractedMethodOfPayment: r.extractedMethodOfPayment,
-    extractedDatetimeRaw: r.extractedDatetimeRaw,
-    extractedPaidAt: r.extractedPaidAt ? r.extractedPaidAt.toISOString() : null,
-    // Legacy fields from the retired Anthropic-based extractor — only ever non-null on old rows.
-    extractedRecipient: r.extractedRecipient,
-    extractedSender: r.extractedSender,
-    confidence: r.confidence,
-    checks: (r.checksJson as unknown as ReceiptCheck[] | null) ?? [],
-    createdAt: r.createdAt.toISOString(),
-    payment: {
-      id: r.payment.id,
-      amount: Number(r.payment.amount),
-      user: r.payment.user,
-      invite: r.payment.invite,
-    },
-  }));
+  const serialized = receipts.map(serializeReceiptForAdmin);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-900">Чектерді тексеру</h1>
-          <p className="text-sm text-zinc-500 mt-1">Қолмен тексеруді қажет ететін чектер</p>
-        </div>
-        {serialized.length > 0 && (
-          <span className="rounded-full bg-amber-100 text-amber-700 text-xs font-bold px-2.5 py-1">{serialized.length}</span>
-        )}
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-900">Чектерді тексеру</h1>
+        <p className="text-sm text-zinc-500 mt-1">Барлық жүктелген чектердің тарихы (соңғы 200)</p>
       </div>
-      <ReceiptReviewList receipts={serialized} />
+      <ReceiptHistoryList receipts={serialized} />
     </div>
   );
 }

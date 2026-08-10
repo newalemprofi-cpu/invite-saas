@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { KaspiInstructions } from "./KaspiInstructions";
 import { Button } from "@/components/ui/Button";
@@ -83,20 +83,23 @@ interface PaymentFlowStrings {
   publishedTitle: string;
   publishedBody: string;
   paidQuestion: string;
+  modalSubtext: string;
   uploadReceipt: string;
   sendViaWhatsapp: string;
   checking: string;
   confirmed: string;
   sentForReview: string;
-  reviewBannerTitle: string;
+  reviewRequiredTitle: string;
   reviewBannerBody: string;
+  later: string;
+  close: string;
   openInvite: string;
   whatsappMessage: (ref: string, amount: number) => string;
 }
 
 const T: Record<Lang, PaymentFlowStrings> = {
   kk: {
-    pendingTitle: "Төлем расталуда",
+    pendingTitle: "Төлем күтілуде",
     pendingBody: "Admin 1-24 сағат ішінде растайды. Расталғаннан кейін шақыру автоматты түрде жарияланады.",
     payTitle: "Төлем",
     back: "← Артқа",
@@ -118,19 +121,22 @@ const T: Record<Lang, PaymentFlowStrings> = {
     publishedTitle: "Сәтті жарияланды! 🎉",
     publishedBody: "Шақыру промокодпен толығымен жабылды және енді жарияланды.",
     paidQuestion: "Төлем жасадыңыз ба?",
+    modalSubtext: "Төлем жасаған болсаңыз, чекті жүктеңіз.\nЖүйе чекті автоматты түрде тексереді.",
     uploadReceipt: "Чекті жүктеу",
     sendViaWhatsapp: "WhatsApp арқылы жіберу",
     checking: "Чек тексерілуде...",
-    confirmed: "Төлем расталды",
-    sentForReview: "Чек қосымша тексеруге жіберілді",
-    reviewBannerTitle: "Чек қабылданды.",
-    reviewBannerBody: "Төлем қосымша тексеруге жіберілді.",
+    confirmed: "✓ Төлем расталды",
+    sentForReview: "Чек қабылданды.\nТөлем қосымша тексеруге жіберілді.",
+    reviewRequiredTitle: "Қосымша тексеру қажет",
+    reviewBannerBody: "Чек қабылданды. Төлем қосымша тексеруге жіберілді.",
+    later: "Кейінірек",
+    close: "Жабу",
     openInvite: "Шақыруды ашу →",
     whatsappMessage: (ref: string, amount: number) =>
       `Сәлеметсіз бе!\nШақыру төлемінің чегін жіберемін.\n\nТөлем коды: ${ref}\nСома: ${amount.toLocaleString("kk-KZ")} ₸`,
   },
   ru: {
-    pendingTitle: "Платёж подтверждается",
+    pendingTitle: "Ожидается оплата",
     pendingBody: "Администратор подтвердит в течение 1-24 часов. После подтверждения приглашение будет опубликовано автоматически.",
     payTitle: "Оплата",
     back: "← Назад",
@@ -151,19 +157,104 @@ const T: Record<Lang, PaymentFlowStrings> = {
     freePublish: "Опубликовать бесплатно",
     publishedTitle: "Успешно опубликовано! 🎉",
     publishedBody: "Приглашение полностью оплачено промокодом и уже опубликовано.",
-    paidQuestion: "Уже оплатили?",
+    paidQuestion: "Вы оплатили?",
+    modalSubtext: "Если оплата выполнена, загрузите чек.\nСистема автоматически проверит его.",
     uploadReceipt: "Загрузить чек",
     sendViaWhatsapp: "Отправить через WhatsApp",
     checking: "Чек проверяется...",
-    confirmed: "Платёж подтверждён",
-    sentForReview: "Чек отправлен на дополнительную проверку",
-    reviewBannerTitle: "Чек получен.",
-    reviewBannerBody: "Платёж отправлен на дополнительную проверку.",
+    confirmed: "✓ Платёж подтверждён",
+    sentForReview: "Чек получен.\nПлатёж отправлен на дополнительную проверку.",
+    reviewRequiredTitle: "Требуется дополнительная проверка",
+    reviewBannerBody: "Чек получен. Платёж отправлен на дополнительную проверку.",
+    later: "Позже",
+    close: "Закрыть",
     openInvite: "Открыть приглашение →",
     whatsappMessage: (ref: string, amount: number) =>
       `Здравствуйте!\nОтправляю чек оплаты приглашения.\n\nКод платежа: ${ref}\nСумма: ${amount.toLocaleString("ru-RU")} ₸`,
   },
 };
+
+/** sessionStorage flag proving THIS specific Payment's Kaspi link was actually clicked — never means paid, only "customer opened Kaspi". */
+function kaspiOpenedKey(paymentId: string): string {
+  return `kaspiPaymentOpened:${paymentId}`;
+}
+
+function armKaspiOpened(paymentId: string) {
+  try {
+    sessionStorage.setItem(kaspiOpenedKey(paymentId), String(Date.now()));
+  } catch {
+    // sessionStorage unavailable (private mode etc.) — the return modal simply won't auto-show; manual entry point still works.
+  }
+}
+
+/**
+ * Detects the customer coming back to this tab after having clicked
+ * through to Kaspi — the concrete cross-platform signal for "browser
+ * backgrounded (Kaspi app/site opened) then foregrounded again" is a
+ * hidden→visible transition, which fires consistently on both desktop tab
+ * switches and mobile app-switches. `pageshow` with `persisted: true`
+ * covers browsers (notably iOS Safari) that suspend/bfcache the page
+ * instead of just hiding it. Plain `focus` is deliberately NOT used as a
+ * trigger — it also fires for unrelated reasons (e.g. closing the native
+ * file picker from the receipt upload button), which would pop this modal
+ * at the wrong moment.
+ */
+function useKaspiReturnDetection(paymentId: string | null, enabled: boolean, onReturn: () => void) {
+  // A ref (not effect-local state) so "already shown for this arming" survives
+  // the effect being torn down and recreated — which happens on every
+  // re-render if `onReturn` were in the dependency array, since callers pass
+  // a fresh inline closure each time (e.g. closing the modal itself causes a
+  // re-render). Keyed by the arm token's own timestamp value, so a genuinely
+  // NEW arming (customer clicks the Kaspi link again) gets a new key and is
+  // free to show the modal again.
+  const shownForArmRef = useRef<string | null>(null);
+  const onReturnRef = useRef(onReturn);
+  useEffect(() => {
+    onReturnRef.current = onReturn;
+  }, [onReturn]);
+
+  useEffect(() => {
+    if (!paymentId || !enabled) return;
+
+    let wasHidden = document.visibilityState === "hidden";
+
+    // Deliberately re-read sessionStorage on every transition rather than
+    // once at effect-setup time: this effect mounts as soon as a Payment
+    // exists (KaspiInstructions renders), which is BEFORE the customer has
+    // clicked the Kaspi link at all — checking once here would always see
+    // "not armed yet" and silently never attach a listener for the arming
+    // that happens moments later on click.
+    const maybeShow = () => {
+      let armValue: string | null = null;
+      try {
+        armValue = sessionStorage.getItem(kaspiOpenedKey(paymentId));
+      } catch {
+        armValue = null;
+      }
+      if (!armValue) return;
+      const armKey = `${paymentId}:${armValue}`;
+      if (shownForArmRef.current === armKey) return;
+      shownForArmRef.current = armKey;
+      onReturnRef.current();
+    };
+
+    const onVisibility = () => {
+      const visible = document.visibilityState === "visible";
+      if (visible && wasHidden) maybeShow();
+      wasHidden = !visible;
+    };
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) maybeShow();
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, [paymentId, enabled]);
+}
 
 export function PaymentFlow({
   inviteId,
@@ -187,10 +278,48 @@ export function PaymentFlow({
   const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
   const [promoLoading, setPromoLoading] = useState(false);
+  const [showReturnModal, setShowReturnModal] = useState(false);
   const t = T[lang];
 
+  // REJECTED/FAILED are terminal for that one attempt, not for the Payment —
+  // the customer must still be able to open the modal and try again, so only
+  // genuinely in-progress statuses suppress the retry entry point.
+  const hasReceiptInFlight =
+    latestReceiptStatus === "UPLOADED" ||
+    latestReceiptStatus === "PROCESSING" ||
+    latestReceiptStatus === "REVIEW_REQUIRED";
+
+  // The "active" payment for return-modal purposes is whichever one the
+  // customer can currently act on: the one just created in THIS tab
+  // (paymentData, set synchronously by handlePay — currentStatus/
+  // pendingPaymentId are server props frozen at the initial page load and
+  // never reflect a payment created moments ago without a full reload), or
+  // else the pending payment the server already knew about at load time.
+  const activePaymentId = paymentData?.paymentId ?? pendingPaymentId;
+  const activePaymentReference = paymentData ? formatPaymentReference(paymentData.paymentId) : pendingPaymentReference;
+  const activePaymentAmount = paymentData?.amount ?? pendingPaymentAmount;
+  const isPaid = paymentData?.status === "PAID";
+
+  useKaspiReturnDetection(
+    activePaymentId,
+    !isPaid && !hasReceiptInFlight,
+    () => setShowReturnModal(true)
+  );
+
+  const returnModal =
+    showReturnModal && !isPaid && activePaymentId && activePaymentReference && activePaymentAmount != null ? (
+      <KaspiReturnModal
+        lang={lang}
+        t={t}
+        receiptVerificationEnabled={receiptVerificationEnabled}
+        whatsappNumber={whatsapp}
+        paymentContext={{ id: activePaymentId, reference: activePaymentReference, amount: activePaymentAmount }}
+        onClose={() => setShowReturnModal(false)}
+        onSettled={() => router.refresh()}
+      />
+    ) : null;
+
   if (currentStatus === "PENDING_PAYMENT" && !paymentData) {
-    const hasReceiptInFlight = latestReceiptStatus != null;
     return (
       <div className="flex flex-col gap-4">
         <div className="rounded-2xl bg-amber-50 border border-amber-100 p-5 flex items-start gap-3">
@@ -203,23 +332,24 @@ export function PaymentFlow({
 
         {hasReceiptInFlight ? (
           <div className="rounded-2xl bg-blue-50 border border-blue-100 p-4">
-            <p className="text-sm font-semibold text-blue-800">{t.reviewBannerTitle}</p>
+            <p className="text-sm font-semibold text-blue-800">{t.reviewRequiredTitle}</p>
             <p className="text-sm text-blue-700 mt-0.5">{t.reviewBannerBody}</p>
           </div>
         ) : (
-          pendingPaymentId &&
-          pendingPaymentReference &&
-          pendingPaymentAmount != null && (
-            <ReceiptSubmitBlock
-              lang={lang}
-              t={t}
-              receiptVerificationEnabled={receiptVerificationEnabled}
-              whatsappNumber={whatsapp}
-              getPaymentContext={async () => ({ id: pendingPaymentId, reference: pendingPaymentReference, amount: pendingPaymentAmount })}
-              onVerified={() => router.refresh()}
-            />
+          activePaymentId && (
+            // Compact manual entry point — the modal normally opens itself
+            // on return-from-Kaspi detection, but sessionStorage doesn't
+            // survive a closed browser/new session, so this keeps the
+            // capability reachable even when auto-detection can't fire.
+            <button
+              onClick={() => setShowReturnModal(true)}
+              className="self-start text-sm font-medium text-zinc-500 hover:text-zinc-800 transition-colors underline underline-offset-2"
+            >
+              {t.paidQuestion}
+            </button>
           )
         )}
+        {returnModal}
       </div>
     );
   }
@@ -284,31 +414,6 @@ export function PaymentFlow({
     }
   };
 
-  // Lazily creates the PENDING payment on first receipt-upload attempt from
-  // the initial (no-payment-yet) screen — exactly the same request handlePay
-  // makes for a provider button, just triggered by "Чекті жүктеу" instead.
-  // A customer who already paid (e.g. scanned a static Kaspi QR elsewhere)
-  // shouldn't have to click a provider button first just to attach a receipt.
-  const ensurePayment = async (): Promise<{ id: string; reference: string; amount: number } | null> => {
-    const providerId = providers[0]?.id ?? "KASPI_LINK";
-    try {
-      const res = await fetch("/api/payments/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteId, provider: providerId, lang, ...(appliedPromo ? { promoCode: appliedPromo.code } : {}) }),
-      });
-      const data: PaymentResponse & { error?: string } = await res.json();
-      if (!res.ok) return null;
-      if (data.status === "PAID" && data.published) {
-        router.refresh();
-        return null;
-      }
-      return { id: data.paymentId, reference: formatPaymentReference(data.paymentId), amount: data.amount };
-    } catch {
-      return null;
-    }
-  };
-
   if (paymentData?.status === "PAID" && paymentData.published) {
     return (
       <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-5 text-center">
@@ -330,7 +435,13 @@ export function PaymentFlow({
             {t.back}
           </button>
         </div>
-        <KaspiInstructions data={paymentData.instructions} planName={t.planName} lang={lang} />
+        <KaspiInstructions
+          data={paymentData.instructions}
+          planName={t.planName}
+          lang={lang}
+          onOpenKaspi={() => armKaspiOpened(paymentData.paymentId)}
+        />
+        {returnModal}
       </div>
     );
   }
@@ -346,6 +457,9 @@ export function PaymentFlow({
     );
   }
 
+  // Deliberately clean: only the payment-method action(s), no receipt/WhatsApp
+  // buttons here. Those only appear once a Payment exists and Kaspi was
+  // actually opened — see the return modal above.
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -421,17 +535,6 @@ export function PaymentFlow({
         <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>
       )}
 
-      {finalAmount > 0 && (
-        <ReceiptSubmitBlock
-          lang={lang}
-          t={t}
-          receiptVerificationEnabled={receiptVerificationEnabled}
-          whatsappNumber={whatsapp}
-          getPaymentContext={ensurePayment}
-          onVerified={() => router.refresh()}
-        />
-      )}
-
       <div className="flex flex-col gap-2">
         {finalAmount === 0 ? (
           <Button
@@ -457,6 +560,7 @@ export function PaymentFlow({
           ))
         )}
       </div>
+      {returnModal}
     </div>
   );
 }
@@ -469,36 +573,43 @@ interface PaymentContext {
   amount: number;
 }
 
-interface ReceiptSubmitBlockProps {
+const buttonBase =
+  "inline-flex h-10 items-center justify-center gap-1.5 rounded-xl px-4 text-sm font-semibold transition-colors disabled:opacity-50";
+
+interface KaspiReturnModalProps {
   lang: Lang;
   t: Translations;
   receiptVerificationEnabled: boolean;
   whatsappNumber: string;
-  /** Returns the Payment to attach the receipt/message to, creating one first if none exists yet. */
-  getPaymentContext: () => Promise<PaymentContext | null>;
-  onVerified: () => void;
+  paymentContext: PaymentContext;
+  onClose: () => void;
+  /** Called after ANY terminal upload outcome (verified or sent-to-review) — refreshes server props so a later reload/re-arm sees up-to-date pendingPaymentId/latestReceiptStatus. */
+  onSettled: () => void;
 }
 
-const buttonBase =
-  "inline-flex h-10 items-center justify-center gap-1.5 rounded-xl px-4 text-sm font-semibold transition-colors disabled:opacity-50";
-
-function ReceiptSubmitBlock({ lang, t, receiptVerificationEnabled, whatsappNumber, getPaymentContext, onVerified }: ReceiptSubmitBlockProps) {
+/**
+ * The "did you pay?" dialog — shown automatically when the customer
+ * returns to this tab after clicking through to Kaspi (see
+ * useKaspiReturnDetection above), or manually via the small text link.
+ * Embeds the exact same working upload/WhatsApp actions as before; this is
+ * only a presentational wrapper, not a second implementation of either.
+ */
+function KaspiReturnModal({ lang, t, receiptVerificationEnabled, whatsappNumber, paymentContext, onClose, onSettled }: KaspiReturnModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [whatsappLoading, setWhatsappLoading] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
 
-  const openWhatsapp = (ctx: PaymentContext) => {
+  const openWhatsapp = () => {
     const phone = whatsappNumber.replace(/\D/g, "");
-    const href = `https://wa.me/${phone}?text=${encodeURIComponent(t.whatsappMessage(ctx.reference, ctx.amount))}`;
+    const href = `https://wa.me/${phone}?text=${encodeURIComponent(t.whatsappMessage(paymentContext.reference, paymentContext.amount))}`;
     window.open(href, "_blank");
   };
 
   const handleWhatsapp = async () => {
     setWhatsappLoading(true);
     try {
-      const ctx = await getPaymentContext();
-      if (ctx) openWhatsapp(ctx);
+      openWhatsapp();
     } finally {
       setWhatsappLoading(false);
     }
@@ -512,13 +623,8 @@ function ReceiptSubmitBlock({ lang, t, receiptVerificationEnabled, whatsappNumbe
     setUploading(true);
     setResult(null);
     try {
-      const ctx = await getPaymentContext();
-      if (!ctx) {
-        setUploading(false);
-        return;
-      }
       const form = new FormData();
-      form.append("paymentId", ctx.id);
+      form.append("paymentId", paymentContext.id);
       form.append("lang", lang);
       form.append("file", file);
       const res = await fetch("/api/payments/receipts/upload", { method: "POST", body: form });
@@ -530,7 +636,6 @@ function ReceiptSubmitBlock({ lang, t, receiptVerificationEnabled, whatsappNumbe
       }
       if (data.status === "AUTO_VERIFIED" || data.status === "ALREADY_PAID") {
         setResult({ ok: true, message: t.confirmed });
-        onVerified();
       } else {
         setResult({ ok: true, message: t.sentForReview });
       }
@@ -541,42 +646,64 @@ function ReceiptSubmitBlock({ lang, t, receiptVerificationEnabled, whatsappNumbe
     }
   };
 
-  if (result) {
-    return (
-      <div className={`rounded-2xl p-4 ${result.ok ? "bg-blue-50 border border-blue-100" : "bg-red-50 border border-red-100"}`}>
-        <p className={`text-sm font-semibold ${result.ok ? "text-blue-800" : "text-red-700"}`}>{result.message}</p>
-      </div>
-    );
-  }
+  // Refreshing (which can swap this whole screen for the published view once
+  // PAID) only happens once the customer dismisses the modal themselves —
+  // never the instant the upload finishes — so a just-shown "✓ Төлем
+  // расталды" message can't be yanked away before they've had a chance to
+  // read it.
+  const handleDismiss = () => {
+    if (result) onSettled();
+    onClose();
+  };
 
   return (
-    <div className="rounded-2xl border border-zinc-100 bg-zinc-50 p-4 flex flex-col gap-2.5">
-      <p className="text-sm font-semibold text-zinc-700">{t.paidQuestion}</p>
-      {uploading ? (
-        <p className="text-sm text-zinc-500">{t.checking}</p>
-      ) : (
-        <div className="flex gap-2 flex-wrap">
-          {receiptVerificationEnabled && (
-            <button onClick={() => fileInputRef.current?.click()} className={`${buttonBase} bg-zinc-900 text-white hover:bg-zinc-800`}>
-              {t.uploadReceipt}
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-4 pb-4 sm:pb-0" onClick={handleDismiss}>
+      <div
+        className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-5 flex flex-col gap-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {result ? (
+          <div className={`rounded-2xl p-4 ${result.ok ? "bg-blue-50 border border-blue-100" : "bg-red-50 border border-red-100"}`}>
+            <p className={`text-sm font-semibold whitespace-pre-line ${result.ok ? "text-blue-800" : "text-red-700"}`}>{result.message}</p>
+          </div>
+        ) : (
+          <div>
+            <h3 className="font-bold text-zinc-900 text-lg">{t.paidQuestion}</h3>
+            <p className="text-sm text-zinc-500 mt-1 whitespace-pre-line leading-relaxed">{t.modalSubtext}</p>
+          </div>
+        )}
+
+        {!result && uploading && <p className="text-sm text-zinc-500">{t.checking}</p>}
+
+        {!result && !uploading && (
+          <div className="flex flex-col gap-2">
+            {receiptVerificationEnabled && (
+              <button onClick={() => fileInputRef.current?.click()} className={`${buttonBase} bg-zinc-900 text-white hover:bg-zinc-800 w-full`}>
+                {t.uploadReceipt}
+              </button>
+            )}
+            <button
+              onClick={handleWhatsapp}
+              disabled={whatsappLoading}
+              className={`${buttonBase} border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 w-full`}
+            >
+              {t.sendViaWhatsapp}
             </button>
-          )}
-          <button
-            onClick={handleWhatsapp}
-            disabled={whatsappLoading}
-            className={`${buttonBase} border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50`}
-          >
-            {t.sendViaWhatsapp}
-          </button>
-        </div>
-      )}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp,application/pdf"
-        className="hidden"
-        onChange={handleFilePicked}
-      />
+          </div>
+        )}
+
+        <button onClick={handleDismiss} className="text-sm font-medium text-zinc-400 hover:text-zinc-600 transition-colors">
+          {result ? t.close : t.later}
+        </button>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,application/pdf"
+          className="hidden"
+          onChange={handleFilePicked}
+        />
+      </div>
     </div>
   );
 }

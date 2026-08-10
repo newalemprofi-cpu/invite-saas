@@ -8,13 +8,18 @@ import { processReceiptExtraction } from "@/lib/receipts/process";
 
 /**
  * "Қайта тексеру" — reprocesses an existing receipt (e.g. one stuck showing
- * a stale NOT_CONFIGURED from before the extractor migration) through the
- * CURRENT extractor/rules, without requiring the customer to re-upload.
- * Reuses `extractionMediaKey` if this row already has one (a converted PDF
- * from an image upload); older rows from before that column existed fall
- * back to `mediaKey` — that only succeeds if the original upload was
- * itself already a PDF, which is a safe, honest limitation to accept
- * rather than re-deriving a PDF from data we no longer have decoded.
+ * a stale NOT_CONFIGURED from before the extractor migration, or affected
+ * by a settings/parser change since) through the CURRENT extractor/rules,
+ * without requiring the customer to re-upload. Reuses `extractionMediaKey`
+ * if this row already has one (a converted PDF from an image upload);
+ * older rows from before that column existed fall back to `mediaKey` —
+ * that only succeeds if the original upload was itself already a PDF,
+ * which is a safe, honest limitation to accept rather than re-deriving a
+ * PDF from data we no longer have decoded.
+ *
+ * Shared by both admin receipt pages (the active "Автоматты өтпегендер"
+ * queue and the broader "Чектерді тексеру" history view) — one action, not
+ * two copies.
  */
 export async function reprocessReceiptAction(receiptId: string): Promise<{ error?: string; status?: string }> {
   let session;
@@ -52,6 +57,7 @@ export async function reprocessReceiptAction(receiptId: string): Promise<{ error
     actorUserId: session.userId,
   });
 
+  revalidatePath("/admin/payments/verification-failures");
   revalidatePath("/admin/payments/receipts");
   revalidatePath("/admin/payments/manual");
   return { status: outcome.status };
