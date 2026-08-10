@@ -9,6 +9,7 @@ import { THEMES } from "@/types/invite";
 import { RSVPForm } from "./RSVPForm";
 import { MusicPlayer } from "./MusicPlayer";
 import { Countdown } from "./Countdown";
+import { getYoutubeEmbedUrl } from "@/lib/youtube";
 
 interface Section { id: string; enabled: boolean }
 
@@ -209,6 +210,7 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
   // Blocks — respect sections ordering if available
   const blocks = resolveEnabledBlocks(d);
   const has = (id: string) => blocks.includes(id);
+  const videoEmbedUrl = d.videoUrl ? getYoutubeEmbedUrl(d.videoUrl) : null;
 
   // Background
   const bgType = d.bgType || "color";
@@ -250,10 +252,7 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
       {d.musicEnabled && d.musicUrl && (
         <MusicPlayer
           url={d.musicUrl}
-          title={d.musicTitle ?? undefined}
           accent={accent}
-          isDark={isDark}
-          textMuted={textMuted}
           loop={d.musicLoop ?? true}
           autoplay={d.musicAutoplay ?? false}
         />
@@ -420,16 +419,21 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
         </section>
       )}
 
-      {/* ── Video ── */}
-      {has("video_section") && d.videoUrl && (
+      {/* ── Video ──
+          Only ever iframes a URL that getYoutubeEmbedUrl() has validated as
+          a recognized YouTube host/format — an unparseable or non-YouTube
+          link hides the whole block instead of iframing raw customer input
+          (see src/lib/youtube.ts). */}
+      {has("video_section") && videoEmbedUrl && (
         <section className="py-14 px-4" style={{ background: "var(--cream)" }}>
           <div className="max-w-2xl mx-auto">
             <p className="label-caps text-center mb-6" style={{ color: "var(--gold)" }}>Бейне</p>
             <div className="aspect-video rounded-2xl overflow-hidden">
               <iframe
-                src={d.videoUrl.includes("youtube") ? d.videoUrl.replace("watch?v=", "embed/") : d.videoUrl}
+                src={videoEmbedUrl}
                 className="w-full h-full"
-                allow="autoplay; encrypted-media"
+                title="Бейне"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
               />
             </div>

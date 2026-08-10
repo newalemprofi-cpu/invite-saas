@@ -228,25 +228,29 @@ export function InvitePreview({ data, template }: Props) {
       </div>
 
       {/* Background audio — floating, not part of the scrolling section
-          list (matches the public page's own floating control). Gated on
+          list. Mirrors the public page's minimal control: just a small
+          circular play/pause button, no title/pill (see MusicPlayer.tsx).
+          Not draggable here — this is a small fixed phone-frame preview,
+          not the real viewport the public button drags around in. Gated on
           musicEnabled alone, same as /i/[slug]/page.tsx. */}
       {data.musicEnabled && data.musicUrl && (
         <button
           type="button"
           onClick={() => preview.toggle(data.musicUrl)}
-          className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-full pl-1 pr-2.5 py-1 max-w-[85%]"
-          style={{
-            background: isDark ? "rgba(20,17,16,0.85)" : "rgba(255,255,255,0.9)",
-            border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}`,
-          }}
+          aria-label={preview.playingUrl === data.musicUrl ? "Тоқтату" : "Ойнату"}
+          className="absolute bottom-3 left-3 z-20 w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+          style={{ background: accent, boxShadow: "0 2px 10px rgba(0,0,0,0.25)" }}
         >
-          <span
-            className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[9px] text-white"
-            style={{ background: accent }}
-          >
-            {preview.playingUrl === data.musicUrl ? "⏸" : "▶"}
-          </span>
-          <span className="text-[9px] truncate" style={{ color: textMuted }}>{data.musicTitle || "Музыка"}</span>
+          {preview.playingUrl === data.musicUrl ? (
+            <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <rect x="5" y="4" width="3" height="12" rx="1" />
+              <rect x="12" y="4" width="3" height="12" rx="1" />
+            </svg>
+          ) : (
+            <svg className="w-3.5 h-3.5 text-white ml-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+            </svg>
+          )}
         </button>
       )}
     </div>
