@@ -27,6 +27,17 @@ export interface SiteContent {
   companyDescriptionKk: string;
   companyDescriptionRu: string;
 
+  /**
+   * The public marketing site's primary CTA color (Site CMS → "Сайт
+   * түстері") — deliberately separate from InviteTemplate.accent, which
+   * styles individual invitation designs and must never be touched by
+   * this. Only ever applied on the marketing pages (/, /templates,
+   * /templates/[slug]); every other route keeps the hardcoded gold
+   * default via globals.css's :root fallback.
+   */
+  primaryColor: string;
+  primaryColorForeground: string;
+
   /** Event-category id (see lib/event-categories.ts) -> uploaded cover image storage key. */
   categoryCovers: Record<string, string>;
   /** Event-category ids to hide from the homepage gallery entirely. */
@@ -54,6 +65,7 @@ export interface SiteContent {
 }
 
 const SITE_KEY = "site_content";
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 export function defaultSiteContent(): SiteContent {
   return {
@@ -68,6 +80,11 @@ export function defaultSiteContent(): SiteContent {
 
     companyDescriptionKk: "Shaqyru — заманауи цифрлық шақыру жасау сервисі. Дайын үлгіні таңдап, бірнеше минут ішінде шақыруыңызды дайындаңыз.",
     companyDescriptionRu: "Shaqyru — современный сервис создания цифровых приглашений. Выберите готовый шаблон и подготовьте приглашение за пару минут.",
+
+    // Matches the original hardcoded gold theme exactly — an admin who
+    // never touches this setting sees zero visual change.
+    primaryColor: "#C4963E",
+    primaryColorForeground: "#1C1917",
 
     categoryCovers: {},
     hiddenCategories: [],
@@ -101,6 +118,12 @@ export async function getSiteContent(): Promise<SiteContent> {
     return {
       ...d,
       ...v,
+      // Defense in depth: even though the API route validates hex format
+      // before writing, never let a malformed stored value reach a CSS
+      // custom property (which would just silently drop the whole
+      // declaration and could look like a broken/transparent button).
+      primaryColor: v.primaryColor && HEX_COLOR_RE.test(v.primaryColor) ? v.primaryColor : d.primaryColor,
+      primaryColorForeground: v.primaryColorForeground && HEX_COLOR_RE.test(v.primaryColorForeground) ? v.primaryColorForeground : d.primaryColorForeground,
       categoryCovers: v.categoryCovers && typeof v.categoryCovers === "object" ? v.categoryCovers : d.categoryCovers,
       hiddenCategories: Array.isArray(v.hiddenCategories) ? v.hiddenCategories : d.hiddenCategories,
       categoryOrder: Array.isArray(v.categoryOrder) ? v.categoryOrder : d.categoryOrder,

@@ -22,7 +22,7 @@ const DEMO_INVITE = {
   brideName: "Аружан",
   date: "2026-09-12",
   time: "18:00",
-  location: "Almaty, Ritz-Carlton",
+  location: "Ritz-Carlton, Алматы",
 };
 
 export function Hero({ lang, content }: Props) {
@@ -41,12 +41,15 @@ export function Hero({ lang, content }: Props) {
           background: "radial-gradient(ellipse at top right, rgba(196,150,62,0.12) 0%, transparent 65%)",
         }}
       />
-      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-10 sm:pt-16 pb-14 sm:pb-20 grid md:grid-cols-2 gap-10 md:gap-8 items-center">
-        {/* Left: copy */}
+      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-10 sm:pt-16 pb-14 sm:pb-20 grid md:grid-cols-[1.08fr_0.92fr] gap-10 md:gap-6 items-center">
+        {/* Left: copy (~55% on desktop). Natural DOM order already puts this
+            first, which is exactly what's wanted on mobile too (headline →
+            description → CTA → phone, phone last/underneath) — no `order-*`
+            utilities needed. */}
         <div className="flex flex-col items-center md:items-start text-center md:text-left animate-fade-up">
-          <p className="label-caps mb-4" style={{ color: "var(--gold)" }}>{t.eyebrow}</p>
+          <p className="label-caps mb-4" style={{ color: "var(--color-primary)" }}>{t.eyebrow}</p>
           <h1
-            className="heading-display text-4xl sm:text-5xl lg:text-[3.4rem] whitespace-pre-line"
+            className="heading-display text-4xl sm:text-5xl lg:text-[3.6rem] whitespace-pre-line"
             style={{ color: "var(--charcoal)" }}
           >
             {title}
@@ -64,11 +67,28 @@ export function Hero({ lang, content }: Props) {
           </div>
         </div>
 
-        {/* Right: phone mockup with a real invite preview */}
-        <div className="flex justify-center md:justify-end animate-fade-in animate-delay-200">
-          <div className="phone-frame w-[240px] sm:w-[270px] p-2.5" style={{ animation: "var(--animate-float)" }}>
-            <div className="phone-screen">
-              <StaticInviteCard data={DEMO_INVITE} />
+        {/* Right: realistic iPhone mockup with a real invite preview (~45% on desktop) */}
+        <div className="relative flex justify-center md:justify-end animate-fade-in animate-delay-200">
+          <div
+            className="absolute rounded-full pointer-events-none"
+            style={{
+              width: "70%", height: "70%", top: "10%", left: "50%", transform: "translateX(-50%)",
+              background: "radial-gradient(circle, rgba(196,150,62,0.14) 0%, transparent 70%)",
+            }}
+          />
+          <div
+            className="iphone-frame relative w-[220px] sm:w-[260px] lg:w-[300px]"
+            style={{ animation: "var(--animate-float)" }}
+          >
+            <span className="iphone-side-button" style={{ top: "14%", width: 2, height: "5%" }} />
+            <span className="iphone-side-button" style={{ top: "21%", width: 2, height: "9%" }} />
+            <span className="iphone-side-button" style={{ top: "31%", width: 2, height: "9%" }} />
+            <span className="iphone-side-button is-right" style={{ top: "20%", width: 2, height: "12%" }} />
+            <div className="iphone-screen">
+              <div className="iphone-island" />
+              <div className="invite-preview-scroll">
+                <StaticInviteCard data={DEMO_INVITE} fill />
+              </div>
             </div>
           </div>
         </div>

@@ -5,6 +5,7 @@ import { TEMPLATE_FILTERS, localizeTemplate } from "@/lib/templates";
 import { getDbTemplates } from "@/lib/db-templates";
 import { getAdminConfig } from "@/lib/admin-config";
 import { resolveLang } from "@/lib/i18n";
+import { getSiteContent } from "@/lib/site-content";
 
 export const dynamic = "force-dynamic";
 
@@ -48,14 +49,20 @@ export default async function TemplatesPage({
   const { cat = "all", lang: langParam } = await searchParams;
   const lang = resolveLang(langParam);
   const t = T[lang];
-  const [session, templates, config] = await Promise.all([
+  const [session, templates, config, content] = await Promise.all([
     getSession(),
     getDbTemplates({ cat, activeOnly: true }),
     getAdminConfig(),
+    getSiteContent(),
   ]);
 
+  const colorVars = {
+    "--color-primary": content.primaryColor,
+    "--color-primary-foreground": content.primaryColorForeground,
+  } as React.CSSProperties;
+
   return (
-    <div className="min-h-screen" style={{ background: "var(--ivory)" }}>
+    <div className="min-h-screen" style={{ background: "var(--ivory)", ...colorVars }}>
       {/* Nav */}
       <header
         className="sticky top-0 z-40 backdrop-blur"

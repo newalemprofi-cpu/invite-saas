@@ -76,8 +76,17 @@ export default async function HomePage({ searchParams }: Props) {
           .filter((t): t is (typeof allTemplates)[number] => !!t)
       : allTemplates.slice(0, FEATURED_FALLBACK_COUNT);
 
+  // Admin's configured marketing-CTA color, exposed as CSS custom
+  // properties ONLY on this page's DOM subtree — .btn-gold/.btn-outline
+  // read them with a hardcoded-gold fallback (see globals.css :root), so
+  // every other route (admin/dashboard/editor) is entirely unaffected.
+  const colorVars = {
+    "--color-primary": content.primaryColor,
+    "--color-primary-foreground": content.primaryColorForeground,
+  } as React.CSSProperties;
+
   return (
-    <div className="min-h-screen" style={{ background: "var(--ivory)" }}>
+    <div className="min-h-screen" style={{ background: "var(--ivory)", ...colorVars }}>
       <SiteHeader lang={lang} authenticated={!!session} />
       <Hero lang={lang} content={content} />
       <CategoryGallery lang={lang} cards={categoryCards} />

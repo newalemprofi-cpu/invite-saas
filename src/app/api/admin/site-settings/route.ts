@@ -3,6 +3,8 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { getSiteContent, updateSiteContent } from "@/lib/site-content";
 
+const HEX_COLOR = z.string().regex(/^#[0-9a-fA-F]{6}$/, "HEX түсі дұрыс форматта болуы керек (мысалы, #D6A84B)");
+
 const siteSchema = z.object({
   heroTitle: z.string().max(200).optional(),
   heroTitleRu: z.string().max(200).optional(),
@@ -14,6 +16,8 @@ const siteSchema = z.object({
   heroCtaSecondaryRu: z.string().max(60).optional(),
   companyDescriptionKk: z.string().max(400).optional(),
   companyDescriptionRu: z.string().max(400).optional(),
+  primaryColor: HEX_COLOR.optional(),
+  primaryColorForeground: HEX_COLOR.optional(),
   hiddenCategories: z.array(z.string()).optional(),
   categoryOrder: z.array(z.string()).optional(),
   featuredTemplateSlugs: z.array(z.string()).optional(),

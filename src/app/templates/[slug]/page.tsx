@@ -5,6 +5,7 @@ import { getDbTemplate } from "@/lib/db-templates";
 import { getTemplate, localizeTemplate } from "@/lib/templates";
 import { getAdminConfig } from "@/lib/admin-config";
 import { resolveLang } from "@/lib/i18n";
+import { getSiteContent } from "@/lib/site-content";
 import { TemplateCreateButton } from "./TemplateCreateButton";
 
 export const dynamic = "force-dynamic";
@@ -104,9 +105,10 @@ export default async function TemplateDetailPage({ params, searchParams }: Props
   const lang = resolveLang(langParam);
   const t = T[lang];
 
-  const [tmpl, config] = await Promise.all([
+  const [tmpl, config, content] = await Promise.all([
     getDbTemplate(slug).then((t) => t ?? getTemplate(slug) ?? null),
     getAdminConfig(),
+    getSiteContent(),
   ]);
 
   if (!tmpl) notFound();
@@ -128,8 +130,13 @@ export default async function TemplateDetailPage({ params, searchParams }: Props
       ? t.heroInviteBirthday
       : t.heroInviteGeneric;
 
+  const colorVars = {
+    "--color-primary": content.primaryColor,
+    "--color-primary-foreground": content.primaryColorForeground,
+  } as React.CSSProperties;
+
   return (
-    <div className="min-h-screen" style={{ background: "var(--ivory)" }}>
+    <div className="min-h-screen" style={{ background: "var(--ivory)", ...colorVars }}>
       {/* Nav */}
       <header
         className="sticky top-0 z-40 backdrop-blur"

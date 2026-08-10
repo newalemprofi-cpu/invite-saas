@@ -11,6 +11,16 @@
   --warm-dark:   #2D2520;
   --muted:       #78716C;
   --border:      #E8E2D9;
+
+  /* Admin-configurable public-marketing-site primary CTA color (Site CMS
+     → "Сайт түстері"). Defaults to the original gold theme so nothing
+     changes until an admin explicitly sets it — see lib/site-content.ts.
+     Only ever set inline (as a page-scoped override) on the public
+     marketing pages (/, /templates, /templates/[slug]); every other route
+     (admin/dashboard/editor) always uses this :root fallback, deliberately
+     never picking up the admin's marketing color. */
+  --color-primary:            #C4963E;
+  --color-primary-foreground: #1C1917;
 }
 
 @theme inline {
@@ -24,8 +34,8 @@
   --color-muted:      var(--muted);
   --color-border:     var(--border);
 
-  --font-serif: var(--font-cormorant), 'Georgia', 'Times New Roman', serif;
-  --font-sans:  var(--font-dm-sans), system-ui, -apple-system, sans-serif;
+  --font-serif: var(--font-spectral), 'Georgia', 'Times New Roman', serif;
+  --font-sans:  var(--font-manrope), system-ui, -apple-system, sans-serif;
 
   --animate-fade-up:   fade-up 0.6s ease-out both;
   --animate-fade-in:   fade-in 0.5s ease-out both;
@@ -83,9 +93,9 @@ body {
 
 .heading-display {
   font-family: var(--font-serif);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.1;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.08;
 }
 
 .label-caps {
@@ -127,6 +137,61 @@ body {
 .phone-screen {
   border-radius: 40px;
   overflow: hidden;
+}
+
+/* ─── Realistic iPhone Mockup (marketing homepage hero ONLY) ─────────
+   Deliberately a separate set of classes from .phone-frame/.phone-screen
+   above — those stay untouched so the constructor's own live preview and
+   the template-detail page's preview (both already using .phone-frame)
+   keep their exact current look. This is an original CSS-built shell —
+   no device photos/PNGs, no copied third-party mockup assets — sized via
+   the parent's width and a fixed aspect-ratio so it scales cleanly at
+   any breakpoint. */
+.iphone-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 9 / 19.5;
+  border-radius: 15%/7%;
+  background: linear-gradient(155deg, #3a3630 0%, #1C1917 15%, #0c0a09 55%, #1C1917 90%, #3a3630 100%);
+  padding: 3.5%;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.06),
+    0 30px 60px -12px rgba(28,25,23,0.45),
+    0 18px 30px -14px rgba(28,25,23,0.35);
+}
+
+.iphone-screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 12%/5.5%;
+  overflow: hidden;
+  background: #000;
+}
+
+.iphone-island {
+  position: absolute;
+  top: 2.6%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 30%;
+  height: 3.2%;
+  min-height: 18px;
+  background: #000;
+  border-radius: 100px;
+  z-index: 20;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+/* Subtle side-button nubs — thin, low-contrast, purely a realism detail. */
+.iphone-side-button {
+  position: absolute;
+  background: linear-gradient(90deg, #2D2520, #171412);
+  border-radius: 2px 0 0 2px;
+}
+.iphone-side-button.is-right {
+  right: -2px;
+  border-radius: 0 2px 2px 0;
 }
 
 /* ─── Invite Card Preview (inside phone) ───────────────────────────── */
@@ -187,17 +252,29 @@ body {
 }
 .input-premium::placeholder { color: #A8A29E; }
 
-/* ─── Button Base ───────────────────────────────────────────────────── */
+/* ─── Button Base ─────────────────────────────────────────────────────
+   Reads --color-primary/--color-primary-foreground (see :root above) so
+   the admin-configured marketing CTA color drives every .btn-gold on
+   whichever page injects those variables, while defaulting to the
+   original gold everywhere else. The lighter gradient stop and the
+   shadow tint are both derived from the single primary color via
+   color-mix() so admins only ever configure one color, not a whole
+   palette. */
 .btn-gold {
-  background: linear-gradient(135deg, #C4963E 0%, #E8C97A 50%, #C4963E 100%);
+  background: linear-gradient(
+    135deg,
+    var(--color-primary) 0%,
+    color-mix(in srgb, var(--color-primary) 65%, white) 50%,
+    var(--color-primary) 100%
+  );
   background-size: 200% auto;
-  color: #1C1917;
+  color: var(--color-primary-foreground);
   font-weight: 700;
   letter-spacing: 0.03em;
   border-radius: 100px;
   padding: 14px 32px;
   transition: background-position 0.4s, transform 0.2s, box-shadow 0.2s;
-  box-shadow: 0 4px 24px rgba(196, 150, 62, 0.3);
+  box-shadow: 0 4px 24px color-mix(in srgb, var(--color-primary) 30%, transparent);
   border: none;
   cursor: pointer;
   display: inline-flex;
@@ -209,7 +286,7 @@ body {
 .btn-gold:hover {
   background-position: right center;
   transform: translateY(-1px);
-  box-shadow: 0 8px 32px rgba(196, 150, 62, 0.4);
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--color-primary) 40%, transparent);
 }
 
 .btn-outline {
@@ -229,8 +306,11 @@ body {
   font-size: 0.9375rem;
 }
 .btn-outline:hover {
-  border-color: var(--gold);
-  color: var(--gold-dark);
+  /* Stays a transparent/neutral outline always — only the hover accent
+     tracks the configured primary color, so hierarchy (filled primary vs
+     outline secondary) never blurs together. */
+  border-color: var(--color-primary);
+  color: color-mix(in srgb, var(--color-primary) 70%, black);
 }
 
 /* ─── Editor Sidebar ────────────────────────────────────────────────── */

@@ -15,6 +15,8 @@ interface SiteContent {
   heroCtaSecondaryRu?: string;
   companyDescriptionKk?: string;
   companyDescriptionRu?: string;
+  primaryColor?: string;
+  primaryColorForeground?: string;
   categoryCovers?: Record<string, string>;
   hiddenCategories?: string[];
   categoryOrder?: string[];
@@ -48,6 +50,8 @@ const DEFAULTS: SiteContent = {
   heroCtaSecondaryRu: "Смотреть шаблоны",
   companyDescriptionKk: "Shaqyru — заманауи цифрлық шақыру жасау сервисі. Дайын үлгіні таңдап, бірнеше минут ішінде шақыруыңызды дайындаңыз.",
   companyDescriptionRu: "Shaqyru — современный сервис создания цифровых приглашений. Выберите готовый шаблон и подготовьте приглашение за пару минут.",
+  primaryColor: "#C4963E",
+  primaryColorForeground: "#1C1917",
   categoryCovers: {},
   hiddenCategories: [],
   categoryOrder: [],
@@ -195,6 +199,27 @@ export default function AdminSitePage() {
           <TextField label="Основная кнопка" value={content.heroCtaPrimaryRu ?? ""} onChange={(v) => up({ heroCtaPrimaryRu: v })} placeholder="Создать приглашение" />
           <TextField label="Вторая кнопка" value={content.heroCtaSecondaryRu ?? ""} onChange={(v) => up({ heroCtaSecondaryRu: v })} placeholder="Смотреть шаблоны" />
         </div>
+      </Card>
+
+      {/* Site colors — public marketing site's primary CTA only (Header/Hero/
+          Template-choose/Final CTA). Never touches invitation TEMPLATE
+          colors (Фон/Акцент/... in /admin/templates) — those are a fully
+          separate, per-template setting. */}
+      <Card title="Сайт түстері">
+        <p className="text-xs" style={{ color: "var(--muted)" }}>
+          Сайттың негізгі батырмасының түсі (Шақыру жасау). Шаблондардың өз түстеріне әсер етпейді.
+        </p>
+        <ColorField
+          label="Негізгі батырма түсі"
+          value={content.primaryColor ?? "#C4963E"}
+          onChange={(v) => up({ primaryColor: v })}
+        />
+        <ColorField
+          label="Негізгі батырма мәтінінің түсі"
+          value={content.primaryColorForeground ?? "#1C1917"}
+          onChange={(v) => up({ primaryColorForeground: v })}
+        />
+        <ColorPreview bg={content.primaryColor ?? "#C4963E"} fg={content.primaryColorForeground ?? "#1C1917"} />
       </Card>
 
       {/* Category covers */}
@@ -446,6 +471,99 @@ function TextArea({ label, value, onChange, placeholder, rows = 3 }: {
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
       />
+    </div>
+  );
+}
+
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
+function ColorField({ label, value, onChange }: {
+  label: string; value: string; onChange: (v: string) => void;
+}) {
+  // A local draft so a mid-typing, momentarily-invalid hex (e.g. "#D6A")
+  // doesn't get force-corrected on every keystroke — only committed
+  // upstream (and only reflected in the live color picker) once it's a
+  // full valid 6-digit hex. No mount-sync effect needed: this component
+  // only ever mounts after the parent's data has finished loading (see
+  // the `if (loading) return ...` guard above), so the useState
+  // initializer already captures the real value, and `value` only ever
+  // changes afterward as an echo of this component's own `commit()`.
+  const [draft, setDraft] = useState(value);
+
+  const isValid = HEX_RE.test(draft);
+
+  const commit = (v: string) => {
+    setDraft(v);
+    if (HEX_RE.test(v)) onChange(v);
+  };
+
+  return (
+    <div>
+      <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>{label}</label>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={isValid ? draft : value}
+          onChange={(e) => commit(e.target.value)}
+          className="w-10 h-10 rounded-lg cursor-pointer shrink-0"
+          style={{ border: "1.5px solid var(--border)", padding: 2 }}
+        />
+        <input
+          type="text"
+          className="input-premium font-mono"
+          value={draft}
+          onChange={(e) => commit(e.target.value)}
+          placeholder="#D6A84B"
+          maxLength={7}
+        />
+      </div>
+      {!isValid && <p className="text-[11px] text-red-500 mt-1">HEX форматы дұрыс емес (мысалы, #D6A84B)</p>}
+    </div>
+  );
+}
+
+/** Relative luminance per WCAG 2.x, used only for a soft contrast hint — never blocks saving. */
+function relativeLuminance(hex: string): number {
+  const c = hex.slice(1).match(/.{2}/g)!.map((h) => {
+    const v = parseInt(h, 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+}
+
+function contrastRatio(hexA: string, hexB: string): number {
+  const lA = relativeLuminance(hexA);
+  const lB = relativeLuminance(hexB);
+  const [lighter, darker] = lA > lB ? [lA, lB] : [lB, lA];
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function ColorPreview({ bg, fg }: { bg: string; fg: string }) {
+  const bothValid = HEX_RE.test(bg) && HEX_RE.test(fg);
+  const ratio = bothValid ? contrastRatio(bg, fg) : null;
+  // WCAG AA for large/bold button-label text is 3:1 — a plain, honest
+  // heads-up rather than a hard block, per "do not silently mutate the
+  // admin's chosen brand color unless necessary."
+  const lowContrast = ratio !== null && ratio < 3;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="block text-xs font-medium" style={{ color: "var(--muted)" }}>Алдын ала қарау</label>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          disabled
+          className="inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-bold"
+          style={{ background: bothValid ? bg : "var(--gold)", color: bothValid ? fg : "#1C1917" }}
+        >
+          Шақыру жасау →
+        </button>
+        {ratio !== null && (
+          <span className="text-xs" style={{ color: lowContrast ? "#dc2626" : "var(--muted)" }}>
+            Контраст: {ratio.toFixed(1)}:1{lowContrast ? " — тым төмен, мәтін оқылмауы мүмкін" : ""}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

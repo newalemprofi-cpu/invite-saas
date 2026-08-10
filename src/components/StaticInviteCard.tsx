@@ -33,7 +33,16 @@ function formatDate(s: string): string {
   }
 }
 
-export function StaticInviteCard({ data }: { data: InviteCardData }) {
+interface Props {
+  data: InviteCardData;
+  /** Renders edge-to-edge with no border/rounding/shadow of its own — for
+   * when a parent device mockup (e.g. the homepage hero's iPhone shell)
+   * already provides those. Defaults to false, which preserves the exact
+   * original standalone-card look every other caller (dashboard) relies on. */
+  fill?: boolean;
+}
+
+export function StaticInviteCard({ data, fill = false }: Props) {
   // Support both new (template) and old (theme) styling
   const tmpl = TEMPLATES.find((t) => t.id === data.template);
   const legacyTheme = THEMES.find((t) => t.id === data.theme);
@@ -59,9 +68,11 @@ export function StaticInviteCard({ data }: { data: InviteCardData }) {
   return (
     <div
       className={cn(
-        "relative w-full max-w-[260px] mx-auto rounded-[28px] overflow-hidden shadow-2xl border-2 aspect-[9/16]",
+        fill
+          ? "relative w-full h-full"
+          : "relative w-full max-w-[260px] mx-auto rounded-[28px] overflow-hidden shadow-2xl border-2 aspect-[9/16]",
         `bg-gradient-to-br ${gradient}`,
-        dark ? "border-white/10" : "border-black/5"
+        !fill && (dark ? "border-white/10" : "border-black/5")
       )}
     >
       {/* Decorative circles */}
@@ -81,7 +92,13 @@ export function StaticInviteCard({ data }: { data: InviteCardData }) {
         </>
       )}
 
-      <div className="relative h-full flex flex-col items-center justify-center px-5 py-10 text-center gap-3">
+      <div
+        className={cn(
+          "relative h-full flex flex-col items-center justify-center px-5 text-center gap-3",
+          // Extra top clearance in fill mode so content never sits under the iPhone shell's Dynamic Island.
+          fill ? "pt-16 pb-8" : "py-10"
+        )}
+      >
         <p
           className="text-[9px] tracking-[0.35em] uppercase font-semibold"
           style={{
