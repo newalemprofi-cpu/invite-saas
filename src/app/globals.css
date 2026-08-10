@@ -139,51 +139,39 @@ body {
   overflow: hidden;
 }
 
-/* ─── Homepage Hero Device Mockup ─────────────────────────────────────
-   Clean, minimal CSS-only iPhone-style shell for the marketing homepage
-   hero ONLY — deliberately separate from .phone-frame/.phone-screen above
-   (used by the editor's live preview and the template-detail page) so
-   tuning this one can never affect those. No device photo/PNG/hand.
+/* ─── Homepage Hero Phone Mockup ───────────────────────────────────────
+   Real iPhone PNG (public/images/hero/iphone-frame-transparent.png),
+   supplied by the client — replaces the earlier CSS-only shell. Deliberately
+   separate from .phone-frame/.phone-screen above (editor live preview,
+   template-detail page) so this never affects those.
+
+   .hero-phone's aspect-ratio MUST match the source PNG's native canvas
+   (1254x1254, i.e. 1/1) — the dynamic preview layer is positioned with
+   percentage insets measured against that same canvas (see Hero.tsx's
+   SCREEN_INSET), so container and image must scale together in lockstep
+   or the preview drifts out from under the screen cutout.
+
    Width is intentionally NOT set here — Hero.tsx controls it per breakpoint
-   via a Tailwind w-[…] utility, and aspect-ratio derives the height from
-   that. (This rule lives outside any Tailwind @layer, which in Tailwind v4
-   always outranks layered utilities regardless of source order — an
-   explicit width here would silently override the responsive Tailwind
-   classes and blow the phone back up to fill its flex column, which is
-   exactly the bug this shell replaced.) */
-.hero-device-frame {
+   via a Tailwind w-[…] utility. (This rule lives outside any Tailwind
+   @layer, which in Tailwind v4 always outranks layered utilities regardless
+   of source order — an explicit width here would silently override the
+   responsive Tailwind classes, as happened with the previous CSS-only
+   shell.) */
+.hero-phone {
   position: relative;
   flex-shrink: 0;
-  aspect-ratio: 9 / 19;
-  border-radius: 11% / 5.5%;
-  background: linear-gradient(165deg, #333029 0%, #1C1917 25%, #0f0d0c 60%, #1C1917 100%);
-  padding: 2.6%;
-  box-shadow:
-    0 0 0 1px rgba(255,255,255,0.05),
-    0 20px 40px -12px rgba(28,25,23,0.32),
-    0 10px 20px -8px rgba(28,25,23,0.22);
+  aspect-ratio: 1 / 1;
 }
 
-.hero-device-screen {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border-radius: 8.5% / 4.3%;
-  overflow: hidden;
-  background: #fff;
+.hero-phone-screen {
+  border-radius: 6% / 4%;
+  background: var(--ivory);
+  z-index: 1;
 }
 
-.hero-device-island {
-  position: absolute;
-  top: 2%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 26%;
-  height: 2.6%;
-  min-height: 14px;
-  background: #000;
-  border-radius: 100px;
-  z-index: 20;
+.hero-phone-frame {
+  z-index: 2;
+  object-fit: contain;
 }
 
 /* ─── Gold Divider ──────────────────────────────────────────────────── */

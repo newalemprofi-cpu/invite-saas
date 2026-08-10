@@ -32,6 +32,18 @@ const T = {
   },
 } as const;
 
+// Measured directly off public/images/hero/iphone-frame-transparent.png
+// (a 1254x1254 canvas): the screen cutout spans x 335-917, y 163-1105.
+// Converted to percentages of the full canvas so this stays correct at any
+// rendered size, as long as the wrapping .hero-phone element keeps the
+// image's native 1:1 aspect ratio (see globals.css). The source PNG's
+// "transparent" screen was actually a checkerboard baked in as near-opaque
+// pixels (common AI-image-gen artifact) — the shipped asset was
+// re-processed with a real alpha punch over exactly this rectangle so the
+// dynamic preview underneath actually shows through instead of being
+// covered by checkerboard pixels.
+const SCREEN_INSET = { top: "13%", bottom: "11.8%", left: "26.7%", right: "26.8%" };
+
 export function Hero({ lang, content, previewImageUrl, previewTemplate }: Props) {
   const t = T[lang];
   const title = lang === "ru" ? content.heroTitleRu : content.heroTitle;
@@ -48,8 +60,8 @@ export function Hero({ lang, content, previewImageUrl, previewTemplate }: Props)
           background: "radial-gradient(ellipse at top right, rgba(196,150,62,0.12) 0%, transparent 65%)",
         }}
       />
-      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-10 sm:pt-16 pb-14 sm:pb-20 grid md:grid-cols-[1.3fr_1fr] gap-10 md:gap-8 items-center">
-        {/* Left: copy (~57% on desktop). Natural DOM order already puts this
+      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-10 sm:pt-16 pb-14 sm:pb-20 grid md:grid-cols-[1.4fr_1fr] gap-10 md:gap-8 items-center">
+        {/* Left: copy (~58% on desktop). Natural DOM order already puts this
             first, which is exactly what's wanted on mobile too (headline →
             description → CTA → phone, phone last/underneath) — no `order-*`
             utilities needed. */}
@@ -74,11 +86,11 @@ export function Hero({ lang, content, previewImageUrl, previewTemplate }: Props)
           </div>
         </div>
 
-        {/* Right: clean CSS iPhone-style shell only — no hand/photo/scenery.
-            Screen content is fully admin-manageable (Site CMS → "Hero алдын
-            ала көрінісі"): a custom uploaded screenshot if set, else a real
-            InviteTemplate rendered with its own style tokens (~43% column
-            on desktop, capped so it never dominates the viewport). */}
+        {/* Right: the supplied realistic iPhone PNG on top, a dynamic
+            invitation preview layered underneath it inside the screen
+            cutout. Screen content is fully admin-manageable (Site CMS →
+            "Hero алдын ала көрінісі"): a custom uploaded screenshot if set,
+            else a real InviteTemplate rendered with its own style tokens. */}
         <div className="relative flex justify-center md:justify-end animate-fade-in animate-delay-200">
           <div
             className="absolute rounded-full pointer-events-none"
@@ -87,16 +99,15 @@ export function Hero({ lang, content, previewImageUrl, previewTemplate }: Props)
               background: "radial-gradient(circle, rgba(196,150,62,0.13) 0%, transparent 70%)",
             }}
           />
-          <div className="hero-device-frame relative w-[200px] sm:w-[230px] md:w-[250px] lg:w-[270px]">
-            <div className="hero-device-island" />
-            <div className="hero-device-screen">
+          <div className="hero-phone relative w-[290px] md:w-[340px] lg:w-[420px]">
+            <div className="hero-phone-screen absolute overflow-hidden" style={SCREEN_INSET}>
               {previewImageUrl ? (
                 <Image
                   src={previewImageUrl}
                   alt="Shaqyru шақыру алдын ала көрінісі"
                   fill
                   className="object-cover"
-                  sizes="270px"
+                  sizes="420px"
                   priority
                 />
               ) : previewTemplate ? (
@@ -105,6 +116,14 @@ export function Hero({ lang, content, previewImageUrl, previewTemplate }: Props)
                 <div className="w-full h-full" style={{ background: "var(--ivory)" }} />
               )}
             </div>
+            <Image
+              src="/images/hero/iphone-frame-transparent.png"
+              alt=""
+              fill
+              className="hero-phone-frame pointer-events-none select-none"
+              sizes="420px"
+              priority
+            />
           </div>
         </div>
       </div>
@@ -122,7 +141,7 @@ interface ScreenCopy {
 
 function TemplatePreviewScreen({ t, tmpl }: { t: ScreenCopy; tmpl: Template }) {
   return (
-    <div className={`h-full pt-8 bg-gradient-to-br ${tmpl.gradient} flex flex-col items-center justify-center gap-2.5 px-4 text-center`}>
+    <div className={`h-full pt-6 bg-gradient-to-br ${tmpl.gradient} flex flex-col items-center justify-center gap-2.5 px-4 text-center`}>
       <p className="label-caps text-[8px]" style={{ color: tmpl.textMuted }}>{t.screenEyebrow}</p>
       <p className="font-serif text-base font-semibold leading-tight" style={{ color: tmpl.textDark }}>
         {tmpl.demoName1}
@@ -137,7 +156,7 @@ function TemplatePreviewScreen({ t, tmpl }: { t: ScreenCopy; tmpl: Template }) {
         <p className="text-[10px] mt-0.5">{t.demoTime} · {t.demoLocation}</p>
       </div>
       <div
-        className="mt-1 px-4 py-1.5 rounded-full text-[10px] font-semibold text-white"
+        className="mt-1 px-3 py-1.5 rounded-full text-[9px] font-semibold text-white whitespace-nowrap"
         style={{ background: tmpl.accent }}
       >
         {t.rsvp}
