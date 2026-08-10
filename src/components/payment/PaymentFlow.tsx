@@ -94,7 +94,8 @@ interface PaymentFlowStrings {
   later: string;
   close: string;
   openInvite: string;
-  whatsappMessage: (ref: string, amount: number) => string;
+  /** Fixed, no technical/payment details — the customer attaches the receipt manually in WhatsApp. */
+  whatsappMessage: string;
 }
 
 const T: Record<Lang, PaymentFlowStrings> = {
@@ -132,8 +133,7 @@ const T: Record<Lang, PaymentFlowStrings> = {
     later: "Кейінірек",
     close: "Жабу",
     openInvite: "Шақыруды ашу →",
-    whatsappMessage: (ref: string, amount: number) =>
-      `Сәлеметсіз бе!\nШақыру төлемінің чегін жіберемін.\n\nТөлем коды: ${ref}\nСома: ${amount.toLocaleString("kk-KZ")} ₸`,
+    whatsappMessage: "Сәлеметсіз бе!\nШақыру төлемінің чегін жіберемін.",
   },
   ru: {
     pendingTitle: "Ожидается оплата",
@@ -169,8 +169,7 @@ const T: Record<Lang, PaymentFlowStrings> = {
     later: "Позже",
     close: "Закрыть",
     openInvite: "Открыть приглашение →",
-    whatsappMessage: (ref: string, amount: number) =>
-      `Здравствуйте!\nОтправляю чек оплаты приглашения.\n\nКод платежа: ${ref}\nСумма: ${amount.toLocaleString("ru-RU")} ₸`,
+    whatsappMessage: "Здравствуйте!\nОтправляю чек оплаты приглашения.",
   },
 };
 
@@ -602,7 +601,7 @@ function KaspiReturnModal({ lang, t, receiptVerificationEnabled, whatsappNumber,
 
   const openWhatsapp = () => {
     const phone = whatsappNumber.replace(/\D/g, "");
-    const href = `https://wa.me/${phone}?text=${encodeURIComponent(t.whatsappMessage(paymentContext.reference, paymentContext.amount))}`;
+    const href = `https://wa.me/${phone}?text=${encodeURIComponent(t.whatsappMessage)}`;
     window.open(href, "_blank");
   };
 
