@@ -9,6 +9,17 @@ RUN npm ci
 # --- builder stage ---
 FROM base AS builder
 WORKDIR /app
+
+# OpenSSL must be present here too, not just in the runner stage: `prisma
+# generate` runs in THIS stage, and it detects the local libssl version to
+# resolve what "native" means and to fetch matching query engine binaries.
+# Without it, detection fails and Prisma silently falls back to guessing
+# the legacy debian-openssl-1.1.x engine — which is baked into the
+# generated client and gets shipped to the runner, where Bookworm's
+# OpenSSL 3 has no libssl.so.1.1 to satisfy it. This is the actual root
+# cause of the "libssl.so.1.1: cannot open shared object file" crash.
+RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate --schema=prisma/schema.prisma
