@@ -2,7 +2,12 @@
 
 import { useState, useEffect, useTransition, useRef } from "react";
 import { EVENT_CATEGORIES } from "@/lib/event-categories";
-import { uploadCategoryCoverAction, removeCategoryCoverAction } from "./actions";
+import {
+  uploadCategoryCoverAction,
+  removeCategoryCoverAction,
+  uploadHeroPreviewImageAction,
+  removeHeroPreviewImageAction,
+} from "./actions";
 
 interface SiteContent {
   heroTitle?: string;
@@ -17,6 +22,8 @@ interface SiteContent {
   companyDescriptionRu?: string;
   primaryColor?: string;
   primaryColorForeground?: string;
+  heroPreviewTemplateSlug?: string;
+  heroPreviewImage?: string;
   categoryCovers?: Record<string, string>;
   hiddenCategories?: string[];
   categoryOrder?: string[];
@@ -52,6 +59,8 @@ const DEFAULTS: SiteContent = {
   companyDescriptionRu: "Shaqyru — современный сервис создания цифровых приглашений. Выберите готовый шаблон и подготовьте приглашение за пару минут.",
   primaryColor: "#C4963E",
   primaryColorForeground: "#1C1917",
+  heroPreviewTemplateSlug: "",
+  heroPreviewImage: "",
   categoryCovers: {},
   hiddenCategories: [],
   categoryOrder: [],
@@ -220,6 +229,33 @@ export default function AdminSitePage() {
           onChange={(v) => up({ primaryColorForeground: v })}
         />
         <ColorPreview bg={content.primaryColor ?? "#C4963E"} fg={content.primaryColorForeground ?? "#1C1917"} />
+      </Card>
+
+      {/* Hero preview — what shows inside the homepage hero's phone mockup */}
+      <Card title="Hero алдын ала көрінісі">
+        <p className="text-xs" style={{ color: "var(--muted)" }}>
+          Басты беттегі телефон макетінің экранында не көрсетілетінін таңдаңыз. Егер сурет жүктелсе — ол шаблоннан басым болады.
+        </p>
+
+        <div>
+          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>Шаблон</label>
+          <select
+            className="input-premium"
+            value={content.heroPreviewTemplateSlug ?? ""}
+            onChange={(e) => up({ heroPreviewTemplateSlug: e.target.value })}
+          >
+            <option value="">Әдепкі (автоматты)</option>
+            {templates.filter((tm) => tm.isActive).map((tm) => (
+              <option key={tm.id} value={tm.slug}>{tm.title} ({tm.category})</option>
+            ))}
+          </select>
+        </div>
+
+        <HeroPreviewImageField
+          imageKey={content.heroPreviewImage}
+          onUploaded={(key) => up({ heroPreviewImage: key })}
+          onRemoved={() => up({ heroPreviewImage: "" })}
+        />
       </Card>
 
       {/* Category covers */}
@@ -427,6 +463,81 @@ function CategoryCoverRow({
       <div className="flex flex-col shrink-0">
         <button type="button" onClick={onMoveUp} disabled={!canMoveUp} className="text-xs disabled:opacity-30" style={{ color: "var(--muted)" }}>▲</button>
         <button type="button" onClick={onMoveDown} disabled={!canMoveDown} className="text-xs disabled:opacity-30" style={{ color: "var(--muted)" }}>▼</button>
+      </div>
+    </div>
+  );
+}
+
+function HeroPreviewImageField({ imageKey, onUploaded, onRemoved }: {
+  imageKey: string | undefined;
+  onUploaded: (key: string) => void;
+  onRemoved: () => void;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (file: File) => {
+    setError(null);
+    const form = new FormData();
+    form.append("file", file);
+    startTransition(async () => {
+      const result = await uploadHeroPreviewImageAction(form);
+      if (result.error) setError(result.error);
+      else if (result.key) onUploaded(result.key);
+    });
+  };
+
+  const handleRemove = () => {
+    onRemoved();
+    removeHeroPreviewImageAction().catch(() => {});
+  };
+
+  return (
+    <div>
+      <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>Меншікті сурет (screenshot)</label>
+      <div className="flex items-center gap-3 p-3 rounded-xl" style={{ border: "1px solid var(--border)" }}>
+        <div
+          className="w-14 h-14 rounded-lg shrink-0 overflow-hidden flex items-center justify-center text-xl"
+          style={{ background: "rgba(196,150,62,0.08)" }}
+        >
+          {imageKey ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={coverSrc(imageKey)} alt="Hero алдын ала көрінісі" className="w-full h-full object-cover" />
+          ) : (
+            <span>📱</span>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isPending}
+              className="text-xs font-medium"
+              style={{ color: "var(--gold-dark)" }}
+            >
+              {isPending ? "Жүктелуде..." : imageKey ? "Ауыстыру" : "Суретті жүктеу"}
+            </button>
+            {imageKey && (
+              <button type="button" onClick={handleRemove} className="text-xs" style={{ color: "var(--muted)" }}>
+                Алып тастау
+              </button>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (f) handleFile(f);
+              }}
+            />
+          </div>
+          {error && <p className="text-[11px] text-red-500 mt-1">{error}</p>}
+        </div>
       </div>
     </div>
   );

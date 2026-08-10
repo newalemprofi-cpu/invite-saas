@@ -18,6 +18,7 @@ const siteSchema = z.object({
   companyDescriptionRu: z.string().max(400).optional(),
   primaryColor: HEX_COLOR.optional(),
   primaryColorForeground: HEX_COLOR.optional(),
+  heroPreviewTemplateSlug: z.string().max(120).optional(),
   hiddenCategories: z.array(z.string()).optional(),
   categoryOrder: z.array(z.string()).optional(),
   featuredTemplateSlugs: z.array(z.string()).optional(),

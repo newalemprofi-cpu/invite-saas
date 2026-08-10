@@ -136,7 +136,10 @@ export default async function TemplateDetailPage({ params, searchParams }: Props
   } as React.CSSProperties;
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--ivory)", ...colorVars }}>
+    <div
+      className="min-h-screen"
+      style={{ background: "var(--ivory)", fontFamily: "var(--font-montserrat)", ...colorVars }}
+    >
       {/* Nav */}
       <header
         className="sticky top-0 z-40 backdrop-blur"

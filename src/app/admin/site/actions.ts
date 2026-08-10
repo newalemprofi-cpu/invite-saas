@@ -69,3 +69,61 @@ export async function removeCategoryCoverAction(category: string): Promise<{ err
   revalidatePath("/");
   return {};
 }
+
+/**
+ * Admin uploads a custom marketing screenshot for the homepage hero's phone
+ * mockup. When set, this overrides the template-based preview entirely (see
+ * getHeroPreview() in src/app/page.tsx). Same shape as the category-cover
+ * upload above: validate -> store under its own key prefix -> save only the
+ * storage key.
+ */
+export async function uploadHeroPreviewImageAction(formData: FormData): Promise<{ error?: string; key?: string }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { error: "Рұқсат жоқ" };
+  }
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "Сурет таңдаңыз" };
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const validated = validateUpload("image", file.type, buffer.byteLength, buffer);
+  if (!validated) return { error: "Қолдамайтын сурет форматы немесе өлшемі (JPG/PNG/WEBP/GIF, 8МБ дейін)" };
+
+  const key = `site/hero-preview/${randomUUID()}.${validated.ext}`;
+  try {
+    await uploadFile({ key, contentType: validated.mime, body: buffer });
+  } catch (err) {
+    console.error("[admin-site] hero preview image upload failed", err);
+    return { error: "Жүктеу сәтсіз аяқталды" };
+  }
+
+  const current = await getSiteContent();
+  const oldKey = current.heroPreviewImage;
+  await updateSiteContent({ heroPreviewImage: key });
+  if (oldKey) await deleteFile(oldKey).catch(() => {});
+
+  revalidatePath("/admin/site");
+  revalidatePath("/");
+  return { key };
+}
+
+export async function removeHeroPreviewImageAction(): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { error: "Рұқсат жоқ" };
+  }
+
+  const current = await getSiteContent();
+  const oldKey = current.heroPreviewImage;
+  if (!oldKey) return {};
+
+  await updateSiteContent({ heroPreviewImage: "" });
+  await deleteFile(oldKey).catch(() => {});
+
+  revalidatePath("/admin/site");
+  revalidatePath("/");
+  return {};
+}

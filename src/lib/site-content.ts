@@ -38,6 +38,18 @@ export interface SiteContent {
   primaryColor: string;
   primaryColorForeground: string;
 
+  /**
+   * Homepage hero phone-mockup preview content (Site CMS → "Hero алдын ала
+   * көрінісі"). Priority on read (see src/app/page.tsx): heroPreviewImage
+   * (custom admin upload) wins if set; else heroPreviewTemplateSlug (an
+   * existing, real InviteTemplate) is rendered; else the homepage falls
+   * back to the first featured/active template. Never a fake/synthetic
+   * template record.
+   */
+  heroPreviewTemplateSlug: string;
+  /** Storage key (never a raw URL) of an admin-uploaded custom hero screenshot; empty string = none set. */
+  heroPreviewImage: string;
+
   /** Event-category id (see lib/event-categories.ts) -> uploaded cover image storage key. */
   categoryCovers: Record<string, string>;
   /** Event-category ids to hide from the homepage gallery entirely. */
@@ -85,6 +97,9 @@ export function defaultSiteContent(): SiteContent {
     // never touches this setting sees zero visual change.
     primaryColor: "#C4963E",
     primaryColorForeground: "#1C1917",
+
+    heroPreviewTemplateSlug: "",
+    heroPreviewImage: "",
 
     categoryCovers: {},
     hiddenCategories: [],

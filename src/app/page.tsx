@@ -76,6 +76,19 @@ export default async function HomePage({ searchParams }: Props) {
           .filter((t): t is (typeof allTemplates)[number] => !!t)
       : allTemplates.slice(0, FEATURED_FALLBACK_COUNT);
 
+  // Hero phone-mockup preview (Site CMS → "Hero алдын ала көрінісі"):
+  // 1) admin's custom uploaded screenshot always wins if set,
+  // 2) else the admin's picked template (rendered with real template style
+  //    tokens, same as the /templates/[slug] preview),
+  // 3) else a graceful default — the first featured template, or else the
+  //    first active template — never a fake/synthetic record.
+  const heroPreviewImageUrl = content.heroPreviewImage ? getPublicUrl(content.heroPreviewImage) : null;
+  const heroPreviewTemplate =
+    allTemplates.find((t) => t.slug === content.heroPreviewTemplateSlug) ??
+    featuredTemplates[0] ??
+    allTemplates[0] ??
+    null;
+
   // Admin's configured marketing-CTA color, exposed as CSS custom
   // properties ONLY on this page's DOM subtree — .btn-gold/.btn-outline
   // read them with a hardcoded-gold fallback (see globals.css :root), so
@@ -86,9 +99,17 @@ export default async function HomePage({ searchParams }: Props) {
   } as React.CSSProperties;
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--ivory)", ...colorVars }}>
+    <div
+      className="min-h-screen"
+      style={{ background: "var(--ivory)", fontFamily: "var(--font-montserrat)", ...colorVars }}
+    >
       <SiteHeader lang={lang} authenticated={!!session} />
-      <Hero lang={lang} content={content} />
+      <Hero
+        lang={lang}
+        content={content}
+        previewImageUrl={heroPreviewImageUrl}
+        previewTemplate={heroPreviewTemplate}
+      />
       <CategoryGallery lang={lang} cards={categoryCards} />
       <FeaturedTemplates lang={lang} templates={featuredTemplates} />
       <HowItWorks lang={lang} />
