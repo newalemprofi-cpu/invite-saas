@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { verifyN8nSecret } from "@/lib/n8n-auth";
 import { getSession } from "@/lib/auth";
 import { deleteFile } from "@/lib/storage";
+import { FEATURE_KEYS } from "@/lib/features";
 
 const patchSchema = z.object({
   // Basic fields
@@ -58,6 +59,20 @@ const patchSchema = z.object({
   mapUrl: z.string().url().optional().or(z.literal("")),
   message: z.string().max(500).optional(),
   theme: z.string().optional(),
+  // Simple-constructor additions (§10) — see claim/route.ts's dataSchema
+  // for the full rationale; kept in exact sync with it field-for-field.
+  address: z.string().max(300).optional(),
+  hosts: z.string().max(200).optional(),
+  parents: z.string().max(200).optional(),
+  note: z.string().max(1000).optional(),
+  age: z.string().max(50).optional(),
+  eventCategoryId: z.string().max(60).optional(),
+  // `entitlements` is deliberately NOT a key in this schema — see
+  // claim/route.ts's identical comment. A client PATCHing `entitlements`
+  // directly has that key silently stripped by zod before it ever reaches
+  // the merge below.
+  selectedFeatures: z.array(z.enum(FEATURE_KEYS)).max(FEATURE_KEYS.length).optional(),
+  qrEnabled: z.boolean().optional(),
 });
 
 interface Props {

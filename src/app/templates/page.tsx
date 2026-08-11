@@ -44,9 +44,9 @@ const T = {
 export default async function TemplatesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ cat?: string; lang?: string }>;
+  searchParams: Promise<{ cat?: string; lang?: string; eventCategory?: string }>;
 }) {
-  const { cat = "all", lang: langParam } = await searchParams;
+  const { cat = "all", lang: langParam, eventCategory } = await searchParams;
   const lang = resolveLang(langParam);
   const t = T[lang];
   const [session, templates, config, content] = await Promise.all([
@@ -129,7 +129,7 @@ export default async function TemplatesPage({
             return (
               <Link
                 key={tmpl.id}
-                href={`/templates/${tmpl.slug}?lang=${lang}`}
+                href={`/templates/${tmpl.slug}?lang=${lang}${eventCategory ? `&eventCategory=${eventCategory}` : ""}`}
                 className="group relative overflow-hidden rounded-3xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
                 style={{ background: tmpl.bg, boxShadow: "0 2px 16px rgba(28,25,23,0.06)" }}
               >

@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 interface Props {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ lang?: string; error?: string }>;
+  searchParams: Promise<{ lang?: string; error?: string; eventCategory?: string }>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -101,7 +101,7 @@ const T = {
 
 export default async function TemplateDetailPage({ params, searchParams }: Props) {
   const { slug } = await params;
-  const { lang: langParam, error } = await searchParams;
+  const { lang: langParam, error, eventCategory } = await searchParams;
   const lang = resolveLang(langParam);
   const t = T[lang];
 
@@ -289,7 +289,7 @@ export default async function TemplateDetailPage({ params, searchParams }: Props
                 </div>
               </div>
 
-              <TemplateCreateButton templateSlug={tmpl.slug} lang={lang} />
+              <TemplateCreateButton templateSlug={tmpl.slug} lang={lang} eventCategory={eventCategory} />
 
               {/* WhatsApp alternative */}
               <a

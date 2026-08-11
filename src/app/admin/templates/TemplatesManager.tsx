@@ -3,15 +3,18 @@
 import { useState, useEffect, useTransition, useRef } from "react";
 import type { InviteTemplate } from "@prisma/client";
 import { uploadTemplateImageAction, removeTemplateImageAction } from "./actions";
+import { TEMPLATE_FILTERS } from "@/lib/templates";
 
 interface FormState {
   title: string;
   slug: string;
   nameKk: string;
+  nameRu: string;
   category: string;
   language: string;
   style: string;
   description: string;
+  descriptionRu: string;
   previewImage: string;
   demoImage: string;
   isActive: boolean;
@@ -27,25 +30,29 @@ interface FormState {
   demoName1: string;
   demoName2: string;
   tags: string;
+  tagsKk: string;
+  tagsRu: string;
 }
 
 const EMPTY: FormState = {
-  title: "", slug: "", nameKk: "", category: "wedding", language: "both",
-  style: "elegant", description: "", previewImage: "", demoImage: "",
+  title: "", slug: "", nameKk: "", nameRu: "", category: "wedding", language: "both",
+  style: "elegant", description: "", descriptionRu: "", previewImage: "", demoImage: "",
   isActive: true, sortOrder: "0", isPremium: false,
   bg: "#FAF8F3", gradient: "from-amber-50 via-stone-50 to-rose-50",
   accent: "#C4963E", textDark: "#1C1917", textMuted: "#78716C",
-  dark: false, emoji: "✨", demoName1: "", demoName2: "", tags: "",
+  dark: false, emoji: "✨", demoName1: "", demoName2: "", tags: "", tagsKk: "", tagsRu: "",
 };
 
-const CATEGORIES = [
-  { value: "wedding", label: "Үйлену той" },
-  { value: "uzatu", label: "Қыз ұзату" },
-  { value: "birthday", label: "Туған күн" },
-  { value: "kazakh", label: "Қазақша дәстүр" },
-  { value: "corporate", label: "Корпоратив" },
-  { value: "minimal", label: "Минимал" },
-];
+// Single canonical style-bucket source (§3/§4) — mirrors exactly what
+// /templates?cat= and getDbTemplates({cat}) filter against. Deliberately
+// NOT the 8-id EVENT_CATEGORIES (lib/event-categories.ts): that's the
+// customer-facing "what kind of celebration" list (drives the simple
+// constructor's category picker + which EventFormSchema applies), while
+// this is the narrower "which visual style bucket" a template belongs to
+// — several EVENT_CATEGORIES ids intentionally share one style bucket
+// (e.g. besiktoi/sundettoi/kudalyk all bucket under "kazakh") so templates
+// stay reusable across related event types instead of fragmenting 1:1.
+const CATEGORIES = TEMPLATE_FILTERS.filter((f) => f.id !== "all").map((f) => ({ value: f.id, label: f.labelKk }));
 
 const LANGUAGES = [
   { value: "both", label: "Екі тілде" },
@@ -55,15 +62,16 @@ const LANGUAGES = [
 
 function toForm(t: InviteTemplate): FormState {
   return {
-    title: t.title, slug: t.slug, nameKk: t.nameKk ?? "",
+    title: t.title, slug: t.slug, nameKk: t.nameKk ?? "", nameRu: t.nameRu ?? "",
     category: t.category, language: t.language, style: t.style,
-    description: t.description ?? "", previewImage: t.previewImage ?? "",
+    description: t.description ?? "", descriptionRu: t.descriptionRu ?? "",
+    previewImage: t.previewImage ?? "",
     demoImage: t.demoImage ?? "", isActive: t.isActive,
     sortOrder: String(t.sortOrder), isPremium: t.isPremium,
     bg: t.bg, gradient: t.gradient, accent: t.accent,
     textDark: t.textDark, textMuted: t.textMuted, dark: t.dark,
     emoji: t.emoji, demoName1: t.demoName1, demoName2: t.demoName2 ?? "",
-    tags: t.tags.join(", "),
+    tags: t.tags.join(", "), tagsKk: t.tagsKk.join(", "), tagsRu: t.tagsRu.join(", "),
   };
 }
 
@@ -96,13 +104,16 @@ export function TemplatesManager() {
     setSaving(true);
     setError(null);
     try {
+      const splitTags = (s: string) => (s ? s.split(",").map((x) => x.trim()).filter(Boolean) : []);
       const payload = {
         ...form,
         sortOrder: parseInt(form.sortOrder, 10) || 0,
-        tags: form.tags
-          ? form.tags.split(",").map((s) => s.trim()).filter(Boolean)
-          : [],
+        tags: splitTags(form.tags),
+        tagsKk: splitTags(form.tagsKk),
+        tagsRu: splitTags(form.tagsRu),
         nameKk: form.nameKk || null,
+        nameRu: form.nameRu || null,
+        descriptionRu: form.descriptionRu || null,
         demoName2: form.demoName2 || null,
       };
       const url =
@@ -285,10 +296,14 @@ export function TemplatesManager() {
                   onChange={(v) => set("slug", v.toLowerCase().replace(/\s+/g, "-"))}
                 />
                 <FI label="Атауы (қазақша)" value={form.nameKk} onChange={(v) => set("nameKk", v)} />
+                <FI label="Атауы (орысша)" value={form.nameRu} onChange={(v) => set("nameRu", v)} />
                 <FS label="Санат" value={form.category} onChange={(v) => set("category", v)} options={CATEGORIES} />
                 <FS label="Тіл" value={form.language} onChange={(v) => set("language", v)} options={LANGUAGES} />
-                <FI label="Сипаттама" value={form.description} onChange={(v) => set("description", v)} multiline />
+                <FI label="Сипаттама (қазақша)" value={form.description} onChange={(v) => set("description", v)} multiline />
+                <FI label="Сипаттама (орысша)" value={form.descriptionRu} onChange={(v) => set("descriptionRu", v)} multiline />
                 <FI label="Теги (үтірмен)" value={form.tags} onChange={(v) => set("tags", v)} placeholder="wedding, floral" />
+                <FI label="Теги — қазақша (үтірмен)" value={form.tagsKk} onChange={(v) => set("tagsKk", v)} placeholder="үйлену, гүл" />
+                <FI label="Теги — орысша (үтірмен)" value={form.tagsRu} onChange={(v) => set("tagsRu", v)} placeholder="свадьба, цветы" />
                 <FI label="Сорт реті" type="number" value={form.sortOrder} onChange={(v) => set("sortOrder", v)} />
               </Section>
 

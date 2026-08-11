@@ -9,6 +9,7 @@
 import type { Prisma } from "@prisma/client";
 import { addPlanDays } from "@/lib/payment/plans";
 import { confirmPromoUsage, releasePromoUsage } from "@/lib/promo-codes";
+import { unionEntitlements } from "@/lib/entitlements";
 
 type Tx = Prisma.TransactionClient;
 
@@ -35,6 +36,22 @@ export async function markPaymentPaidAndPublish(
   const expiresAt = addPlanDays(base, input.plan);
   const inviteAlreadyPublished = input.inviteStatus === "PUBLISHED";
 
+  // Read BEFORE updating: the feature-purchase snapshot written at
+  // Payment-creation time (see /api/payments/create's rawPayload.features)
+  // is what determines entitlements — never re-derived from current admin
+  // pricing (§23: "Do not infer purchased features from current admin
+  // prices after payment"). This is a read-only lookup of a field this
+  // function's own update below never touches.
+  const paymentBefore = await tx.payment.findUnique({
+    where: { id: input.paymentId },
+    select: { rawPayload: true },
+  });
+  const purchasedFeatureKeys = (() => {
+    const raw = (paymentBefore?.rawPayload ?? {}) as { features?: { key?: unknown }[] };
+    if (!Array.isArray(raw.features)) return [];
+    return raw.features.map((f) => f.key).filter((k): k is string => typeof k === "string");
+  })();
+
   await tx.payment.update({
     where: { id: input.paymentId },
     data: {
@@ -44,10 +61,19 @@ export async function markPaymentPaidAndPublish(
     },
   });
 
+  const inviteBefore = await tx.invite.findUnique({
+    where: { id: input.inviteId },
+    select: { data: true },
+  });
+  // Entitlements ACCUMULATE across payments (§23/#35: "template switching
+  // ... does not lose entitlements") — never overwritten, only unioned in.
+  const entitlements = unionEntitlements(inviteBefore?.data, purchasedFeatureKeys);
+
   await tx.invite.update({
     where: { id: input.inviteId },
     data: {
       expiresAt,
+      data: { ...((inviteBefore?.data as object) ?? {}), entitlements },
       ...(inviteAlreadyPublished ? {} : { status: "PUBLISHED", publishedAt: now }),
     },
   });

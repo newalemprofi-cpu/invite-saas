@@ -26,10 +26,12 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (body.title !== undefined) data.title = String(body.title);
   if (body.slug !== undefined) data.slug = String(body.slug).toLowerCase().trim();
   if (body.nameKk !== undefined) data.nameKk = body.nameKk ? String(body.nameKk) : null;
+  if (body.nameRu !== undefined) data.nameRu = body.nameRu ? String(body.nameRu) : null;
   if (body.category !== undefined) data.category = String(body.category);
   if (body.language !== undefined) data.language = String(body.language);
   if (body.style !== undefined) data.style = String(body.style);
   if (body.description !== undefined) data.description = body.description ? String(body.description) : null;
+  if (body.descriptionRu !== undefined) data.descriptionRu = body.descriptionRu ? String(body.descriptionRu) : null;
   if (body.previewImage !== undefined) data.previewImage = body.previewImage ? String(body.previewImage) : null;
   if (body.demoImage !== undefined) data.demoImage = body.demoImage ? String(body.demoImage) : null;
   if (body.isActive !== undefined) data.isActive = Boolean(body.isActive);
@@ -45,6 +47,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (body.demoName1 !== undefined) data.demoName1 = String(body.demoName1);
   if (body.demoName2 !== undefined) data.demoName2 = body.demoName2 ? String(body.demoName2) : null;
   if (body.tags !== undefined) data.tags = Array.isArray(body.tags) ? body.tags : [];
+  if (body.tagsKk !== undefined) data.tagsKk = Array.isArray(body.tagsKk) ? body.tagsKk : [];
+  if (body.tagsRu !== undefined) data.tagsRu = Array.isArray(body.tagsRu) ? body.tagsRu : [];
 
   try {
     const tmpl = await db.inviteTemplate.update({ where: { id }, data });

@@ -7,6 +7,7 @@ import type { Lang } from "@/lib/i18n";
 interface Props {
   templateSlug: string;
   lang: Lang;
+  eventCategory?: string;
 }
 
 const LABELS = {
@@ -14,7 +15,7 @@ const LABELS = {
   ru: { create: "✨ Создать по этому шаблону", creating: "Открывается..." },
 } as const;
 
-export function TemplateCreateButton({ templateSlug, lang }: Props) {
+export function TemplateCreateButton({ templateSlug, lang, eventCategory }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const L = LABELS[lang];
@@ -23,7 +24,8 @@ export function TemplateCreateButton({ templateSlug, lang }: Props) {
     setLoading(true);
     // The constructor opens immediately for everyone, signed in or not —
     // no account is required to try it. Only publishing later requires auth.
-    router.push(`/invitations/new?template=${encodeURIComponent(templateSlug)}&lang=${lang}`);
+    const eventCategoryParam = eventCategory ? `&eventCategory=${encodeURIComponent(eventCategory)}` : "";
+    router.push(`/invitations/new?template=${encodeURIComponent(templateSlug)}&lang=${lang}${eventCategoryParam}`);
   }
 
   return (

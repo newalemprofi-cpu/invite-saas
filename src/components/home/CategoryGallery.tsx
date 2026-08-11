@@ -53,7 +53,7 @@ export function CategoryGallery({ lang, cards }: Props) {
           return (
             <Link
               key={category.id}
-              href={`/templates?cat=${category.cat}&lang=${lang}`}
+              href={`/templates?cat=${category.cat}&eventCategory=${category.id}&lang=${lang}`}
               className="group relative block rounded-2xl overflow-hidden aspect-[3/4] transition-transform duration-300 hover:-translate-y-1"
               style={{ boxShadow: "0 2px 16px rgba(28,25,23,0.08)" }}
             >

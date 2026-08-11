@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { getProductSettings } from "@/lib/product";
@@ -8,6 +9,9 @@ import { getGenericGatewayInstructions } from "@/lib/payment/providers/generic-g
 import { isProviderUsable, PROVIDER_TO_PAYMENT_ENUM, ALL_PROVIDER_IDS, type ProviderId } from "@/lib/payment-providers";
 import { validateAndCalculatePromo, reservePromoUsage, getPromoErrorMessage, PromoReservationFailedError } from "@/lib/promo-codes";
 import { markPaymentPaidAndPublish } from "@/lib/payment/lifecycle";
+import { getFeaturePricing } from "@/lib/feature-pricing";
+import { calculateInvitePrice } from "@/lib/pricing";
+import { readFeatureState } from "@/lib/entitlements";
 
 const schema = z.object({
   inviteId: z.string().uuid(),
@@ -48,7 +52,7 @@ export async function POST(req: NextRequest) {
 
   const invite = await db.invite.findUnique({
     where: { id: inviteId },
-    select: { id: true, userId: true, status: true },
+    select: { id: true, userId: true, status: true, data: true },
   });
   if (!invite) {
     return NextResponse.json({ error: "Invite not found" }, { status: 404 });
@@ -69,10 +73,11 @@ export async function POST(req: NextRequest) {
   // request is intentionally ignored, exactly like `provider` already is.
   const existing = await db.payment.findFirst({
     where: { inviteId, status: "PENDING" },
-    select: { id: true, amount: true, provider: true, originalAmount: true, discountAmount: true, promoCode: true },
+    select: { id: true, amount: true, provider: true, originalAmount: true, discountAmount: true, promoCode: true, rawPayload: true },
   });
   if (existing) {
     const instructions = await buildInstructions(providerId, Number(existing.amount), existing.id, lang);
+    const rawPayload = (existing.rawPayload ?? {}) as { features?: unknown };
     return NextResponse.json({
       paymentId: existing.id,
       status: "PENDING",
@@ -82,16 +87,30 @@ export async function POST(req: NextRequest) {
       promoCode: existing.promoCode,
       currency: "KZT",
       provider: existing.provider,
+      // Snapshotted at THIS payment's creation time — same value shown when
+      // it was first created, regardless of any admin price change since.
+      features: Array.isArray(rawPayload.features) ? rawPayload.features : [],
       instructions,
     });
   }
 
-  const product = await getProductSettings();
-  const originalPrice = product.price;
+  // Server-authoritative total (§13/§20/§21): base price from admin config
+  // + only the invite's OWN already-saved `selectedFeatures` (read from the
+  // Invite row itself, never from this request's body — closes any path
+  // where a client could claim to be purchasing a different feature set
+  // than what's actually persisted/displayed) + only enabled features at
+  // their CURRENT admin-configured price. calculateInvitePrice() silently
+  // drops unknown/disabled keys, so a disabled feature can never be priced
+  // here even if it's still sitting in an old selectedFeatures array.
+  const [product, featurePricing] = await Promise.all([getProductSettings(), getFeaturePricing()]);
+  const featureState = readFeatureState(invite.data);
+  const priceBreakdown = calculateInvitePrice(featureState.selectedFeatures, featurePricing, product.price);
+  const originalPrice = priceBreakdown.total;
 
   // Server-authoritative promo resolution — the browser only ever supplies
   // the code text; every amount below is computed here, never trusted from
-  // the client (see src/lib/promo-codes.ts).
+  // the client (see src/lib/promo-codes.ts). Discount applies to the FULL
+  // total (base + selected add-ons), not just the base price.
   let discountAmount = 0;
   let finalAmount = originalPrice;
   let resolvedPromoId: string | null = null;
@@ -143,7 +162,14 @@ export async function POST(req: NextRequest) {
             activeDays: product.activeDays,
             provider,
             createdBy: session.userId,
-          },
+            // Payment snapshot (§22): exactly what was purchased at what
+            // price, immune to a later admin price change. Read back by
+            // markPaymentPaidAndPublish (lib/payment/lifecycle.ts) to grant
+            // entitlements, and by the "existing PENDING payment" branch
+            // above to redisplay the same line items on a retried request.
+            basePrice: priceBreakdown.basePrice,
+            features: priceBreakdown.lineItems,
+          } as unknown as Prisma.InputJsonValue,
         },
       });
 
@@ -197,6 +223,7 @@ export async function POST(req: NextRequest) {
           promoCode: resolvedPromoCode,
           currency: "KZT",
           provider,
+          features: priceBreakdown.lineItems,
         },
         { status: 201 }
       );
@@ -207,6 +234,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         paymentId: payment.id,
+        features: priceBreakdown.lineItems,
         status: "PENDING",
         amount: finalAmount,
         originalAmount: resolvedPromoId ? originalPrice : null,

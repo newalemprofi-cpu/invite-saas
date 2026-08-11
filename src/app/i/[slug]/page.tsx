@@ -7,9 +7,11 @@ import { getTemplate } from "@/lib/templates";
 import { getDbTemplate } from "@/lib/db-templates";
 import { THEMES } from "@/types/invite";
 import { RSVPForm } from "./RSVPForm";
+import { WishesWall } from "./WishesWall";
 import { MusicPlayer } from "./MusicPlayer";
 import { Countdown } from "./Countdown";
 import { getYoutubeEmbedUrl } from "@/lib/youtube";
+import { readFeatureState } from "@/lib/entitlements";
 
 interface Section { id: string; enabled: boolean }
 
@@ -64,8 +66,15 @@ interface D {
   giftInfo?: string | null;
   videoUrl?: string | null;
   rsvpText?: string | null;
+  programText?: string | null;
   // Legacy
   theme?: string | null;
+  // Simple-constructor additions (§10) — additive, absent on pre-existing invites.
+  address?: string | null;
+  hosts?: string | null;
+  parents?: string | null;
+  note?: string | null;
+  age?: string | null;
 }
 
 interface Props {
@@ -184,6 +193,19 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
 
   const d = (invite.data ?? {}) as D;
 
+  // Which paid add-ons this specific invite is entitled to, per the
+  // purchase snapshot (see lib/entitlements.ts / lib/payment/lifecycle.ts)
+  // — NEVER re-derived from current admin pricing. Invites that predate
+  // this system entirely (no `entitlements` key ever written) are
+  // grandfathered to FULL access by readFeatureState() itself — see its
+  // own comment — so a pre-existing published invite's music/gallery/RSVP/
+  // map keep working exactly as before this task.
+  const entitled = readFeatureState(invite.data).entitlements;
+  const isEntitledTo = (key: string) => entitled.includes(key as (typeof entitled)[number]);
+  const wishes = isEntitledTo("wishes")
+    ? await db.wish.findMany({ where: { inviteId: invite.id }, orderBy: { createdAt: "desc" }, take: 100 })
+    : [];
+
   // Resolve template: static list first (fast), then DB for admin-created templates
   const newSlug = d.templateSlug ?? d.template ?? null;
   const tmpl = newSlug
@@ -206,6 +228,8 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
   const mapUrl = d.mapLink ?? d.mapUrl;
   const message = d.invitationText ?? d.message;
   const gallery = d.galleryUrls ?? [];
+  // Simple-constructor additions (§10) — additive, absent on pre-existing invites.
+  const hostsLine = d.hosts || d.parents || null;
 
   // Blocks — respect sections ordering if available
   const blocks = resolveEnabledBlocks(d);
@@ -249,7 +273,7 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
           Gated on musicEnabled alone (not a "music" section/block id — see
           the comment by BLOCK_META in EditorClient.tsx for why that
           previously-separate toggle was removed as a source of bugs). */}
-      {d.musicEnabled && d.musicUrl && (
+      {d.musicEnabled && d.musicUrl && isEntitledTo("music") && (
         <MusicPlayer
           url={d.musicUrl}
           accent={accent}
@@ -317,7 +341,14 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
               <h1 className="heading-display text-4xl sm:text-5xl break-words" style={{ color: textDark }}>
                 {displayName}
               </h1>
+              {d.age && (
+                <p className="text-sm" style={{ color: textMuted }}>{d.age}</p>
+              )}
             </>
+          )}
+
+          {hostsLine && (
+            <p className="text-sm" style={{ color: textMuted }}>{hostsLine}</p>
           )}
 
           <div className="flex items-center gap-4 w-full px-4">
@@ -344,7 +375,11 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
           {location && (
             <div className="flex flex-col items-center gap-1.5">
               <p className="font-semibold text-base" style={{ color: textDark }}>{location}</p>
-              {mapUrl && (
+              {d.address && <p className="text-sm" style={{ color: textMuted }}>{d.address}</p>}
+              {/* MAP is a paid add-on (§15/§18): the address TEXT above is
+                  always shown (base event info), only the "open in map app"
+                  link requires entitlement. */}
+              {mapUrl && isEntitledTo("map") && (
                 <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="text-sm underline underline-offset-2 hover:opacity-80" style={{ color: accent }}>
                   Картада ашу ↗
                 </a>
@@ -358,9 +393,13 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
               &ldquo;{message}&rdquo;
             </div>
           )}
+
+          {d.note && (
+            <p className="text-xs leading-relaxed" style={{ color: textMuted }}>{d.note}</p>
+          )}
         </div>
 
-        {has("rsvp") && (
+        {has("rsvp") && isEntitledTo("rsvp") && (
           <div className="absolute bottom-7 inset-x-0 flex flex-col items-center gap-2 pointer-events-none">
             <p className="label-caps text-[9px]" style={{ color: isDark ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.22)" }}>Жауап беріңіз</p>
             <div className="w-5 h-8 rounded-full border-2 flex items-start justify-center pt-1.5"
@@ -403,7 +442,7 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
       )}
 
       {/* ── Gallery ── */}
-      {has("gallery") && gallery.length > 0 && (
+      {has("gallery") && gallery.length > 0 && isEntitledTo("gallery") && (
         <section className="py-14 px-4" style={{ background: "var(--ivory)" }}>
           <div className="max-w-2xl mx-auto">
             <p className="label-caps text-center mb-8" style={{ color: "var(--gold)" }}>Галерея</p>
@@ -441,25 +480,34 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
         </section>
       )}
 
-      {/* ── Program ── */}
+      {/* ── Program ──
+          §7's approved Wedding form offers a single free-text "Бағдарлама"
+          field (programText), distinct from the advanced editor's
+          structured programItems timeline. When the customer used the
+          simple constructor (programText set, programItems empty), show
+          their text as-is instead of the hardcoded demo timeline. */}
       {has("program") && (
         <section className="py-14 px-4" style={{ background: "var(--cream)" }}>
           <div className="max-w-md mx-auto">
             <p className="label-caps text-center mb-8" style={{ color: "var(--gold)" }}>Бағдарлама</p>
-            <div className="flex flex-col gap-0">
-              {programItems.map((item, i) => (
-                <div key={i} className="flex gap-4 relative">
-                  <div className="flex flex-col items-center">
-                    <div className="w-3 h-3 rounded-full shrink-0 mt-1" style={{ background: accent }} />
-                    {i < programItems.length - 1 && <div className="w-px flex-1 my-1" style={{ background: `${accent}30` }} />}
+            {(!d.programItems || d.programItems.length === 0) && d.programText ? (
+              <p className="text-sm leading-relaxed text-center" style={{ color: "var(--charcoal)" }}>{d.programText}</p>
+            ) : (
+              <div className="flex flex-col gap-0">
+                {programItems.map((item, i) => (
+                  <div key={i} className="flex gap-4 relative">
+                    <div className="flex flex-col items-center">
+                      <div className="w-3 h-3 rounded-full shrink-0 mt-1" style={{ background: accent }} />
+                      {i < programItems.length - 1 && <div className="w-px flex-1 my-1" style={{ background: `${accent}30` }} />}
+                    </div>
+                    <div className="pb-5">
+                      <p className="text-sm font-semibold font-mono" style={{ color: accent }}>{item.time}</p>
+                      <p className="text-sm" style={{ color: "var(--charcoal)" }}>{item.label}</p>
+                    </div>
                   </div>
-                  <div className="pb-5">
-                    <p className="text-sm font-semibold font-mono" style={{ color: accent }}>{item.time}</p>
-                    <p className="text-sm" style={{ color: "var(--charcoal)" }}>{item.label}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </section>
       )}
@@ -476,12 +524,13 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
         </section>
       )}
 
-      {/* ── Map ── */}
-      {has("map") && mapUrl && (
+      {/* ── Map (paid add-on §15/§18) ── */}
+      {has("map") && mapUrl && isEntitledTo("map") && (
         <section className="py-10 px-4" style={{ background: "var(--ivory)" }}>
           <div className="max-w-md mx-auto text-center">
             <p className="label-caps mb-5" style={{ color: "var(--gold)" }}>Орын</p>
             {location && <p className="text-base font-semibold mb-3" style={{ color: "var(--charcoal)" }}>{location}</p>}
+            {d.address && <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>{d.address}</p>}
             <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="btn-outline inline-flex">
               Картада ашу ↗
             </a>
@@ -515,7 +564,8 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
         </section>
       )}
 
-      {/* ── Wishes ── */}
+      {/* ── Wishes (owner's own static message to guests — always free,
+          unrelated to the WISHES paid add-on below) ── */}
       {has("wishes") && (
         <section className="py-12 px-4" style={{ background: "var(--ivory)" }}>
           <div className="max-w-md mx-auto text-center">
@@ -527,6 +577,15 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
             </div>
           </div>
         </section>
+      )}
+
+      {/* ── Guest wishes wall (paid WISHES add-on §15/§18) — guests writing
+          BACK to the couple, a real persisted Wish[] model, distinct from
+          the static wishesText above. Only rendered when both the invite
+          is entitled AND actually published (guests can't submit to an
+          unpublished/preview invite). */}
+      {isEntitledTo("wishes") && invite.status === "PUBLISHED" && (
+        <WishesWall inviteId={invite.id} wishes={wishes} accent={accent} cardBg={cardBg} cardBorder={cardBorder} />
       )}
 
       {/* ── Gift Info ── */}
@@ -541,8 +600,8 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
         </section>
       )}
 
-      {/* ── RSVP ── */}
-      {has("rsvp") && (
+      {/* ── RSVP (paid add-on §15/§18) ── */}
+      {has("rsvp") && isEntitledTo("rsvp") && (
         <section className="py-14 px-4" style={{ background: "var(--ivory)" }}>
           <div className="max-w-md mx-auto">
             <div className="text-center mb-8">

@@ -17,6 +17,8 @@ import { getCheckoutProviders } from "@/lib/payment-providers";
 import { getReceiptVerificationSettings } from "@/lib/receipts/settings";
 import { getAdminConfig } from "@/lib/admin-config";
 import { formatPaymentReference } from "@/lib/payment/reference";
+import { readFeatureState } from "@/lib/entitlements";
+import QRCode from "qrcode";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -72,6 +74,10 @@ const T = {
     previewLink: "Алдын ала қарау ↗",
     back: "← Менің шақыруларым",
     locale: "kk-KZ",
+    qrTitle: "QR-код",
+    qrDownload: "Жүктеп алу",
+    analyticsTitle: "Статистика",
+    viewsLabel: "Қаралым",
   },
   ru: {
     breadcrumb: "Мои приглашения",
@@ -100,6 +106,10 @@ const T = {
     previewLink: "Предпросмотр ↗",
     back: "← Мои приглашения",
     locale: "ru-RU",
+    qrTitle: "QR-код",
+    qrDownload: "Скачать",
+    analyticsTitle: "Статистика",
+    viewsLabel: "Просмотры",
   },
 } as const;
 
@@ -175,6 +185,17 @@ export default async function InviteDetailPage({ params, searchParams }: Props) 
   const appUrl = await getAppOrigin();
   const shareUrl = `${appUrl}/i/${invite.slug}`;
 
+  // Free QR toggle (§19, never affects price) + entitled paid add-ons
+  // (§21/§23 — the ANALYTICS card below is gated the same way music/
+  // gallery/RSVP/map are gated on the public page: from the purchase
+  // snapshot, never re-derived from current admin pricing).
+  const featureState = readFeatureState(invite.data);
+  const qrDataUrl =
+    featureState.qrEnabled && invite.status === "PUBLISHED"
+      ? await QRCode.toDataURL(shareUrl, { margin: 1, width: 220, color: { dark: "#1C1917", light: "#FFFFFF" } }).catch(() => null)
+      : null;
+  const isEntitledToAnalytics = featureState.entitlements.includes("analytics");
+
   const eventLabel = EVENT_TYPES.find((e) => e.value === data.eventType)?.label;
   const themeLabel =
     TEMPLATES.find((tm) => tm.id === data.template)?.name ??
@@ -240,6 +261,19 @@ export default async function InviteDetailPage({ params, searchParams }: Props) 
             )}
           </div>
 
+          {qrDataUrl && (
+            <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-4 flex flex-col items-center gap-3">
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider self-start">
+                {t.qrTitle}
+              </p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={qrDataUrl} alt={t.qrTitle} width={160} height={160} className="rounded-lg" />
+              <a href={qrDataUrl} download={`${invite.slug}-qr.png`} className="btn-outline text-xs px-4 py-2">
+                {t.qrDownload}
+              </a>
+            </div>
+          )}
+
           <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-4">
             <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
               {t.guestsTitle}
@@ -247,6 +281,19 @@ export default async function InviteDetailPage({ params, searchParams }: Props) 
             <p className="text-3xl font-bold text-zinc-900">{invite._count.guests}</p>
             <p className="text-xs text-zinc-400 mt-0.5">{t.guestResponsesTitle}</p>
           </div>
+
+          {/* ANALYTICS paid add-on (§15/§18/§23) — real tracked data only
+              (Invite.viewCount, already incremented on every public page
+              load — see src/app/i/[slug]/page.tsx), never fabricated. */}
+          {isEntitledToAnalytics && (
+            <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-4">
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+                {t.analyticsTitle}
+              </p>
+              <p className="text-3xl font-bold text-zinc-900">{invite.viewCount}</p>
+              <p className="text-xs text-zinc-400 mt-0.5">{t.viewsLabel}</p>
+            </div>
+          )}
         </div>
       </div>
 

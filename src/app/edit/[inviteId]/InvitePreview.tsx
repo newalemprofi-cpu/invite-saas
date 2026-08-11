@@ -98,9 +98,13 @@ export function InvitePreview({ data, template }: Props) {
               )}
               <p className="label-caps text-[9px]" style={{ color: textMuted }}>Іс-шараға шақырамыз</p>
               <p className="font-serif text-xl font-semibold leading-tight" style={{ color: textColor }}>{name}</p>
+              {(data.hosts || data.parents) && (
+                <p className="text-[10px]" style={{ color: textMuted }}>{data.hosts || data.parents}</p>
+              )}
               <div className="w-full h-px opacity-20 my-1" style={{ background: `linear-gradient(90deg,transparent,${accent},transparent)` }} />
               {data.date && <p className="font-serif text-sm" style={{ color: textMuted }}>{fmt(data.date)}{data.time && ` · ${data.time}`}</p>}
               {data.location && <p className="text-xs" style={{ color: textMuted }}>{data.location}</p>}
+              {data.address && <p className="text-[10px]" style={{ color: textMuted }}>{data.address}</p>}
             </div>
           );
 

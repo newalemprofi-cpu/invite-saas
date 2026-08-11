@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { claimAnonymousInvite, TemplateNotFoundError } from "@/lib/data/invites";
+import { FEATURE_KEYS } from "@/lib/features";
 
 // Matches crypto.randomUUID() output from lib/anonymousDraft.ts.
 const DRAFT_TOKEN_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -48,6 +49,26 @@ const dataSchema = z.object({
   programItems: z.array(z.object({ time: z.string(), label: z.string() })).optional(),
   rsvpText: z.string().max(500).optional(),
   programText: z.string().max(1000).optional(),
+  // Simple-constructor additions (§10) — genuinely new content fields with
+  // no existing equivalent. Additive: absent on every pre-existing row,
+  // never required by any reader.
+  address: z.string().max(300).optional(),
+  hosts: z.string().max(200).optional(),
+  parents: z.string().max(200).optional(),
+  note: z.string().max(1000).optional(),
+  age: z.string().max(50).optional(),
+  // Which of the 8 EVENT_CATEGORIES ids this invite is — drives which
+  // EventFormSchema (lib/event-schema.ts) the simple constructor shows.
+  eventCategoryId: z.string().max(60).optional(),
+  // Pre-payment feature "shopping cart" (§17/§20) — customer can freely
+  // add/remove before paying. NEVER confuse with `entitlements`, which is
+  // deliberately NOT declared in this schema: zod strips any unknown key
+  // on parse, so a client attempting to send `entitlements` directly here
+  // is silently dropped, never persisted. Entitlements are only ever
+  // written server-side in lib/payment/lifecycle.ts.
+  selectedFeatures: z.array(z.enum(FEATURE_KEYS)).max(FEATURE_KEYS.length).optional(),
+  // Free QR toggle (§19) — never affects price.
+  qrEnabled: z.boolean().optional(),
 });
 
 const schema = z.object({

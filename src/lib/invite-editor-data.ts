@@ -1,4 +1,5 @@
 import type { Template } from "@/lib/templates";
+import type { FeatureKey } from "@/lib/features";
 
 export interface Section {
   id: string;
@@ -51,6 +52,21 @@ export interface EditorData {
   programItems: { time: string; label: string }[];
   rsvpText: string;
   programText: string;
+  // Simple-constructor additions (§10) — new content fields with no
+  // existing equivalent (see lib/event-schema.ts's Wedding/Sundet field
+  // lists). Additive: absent/empty on every pre-existing invite.
+  address: string;
+  hosts: string;
+  parents: string;
+  note: string;
+  age: string;
+  // Which of the 8 EVENT_CATEGORIES ids this invite is (lib/event-categories.ts) — drives which EventFormSchema the simple constructor shows.
+  eventCategoryId: string;
+  // Pre-payment feature "shopping cart" (§17/§20). NOT the same as
+  // entitlements (server-only, granted on payment — see lib/entitlements.ts).
+  selectedFeatures: FeatureKey[];
+  // Free QR toggle (§19) — never affects price.
+  qrEnabled: boolean;
 }
 
 export const DEFAULT_SECTIONS: Section[] = [
@@ -113,6 +129,14 @@ export function buildFreshEditorData(tmpl: Template): EditorData {
     programItems: [],
     rsvpText: "",
     programText: "",
+    address: "",
+    hosts: "",
+    parents: "",
+    note: "",
+    age: "",
+    eventCategoryId: "",
+    selectedFeatures: [],
+    qrEnabled: true,
   };
 }
 
@@ -159,6 +183,14 @@ export function parseEditorData(d: Record<string, unknown>, fallbackTemplateSlug
     programItems: (d.programItems as { time: string; label: string }[]) ?? [],
     rsvpText: (d.rsvpText as string) ?? "",
     programText: (d.programText as string) ?? "",
+    address: (d.address as string) ?? "",
+    hosts: (d.hosts as string) ?? "",
+    parents: (d.parents as string) ?? "",
+    note: (d.note as string) ?? "",
+    age: (d.age as string) ?? "",
+    eventCategoryId: (d.eventCategoryId as string) ?? "",
+    selectedFeatures: Array.isArray(d.selectedFeatures) ? (d.selectedFeatures as FeatureKey[]) : [],
+    qrEnabled: typeof d.qrEnabled === "boolean" ? d.qrEnabled : true,
   };
 }
 
@@ -203,5 +235,13 @@ export function editorDataToSaveBody(data: EditorData): Record<string, unknown> 
     programItems: data.programItems.length > 0 ? data.programItems : undefined,
     rsvpText: data.rsvpText || undefined,
     programText: data.programText || undefined,
+    address: data.address || undefined,
+    hosts: data.hosts || undefined,
+    parents: data.parents || undefined,
+    note: data.note || undefined,
+    age: data.age || undefined,
+    eventCategoryId: data.eventCategoryId || undefined,
+    selectedFeatures: data.selectedFeatures,
+    qrEnabled: data.qrEnabled,
   };
 }
