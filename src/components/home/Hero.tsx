@@ -99,7 +99,7 @@ export function Hero({ lang, content, previewImageUrl, previewTemplate }: Props)
               background: "radial-gradient(circle, rgba(196,150,62,0.13) 0%, transparent 70%)",
             }}
           />
-          <div className="hero-phone relative w-[290px] md:w-[340px] lg:w-[420px]">
+          <div className="hero-phone relative w-[290px] md:w-[340px] lg:w-[470px]">
             <div className="hero-phone-screen absolute overflow-hidden" style={SCREEN_INSET}>
               {previewImageUrl ? (
                 <Image
