@@ -5,7 +5,10 @@ import { getSession } from "@/lib/auth";
 import { getInvite } from "@/lib/data/invites";
 import { getProductSettings } from "@/lib/product";
 import { db } from "@/lib/db";
-import { StaticInviteCard } from "@/components/StaticInviteCard";
+import { parseEditorData } from "@/lib/invite-editor-data";
+import { getDbTemplate } from "@/lib/db-templates";
+import { getTemplate } from "@/lib/templates";
+import { InvitePreview } from "@/app/edit/[inviteId]/InvitePreview";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { CopyButton } from "@/components/dashboard/CopyButton";
 import { PaymentFlow } from "@/components/payment/PaymentFlow";
@@ -185,6 +188,15 @@ export default async function InviteDetailPage({ params, searchParams }: Props) 
   const appUrl = await getAppOrigin();
   const shareUrl = `${appUrl}/i/${invite.slug}`;
 
+  // Real preview (§Part6): the SAME renderer/data the constructor and the
+  // public page already use — never the legacy StaticInviteCard, which
+  // only understands the old `data.template`/THEMES lookup and falls back
+  // to a generic gradient for any invite created via SimpleConstructor
+  // (which only ever sets `templateSlug`). Invite.data is authoritative;
+  // there is no demo-content fallback here.
+  const previewData = parseEditorData((invite.data ?? {}) as Record<string, unknown>, "wedding-rose");
+  const previewTemplate = (await getDbTemplate(previewData.templateSlug)) ?? getTemplate(previewData.templateSlug) ?? null;
+
   // Free QR toggle (§19, never affects price) + entitled paid add-ons
   // (§21/§23 — the ANALYTICS card below is gated the same way music/
   // gallery/RSVP/map are gated on the public page: from the purchase
@@ -240,7 +252,11 @@ export default async function InviteDetailPage({ params, searchParams }: Props) 
       {/* Preview + share */}
       <div className="grid sm:grid-cols-2 gap-5 items-start">
         <div className="max-w-[200px] mx-auto sm:mx-0">
-          <StaticInviteCard data={data} />
+          <div className="phone-frame w-full">
+            <div className="phone-screen" style={{ height: 356 }}>
+              <InvitePreview data={previewData} template={previewTemplate} />
+            </div>
+          </div>
         </div>
 
         <div className="flex flex-col gap-4">

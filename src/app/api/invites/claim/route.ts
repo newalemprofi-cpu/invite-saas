@@ -34,7 +34,11 @@ const dataSchema = z.object({
   bgBlur: z.number().min(0).max(20).optional(),
   bgOpacity: z.number().min(0).max(1).optional(),
   bgOverlay: z.string().max(30).optional(),
-  galleryUrls: z.array(z.string()).optional(),
+  // Hard cap of 10 photos, kept in sync with GalleryUploader's client-side
+  // limit and the identical check in PATCH /api/invites/[id]. A claim
+  // attempting to sneak more than 10 through a tampered draft is rejected
+  // (VALIDATION_ERROR), never silently truncated.
+  galleryUrls: z.array(z.string()).max(10).optional(),
   musicUrl: z.string().max(500).optional().or(z.literal("")),
   musicTitle: z.string().max(100).optional(),
   musicEnabled: z.boolean().optional(),

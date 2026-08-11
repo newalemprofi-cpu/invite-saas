@@ -7,15 +7,25 @@ import type { Template } from "@/lib/templates";
 import type { EventFormSchema, EventFormField } from "@/lib/event-schema";
 import type { FeaturePricingConfig } from "@/lib/feature-pricing";
 import type { PlayableTrack } from "@/lib/recommended-tracks";
+import type { UploadTarget } from "@/lib/useUpload";
 import { FEATURE_KEYS, type FeatureKey } from "@/lib/features";
 import { calculateInvitePrice, lineItemTitle } from "@/lib/pricing";
-import { buildFreshEditorData, type EditorData } from "@/lib/invite-editor-data";
+import { buildFreshEditorData, editorDataToSaveBody, type EditorData } from "@/lib/invite-editor-data";
 import { loadAnonymousDraft, saveAnonymousDraft, createDraftToken } from "@/lib/anonymousDraft";
 import { InvitePreview } from "@/app/edit/[inviteId]/InvitePreview";
 import { ImageUploadField, GalleryUploader, MusicUploader } from "@/app/edit/[inviteId]/uploads";
 import { useSingleAudioPreview } from "@/app/edit/[inviteId]/useSingleAudioPreview";
 
 interface Props {
+  /** "create" (default): anonymous draft → claim, exactly as before.
+   * "edit": DB Invite is authoritative — no localStorage involvement, saves
+   * PATCH the SAME invite instead of navigating to /invitations/publish. */
+  mode?: "create" | "edit";
+  /** Required when mode="edit". */
+  inviteId?: string;
+  /** Required when mode="edit" — the persisted invite's own data, never a
+   * template's demo content. */
+  initialData?: EditorData;
   template: Template;
   templates: Template[];
   schema: EventFormSchema;
@@ -73,6 +83,14 @@ const T = {
     rsvpFieldComment: "Пікір (міндетті емес)",
     wishesInfo: "Қонақтар шақыру бетінде сізге жылы лебізін қалдыра алады.",
     analyticsInfo: "Шақыру жарияланғаннан кейін қаралымдар мен қонақтардың жауаптарын бақылаңыз.",
+    editableHint: "Мәтінді өзгерте аласыз",
+    fieldRequiredError: "Бұл өрісті толтырыңыз",
+    fieldRequiredImageError: "Негізгі фотоны жүктеңіз",
+    saveChanges: "Өзгерістерді сақтау",
+    saving: "Сақталуда…",
+    saveSuccess: "Өзгерістер сақталды",
+    saveError: "Сақтау кезінде қате шықты. Қайталап көріңіз.",
+    galleryLimitReached: "Ең көбі 10 фото жүктеуге болады",
   },
   ru: {
     basicInfo: "Основная информация",
@@ -108,6 +126,14 @@ const T = {
     rsvpFieldComment: "Комментарий (необязательно)",
     wishesInfo: "Гости смогут оставить вам тёплое пожелание прямо на странице приглашения.",
     analyticsInfo: "После публикации отслеживайте просмотры приглашения и ответы гостей.",
+    editableHint: "Текст можно изменить",
+    fieldRequiredError: "Заполните это поле",
+    fieldRequiredImageError: "Загрузите основное фото",
+    saveChanges: "Сохранить изменения",
+    saving: "Сохранение…",
+    saveSuccess: "Изменения сохранены",
+    saveError: "Ошибка при сохранении. Попробуйте снова.",
+    galleryLimitReached: "Можно загрузить не более 10 фотографий",
   },
 } as const;
 
@@ -145,6 +171,14 @@ interface ConstructorCopy {
   rsvpFieldComment: string;
   wishesInfo: string;
   analyticsInfo: string;
+  editableHint: string;
+  fieldRequiredError: string;
+  fieldRequiredImageError: string;
+  saveChanges: string;
+  saving: string;
+  saveSuccess: string;
+  saveError: string;
+  galleryLimitReached: string;
 }
 
 function fieldLabel(f: EventFormField, lang: Lang) {
@@ -161,24 +195,45 @@ function mediaSrc(key: string): string {
   return `/api/media/${key.split("/").map(encodeURIComponent).join("/")}`;
 }
 
+function scrollToInvalidField(key: string) {
+  if (typeof document === "undefined") return;
+  const el = document.querySelector<HTMLElement>(`[data-field-key="${key}"]`);
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  const focusable = el.querySelector<HTMLElement>("input, textarea, select");
+  focusable?.focus();
+}
+
 export function SimpleConstructor({
+  mode = "create", inviteId, initialData,
   template, templates, schema, eventCategoryId, lang, featurePricing, basePrice, recommendedTracks,
 }: Props) {
   const router = useRouter();
   const t = T[lang];
   const preview = useSingleAudioPreview();
+  const isEdit = mode === "edit";
 
-  // Lazy-initialized ONCE (pure, no render-time side effects). The
-  // RESUME condition is keyed on eventCategoryId, NOT templateSlug — this
-  // is the actual fix for gap §1: a draft in progress for this SAME event
-  // category is always continued (content, features, everything) no
-  // matter which template URL the customer arrives through next; only a
-  // genuinely different event category starts fresh (§5).
+  // Lazy-initialized ONCE (pure, no render-time side effects).
+  //
+  // CREATE mode: the RESUME condition is keyed on eventCategoryId, NOT
+  // templateSlug — a draft in progress for this SAME event category is
+  // always continued (content, features, everything) no matter which
+  // template URL the customer arrives through next; only a genuinely
+  // different event category starts fresh. A genuinely fresh invitation
+  // gets schema-driven textarea defaults seeded in (Part 1) — never applied
+  // on resume.
+  //
+  // EDIT mode: `initialData` (the real DB Invite.data, parsed server-side)
+  // is the ONLY source — localStorage is never read, so a stale anonymous
+  // draft elsewhere in this browser can never leak into or overwrite an
+  // existing invitation being edited.
   const [draftToken] = useState<string>(() => {
+    if (isEdit) return "";
     const existing = loadAnonymousDraft();
     return existing && existing.data.eventCategoryId === eventCategoryId ? existing.token : createDraftToken();
   });
   const [data, setData] = useState<EditorData>(() => {
+    if (isEdit && initialData) return initialData;
     const existing = loadAnonymousDraft();
     if (existing && existing.data.eventCategoryId === eventCategoryId) {
       // Resume in-progress draft — adopt whichever template the customer
@@ -193,33 +248,57 @@ export function SimpleConstructor({
     fresh.sections = fresh.sections.map((s) =>
       Object.values(FEATURE_SECTION_ID).includes(s.id) ? { ...s, enabled: false } : s
     );
+    // Part 1: seed schema-driven default text for empty long-text fields on
+    // a genuinely NEW invitation only. Schema-driven (not hardcoded here)
+    // so a future event category simply supplies its own defaults in
+    // lib/event-schema.ts with zero component changes.
+    for (const f of schema.fields) {
+      if (f.type === "textarea" && !(fresh as unknown as Record<string, unknown>)[f.key]) {
+        const def = lang === "ru" ? f.defaultValueRu : f.defaultValueKk;
+        if (def) (fresh as unknown as Record<string, string>)[f.key] = def;
+      }
+    }
     return fresh;
   });
   const [selectedTemplateSlug, setSelectedTemplateSlug] = useState(template.slug);
   const [showPreviewMobile, setShowPreviewMobile] = useState(false);
-  const [validationError, setValidationError] = useState(false);
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveErrorMsg, setSaveErrorMsg] = useState<string | null>(null);
 
   const currentTemplate = templates.find((tm) => tm.slug === selectedTemplateSlug) ?? template;
 
-  // Debounced localStorage save — same mechanism the advanced editor's
-  // anonymous-draft path already uses, so /invitations/publish's existing
-  // ClaimDraftClient claims this identically without any changes there.
-  // templateSlug is read from `data` (not the fixed `template` prop) so a
-  // template switch is correctly reflected in the saved draft (§6).
+  // Uploads target the invite's own permanent namespace in EDIT mode
+  // (matching how the advanced editor already uploads for an existing
+  // invite) — the anonymous temp/<draftToken>/ + claim-time move mechanism
+  // only applies to CREATE mode, since edit mode never runs a claim.
+  const uploadTarget: UploadTarget = isEdit && inviteId ? { mode: "invite", inviteId } : { mode: "draft", draftToken };
+
+  // Debounced localStorage save — CREATE mode only. EDIT mode never touches
+  // localStorage: DB Invite.data stays authoritative until an explicit Save.
   useEffect(() => {
+    if (isEdit) return;
     const timer = setTimeout(() => {
       saveAnonymousDraft({ token: draftToken, templateSlug: data.templateSlug || template.slug, lang, data, updatedAt: Date.now() });
     }, 400);
     return () => clearTimeout(timer);
-  }, [data, template.slug, lang, draftToken]);
+  }, [data, template.slug, lang, draftToken, isEdit]);
 
-  const set = <K extends keyof EditorData>(key: K, value: EditorData[K]) =>
+  const set = <K extends keyof EditorData>(key: K, value: EditorData[K]) => {
+    // Once a save succeeds, the "saved" confirmation clears itself the
+    // moment the customer edits anything else (so it doesn't linger next to
+    // stale content forever) — done inline in the event handler, not a
+    // useEffect, so there's nothing to "synchronize" after the fact.
+    setSaveState((s) => (s === "saved" ? "idle" : s));
     setData((prev) => ({ ...prev, [key]: value }));
+  };
 
   const switchTemplate = (slug: string) => {
     setSelectedTemplateSlug(slug);
     // Content, selectedFeatures, feature configuration, qrEnabled — every
-    // other field — is untouched (§2/§3/§4). Only presentation changes.
+    // other field — is untouched. Only presentation changes. Works
+    // identically in CREATE and EDIT mode: no new Invite/draft, no id
+    // change, ever.
     set("templateSlug", slug);
   };
 
@@ -237,49 +316,112 @@ export function SimpleConstructor({
       // Keep the corresponding Section's enabled flag in sync with
       // selection — this is the SAME `has(id)` mechanism InvitePreview.tsx
       // (and the public page) already gate on, so Live Preview updates
-      // for free with zero changes to that shared renderer (§7/§17).
+      // for free with zero changes to that shared renderer.
       const sectionId = FEATURE_SECTION_ID[key];
       const sections = sectionId
         ? prev.sections.map((s) => (s.id === sectionId ? { ...s, enabled: nowSelected } : s))
         : prev.sections;
-      // §20: deselecting NEVER clears prev configuration (galleryUrls,
-      // musicUrl, mapLink, ...) — only selectedFeatures/sections change,
-      // so re-selecting brings everything straight back.
+      // Deselecting NEVER clears prev configuration (galleryUrls, musicUrl,
+      // mapLink, ...) — only selectedFeatures/sections change, so
+      // re-selecting brings everything straight back.
       return { ...prev, selectedFeatures, sections };
     });
   };
 
-  // What Live Preview should actually show reflects CURRENT selection,
-  // not just whatever was ever configured — deselecting MUSIC hides it in
+  // What Live Preview should actually show reflects CURRENT selection, not
+  // just whatever was ever configured — deselecting MUSIC hides it in
   // preview immediately even though the underlying musicUrl/musicEnabled
-  // are preserved in `data` for a possible re-add (§17/§20). Sections
-  // already stay in sync via toggleFeature above, so only `musicEnabled`
-  // (not a section) needs this derived override.
+  // are preserved in `data` for a possible re-add. Sections already stay in
+  // sync via toggleFeature above, so only `musicEnabled` (not a section)
+  // needs this derived override.
   const previewData = useMemo<EditorData>(
     () => ({ ...data, musicEnabled: data.musicEnabled && data.selectedFeatures.includes("music") }),
     [data]
   );
 
-  const missingRequired = schema.fields.filter((f) => f.required && !String(data[f.key as keyof EditorData] ?? "").trim());
+  // Validation (Part 4) is driven entirely by the active EventFormSchema —
+  // no per-category special-casing here. Recomputed every render (cheap)
+  // so a field's error clears the instant it becomes valid.
+  const requiredFields = schema.fields.filter((f) => f.required);
+  const invalidFields = requiredFields.filter((f) => !String(data[f.key as keyof EditorData] ?? "").trim());
+  const invalidKeys = new Set(invalidFields.map((f) => f.key));
+  const imageField = schema.fields.find((f) => f.type === "image");
+
+  const runValidation = (): boolean => {
+    setAttemptedSubmit(true);
+    if (invalidFields.length > 0) {
+      scrollToInvalidField(invalidFields[0].key);
+      return false;
+    }
+    return true;
+  };
 
   const handleContinue = () => {
-    if (missingRequired.length > 0) {
-      setValidationError(true);
-      return;
-    }
-    setValidationError(false);
+    if (!runValidation()) return;
     // Force-flush the draft before navigating (the debounce above may not
     // have fired yet for the very last keystroke).
     saveAnonymousDraft({ token: draftToken, templateSlug: data.templateSlug || template.slug, lang, data, updatedAt: Date.now() });
     router.push(`/invitations/publish?lang=${lang}`);
   };
 
+  const handleSave = async () => {
+    if (!runValidation() || !inviteId) return;
+    setSaveState("saving");
+    setSaveErrorMsg(null);
+    try {
+      const res = await fetch(`/api/invites/${inviteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editorDataToSaveBody(data)),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setSaveState("error");
+        setSaveErrorMsg(json.error === "GALLERY_LIMIT_EXCEEDED" ? t.galleryLimitReached : t.saveError);
+        return;
+      }
+      setSaveState("saved");
+    } catch {
+      setSaveState("error");
+      setSaveErrorMsg(t.saveError);
+    }
+  };
+
+  const ctaLabel = isEdit
+    ? saveState === "saving" ? t.saving : t.saveChanges
+    : `${priceBreakdown.total.toLocaleString("kk-KZ")} ₸ — ${t.continue}`;
+  const statusMessage = isEdit
+    ? saveState === "saved" ? t.saveSuccess : saveState === "error" ? (saveErrorMsg ?? t.saveError) : null
+    : null;
+
   // mapLink is part of the base EventFormSchema (so it's still validated/
   // labeled centrally) but rendered inside the MAP feature card instead of
   // the generic base-info list — showing a "map link" field the customer
-  // hasn't paid for would be misleading (§13).
+  // hasn't paid for would be misleading.
   const baseFields = schema.fields.filter((f) => f.type !== "image" && f.key !== "mapLink").sort((a, b) => a.order - b.order);
   const mapLinkField = schema.fields.find((f) => f.key === "mapLink");
+
+  const mobilePreviewToggle = (
+    <>
+      <button
+        type="button"
+        onClick={() => setShowPreviewMobile((v) => !v)}
+        className="lg:hidden self-center text-xs underline underline-offset-2"
+        style={{ color: "var(--muted)" }}
+      >
+        {showPreviewMobile ? t.hidePreview : `👁 ${t.preview}`}
+      </button>
+      {showPreviewMobile && (
+        <div className="lg:hidden flex justify-center">
+          <div className="phone-frame w-[240px]">
+            <div className="phone-screen" style={{ height: 480 }}>
+              <InvitePreview data={previewData} template={currentTemplate} />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div className="min-h-screen" style={{ background: "var(--ivory)" }}>
@@ -293,8 +435,9 @@ export function SimpleConstructor({
           </div>
 
           {/* Template switcher — compact horizontal thumbnail row, works
-              at 360px via horizontal scroll (§21). Switching NEVER
-              navigates/reloads — pure client state (§3). */}
+              at 360px via horizontal scroll. Switching NEVER
+              navigates/reloads/creates a new invite or draft — pure client
+              state, identical in CREATE and EDIT mode. */}
           {templates.length > 1 && (
             <Section title={t.templateTitle}>
               <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-1 px-1">
@@ -335,38 +478,41 @@ export function SimpleConstructor({
             </Section>
           )}
 
-          {/* Mobile: collapsible preview toggle right under the title */}
-          <button
-            type="button"
-            onClick={() => setShowPreviewMobile((v) => !v)}
-            className="lg:hidden btn-outline text-sm justify-center"
-          >
-            {showPreviewMobile ? t.hidePreview : `👁 ${t.preview}`}
-          </button>
-          {showPreviewMobile && (
-            <div className="lg:hidden flex justify-center">
-              <div className="phone-frame w-[240px]">
-                <div className="phone-screen" style={{ height: 480 }}>
-                  <InvitePreview data={previewData} template={currentTemplate} />
-                </div>
-              </div>
-            </div>
-          )}
-
           <Section title={t.basicInfo}>
             {baseFields.map((f) => (
-              <DynamicField key={f.key} field={f} lang={lang} value={String(data[f.key as keyof EditorData] ?? "")} onChange={(v) => set(f.key as keyof EditorData, v as never)} />
+              <DynamicField
+                key={f.key}
+                field={f}
+                lang={lang}
+                value={String(data[f.key as keyof EditorData] ?? "")}
+                onChange={(v) => set(f.key as keyof EditorData, v as never)}
+                error={attemptedSubmit && invalidKeys.has(f.key) ? t.fieldRequiredError : undefined}
+                hint={f.type === "textarea" ? t.editableHint : undefined}
+              />
             ))}
           </Section>
 
-          {schema.fields.some((f) => f.type === "image") && (
+          {imageField && (
             <Section title={t.mainPhoto}>
-              <ImageUploadField
-                target={{ mode: "draft", draftToken }}
-                lang={lang}
-                value={data.bgImageUrl}
-                onChange={(url) => setData((prev) => ({ ...prev, bgImageUrl: url, bgType: url ? "image" : "color" }))}
-              />
+              <div data-field-key={imageField.key}>
+                <div
+                  style={
+                    attemptedSubmit && invalidKeys.has(imageField.key)
+                      ? { outline: "2px solid #dc2626", outlineOffset: 2, borderRadius: 12 }
+                      : undefined
+                  }
+                >
+                  <ImageUploadField
+                    target={uploadTarget}
+                    lang={lang}
+                    value={data.bgImageUrl}
+                    onChange={(url) => setData((prev) => ({ ...prev, bgImageUrl: url, bgType: url ? "image" : "color" }))}
+                  />
+                </div>
+                {attemptedSubmit && invalidKeys.has(imageField.key) && (
+                  <p className="mt-1 text-xs text-red-500">{t.fieldRequiredImageError}</p>
+                )}
+              </div>
             </Section>
           )}
 
@@ -390,7 +536,7 @@ export function SimpleConstructor({
                         set={set}
                         lang={lang}
                         t={t}
-                        draftToken={draftToken}
+                        uploadTarget={uploadTarget}
                         recommendedTracks={recommendedTracks}
                         preview={preview}
                         mapLinkField={mapLinkField}
@@ -401,7 +547,7 @@ export function SimpleConstructor({
               })}
             </div>
 
-            {/* Free QR toggle — never affects price (§16/§19) */}
+            {/* Free QR toggle — never affects price */}
             {featurePricing.qr.enabled && (
               <div className="flex items-start justify-between gap-3 p-4 rounded-2xl mt-1" style={{ border: "1px solid var(--border)", background: "white" }}>
                 <div className="min-w-0">
@@ -427,11 +573,15 @@ export function SimpleConstructor({
             )}
           </Section>
 
-          {validationError && (
+          {attemptedSubmit && invalidFields.length > 0 && (
             <p className="rounded-xl bg-red-50 border border-red-100 px-4 py-2.5 text-sm text-red-600">
               {t.validationError}
             </p>
           )}
+
+          {/* Mobile preview — a small secondary link near checkout, not a
+              prominent control competing with the form itself. */}
+          {mobilePreviewToggle}
         </div>
 
         {/* RIGHT: sticky live preview (desktop) + price summary */}
@@ -443,12 +593,12 @@ export function SimpleConstructor({
               </div>
             </div>
           </div>
-          <PriceSummary t={t} lang={lang} breakdown={priceBreakdown} onContinue={handleContinue} />
+          <PriceSummary t={t} lang={lang} breakdown={priceBreakdown} ctaLabel={ctaLabel} onAction={isEdit ? handleSave : handleContinue} ctaDisabled={isEdit && saveState === "saving"} statusMessage={statusMessage} statusTone={saveState === "error" ? "error" : "success"} />
         </div>
 
-        {/* Mobile: price summary + continue, always visible below the form */}
+        {/* Mobile: price summary + continue/save, always visible below the form */}
         <div className="lg:hidden">
-          <PriceSummary t={t} lang={lang} breakdown={priceBreakdown} onContinue={handleContinue} sticky />
+          <PriceSummary t={t} lang={lang} breakdown={priceBreakdown} ctaLabel={ctaLabel} onAction={isEdit ? handleSave : handleContinue} ctaDisabled={isEdit && saveState === "saving"} statusMessage={statusMessage} statusTone={saveState === "error" ? "error" : "success"} sticky />
         </div>
       </div>
     </div>
@@ -465,27 +615,33 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function DynamicField({
-  field, lang, value, onChange,
+  field, lang, value, onChange, error, hint,
 }: {
   field: EventFormField;
   lang: Lang;
   value: string;
   onChange: (v: string) => void;
+  error?: string;
+  hint?: string;
 }) {
   const label = fieldLabel(field, lang) + (field.required ? " *" : "");
   const placeholder = fieldPlaceholder(field, lang);
+  const borderStyle = error ? { borderColor: "#dc2626" } : undefined;
 
   if (field.type === "textarea") {
     return (
-      <div>
-        <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>{label}</label>
+      <div data-field-key={field.key}>
+        <label className="block text-xs font-medium mb-1" style={{ color: "var(--muted)" }}>{label}</label>
+        {hint && <p className="text-[10px] mb-1.5" style={{ color: "var(--muted)", opacity: 0.75 }}>{hint}</p>}
         <textarea
           className="input-premium resize-none"
           rows={3}
           value={value}
           placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
+          style={borderStyle}
         />
+        {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
       </div>
     );
   }
@@ -493,7 +649,7 @@ function DynamicField({
   const inputType = field.type === "date" ? "date" : field.type === "time" ? "time" : field.type === "url" ? "url" : field.type === "number" ? "number" : "text";
 
   return (
-    <div>
+    <div data-field-key={field.key}>
       <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--muted)" }}>{label}</label>
       <input
         type={inputType}
@@ -501,7 +657,9 @@ function DynamicField({
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
+        style={borderStyle}
       />
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
     </div>
   );
 }
@@ -556,23 +714,22 @@ function FeatureCard({
 }
 
 /**
- * Inline per-feature configuration (§8-§15) — this is the whole point of
- * gap #2: preparing the invitation must be possible BEFORE payment, not
- * deferred to the dashboard/advanced editor. Every field here writes into
- * the SAME Invite.data keys the advanced editor already uses
- * (musicUrl/galleryUrls/mapLink/...), so nothing new needed to be added to
- * the PATCH/claim schemas, and the exact same public-page rendering picks
- * these values up unchanged once entitled.
+ * Inline per-feature configuration — preparing the invitation must be
+ * possible BEFORE payment, not deferred to the dashboard/advanced editor.
+ * Every field here writes into the SAME Invite.data keys the advanced
+ * editor already uses (musicUrl/galleryUrls/mapLink/...), so nothing new
+ * needed to be added to the PATCH/claim schemas, and the exact same
+ * public-page rendering picks these values up unchanged once entitled.
  */
 function FeatureConfig({
-  featureKey, data, set, lang, t, draftToken, recommendedTracks, preview, mapLinkField,
+  featureKey, data, set, lang, t, uploadTarget, recommendedTracks, preview, mapLinkField,
 }: {
   featureKey: FeatureKey;
   data: EditorData;
   set: <K extends keyof EditorData>(key: K, value: EditorData[K]) => void;
   lang: Lang;
   t: ConstructorCopy;
-  draftToken: string;
+  uploadTarget: UploadTarget;
   recommendedTracks: PlayableTrack[];
   preview: ReturnType<typeof useSingleAudioPreview>;
   mapLinkField: EventFormField | undefined;
@@ -632,7 +789,7 @@ function FeatureConfig({
         <div>
           <p className="text-xs font-medium mb-2" style={{ color: "var(--muted)" }}>{t.uploadOwnMusic}</p>
           <MusicUploader
-            target={{ mode: "draft", draftToken }}
+            target={uploadTarget}
             lang={lang}
             musicUrl={data.musicUrl}
             onUploaded={(url, fileLabel) => {
@@ -650,7 +807,7 @@ function FeatureConfig({
   if (featureKey === "gallery") {
     return (
       <GalleryUploader
-        target={{ mode: "draft", draftToken }}
+        target={uploadTarget}
         lang={lang}
         urls={data.galleryUrls}
         onChange={(urls) => set("galleryUrls", urls)}
@@ -700,13 +857,17 @@ function FeatureConfig({
 }
 
 function PriceSummary({
-  t, lang, breakdown, onContinue, sticky,
+  t, lang, breakdown, ctaLabel, onAction, ctaDisabled, sticky, statusMessage, statusTone,
 }: {
   t: ConstructorCopy;
   lang: Lang;
   breakdown: ReturnType<typeof calculateInvitePrice>;
-  onContinue: () => void;
+  ctaLabel: string;
+  onAction: () => void;
+  ctaDisabled?: boolean;
   sticky?: boolean;
+  statusMessage?: string | null;
+  statusTone?: "success" | "error";
 }) {
   return (
     <div
@@ -729,8 +890,11 @@ function PriceSummary({
         <span>{t.total}</span>
         <span>{breakdown.total.toLocaleString("kk-KZ")} ₸</span>
       </div>
-      <button type="button" onClick={onContinue} className="btn-gold w-full justify-center mt-1">
-        {breakdown.total.toLocaleString("kk-KZ")} ₸ — {t.continue}
+      {statusMessage && (
+        <p className="text-xs text-center" style={{ color: statusTone === "error" ? "#f87171" : "#4ade80" }}>{statusMessage}</p>
+      )}
+      <button type="button" onClick={onAction} disabled={ctaDisabled} className="btn-gold w-full justify-center mt-1" style={ctaDisabled ? { opacity: 0.6, cursor: "default" } : undefined}>
+        {ctaLabel}
       </button>
     </div>
   );

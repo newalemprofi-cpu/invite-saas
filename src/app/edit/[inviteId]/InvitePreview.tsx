@@ -160,16 +160,20 @@ export function InvitePreview({ data, template }: Props) {
             <div key="program" className="mx-4 my-2 p-3 rounded-xl shrink-0"
               style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}>
               <p className="text-[10px] font-semibold mb-2" style={{ color: textMuted }}>Бағдарлама</p>
-              {(data.programItems.length > 0 ? data.programItems : [
-                { time: "18:00", label: "Қонақтарды қарсы алу" },
-                { time: "19:00", label: "Той басталады" },
-                { time: "21:00", label: "Би кеші" },
-              ]).map((p) => (
-                <div key={p.time} className="flex gap-2 text-[9px] mb-1" style={{ color: textMuted }}>
-                  <span className="shrink-0 font-mono" style={{ color: accent }}>{p.time}</span>
-                  <span>{p.label}</span>
-                </div>
-              ))}
+              {data.programItems.length === 0 && data.programText ? (
+                <p className="text-[9px] leading-relaxed" style={{ color: textMuted }}>{data.programText}</p>
+              ) : (
+                (data.programItems.length > 0 ? data.programItems : [
+                  { time: "18:00", label: "Қонақтарды қарсы алу" },
+                  { time: "19:00", label: "Той басталады" },
+                  { time: "21:00", label: "Би кеші" },
+                ]).map((p) => (
+                  <div key={p.time} className="flex gap-2 text-[9px] mb-1" style={{ color: textMuted }}>
+                    <span className="shrink-0 font-mono" style={{ color: accent }}>{p.time}</span>
+                    <span>{p.label}</span>
+                  </div>
+                ))
+              )}
             </div>
           );
 
@@ -229,6 +233,9 @@ export function InvitePreview({ data, template }: Props) {
 
           return null;
         })}
+        {data.note && (
+          <p className="mx-4 mb-2 text-[9px] leading-relaxed shrink-0" style={{ color: textMuted }}>{data.note}</p>
+        )}
       </div>
 
       {/* Background audio — floating, not part of the scrolling section

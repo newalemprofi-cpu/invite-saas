@@ -37,8 +37,11 @@ const patchSchema = z.object({
   bgBlur: z.number().min(0).max(20).optional(),
   bgOpacity: z.number().min(0).max(1).optional(),
   bgOverlay: z.string().max(30).optional(),
-  // Media
-  galleryUrls: z.array(z.string()).optional(),
+  // Media — hard cap of 10 photos (see GalleryUploader's own client-side
+  // limit in edit/[inviteId]/uploads.tsx, kept in sync). Enforced here too
+  // so a manipulated/direct PATCH can't exceed it — never truncated, a
+  // request over the limit is rejected outright.
+  galleryUrls: z.array(z.string()).max(10, "GALLERY_LIMIT_EXCEEDED").optional(),
   musicUrl: z.string().max(500).optional().or(z.literal("")),
   musicTitle: z.string().max(100).optional(),
   musicEnabled: z.boolean().optional(),

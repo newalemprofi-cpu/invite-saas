@@ -115,9 +115,23 @@ export function ImageUploadField({ target, lang, value, onChange }: ImageUploadF
   );
 }
 
+const GALLERY_MAX = 10;
+
 const GALLERY_LABELS = {
-  kk: { upload: "🖼️ Суреттерді жүктеу", hint: "Бірнеше суретті бірден таңдай аласыз", reorderHint: "Ретін өзгерту үшін сүйреңіз", max: (n: number) => `${n}/8 сурет` },
-  ru: { upload: "🖼️ Загрузить изображения", hint: "Можно выбрать сразу несколько файлов", reorderHint: "Перетащите, чтобы изменить порядок", max: (n: number) => `${n}/8 фото` },
+  kk: {
+    upload: "🖼️ Суреттерді жүктеу",
+    hint: "Бірнеше суретті бірден таңдай аласыз",
+    reorderHint: "Ретін өзгерту үшін сүйреңіз",
+    max: (n: number) => `${n}/${GALLERY_MAX} сурет`,
+    limitReached: "Ең көбі 10 фото жүктеуге болады",
+  },
+  ru: {
+    upload: "🖼️ Загрузить изображения",
+    hint: "Можно выбрать сразу несколько файлов",
+    reorderHint: "Перетащите, чтобы изменить порядок",
+    max: (n: number) => `${n}/${GALLERY_MAX} фото`,
+    limitReached: "Можно загрузить не более 10 фотографий",
+  },
 } as const;
 
 interface GalleryUploaderProps {
@@ -134,7 +148,7 @@ export function GalleryUploader({ target, lang, urls, onChange }: GalleryUploade
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const L = GALLERY_LABELS[lang];
   const err = error ? ERROR_MESSAGES[lang][error] : null;
-  const remaining = 8 - urls.length;
+  const remaining = GALLERY_MAX - urls.length;
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0 || remaining <= 0) return;
@@ -200,7 +214,7 @@ export function GalleryUploader({ target, lang, urls, onChange }: GalleryUploade
         </div>
       )}
 
-      {remaining > 0 && (
+      {remaining > 0 ? (
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
@@ -211,6 +225,8 @@ export function GalleryUploader({ target, lang, urls, onChange }: GalleryUploade
           <span>{uploading ? "…" : L.upload}</span>
           <span className="text-[10px] font-normal" style={{ color: "var(--muted)" }}>{L.hint}</span>
         </button>
+      ) : (
+        <p className="text-xs text-center py-2" style={{ color: "var(--muted)" }}>{L.limitReached}</p>
       )}
 
       <div className="flex items-center justify-between">

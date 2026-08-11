@@ -134,7 +134,7 @@ function InviteCard({
 
       <div className="flex gap-2 pt-1">
         <Link
-          href={`/edit/${invite.id}?lang=${lang}`}
+          href={`/invitations/${invite.id}/edit?lang=${lang}`}
           className="flex-1 text-center py-2 rounded-xl text-sm font-medium transition-all"
           style={{
             background: "var(--cream)",

@@ -34,6 +34,16 @@ export interface EventFormField {
   placeholderKk?: string;
   placeholderRu?: string;
   order: number;
+  /**
+   * Seed value for a genuinely NEW invitation (never applied when resuming
+   * a draft, refreshing, claiming, or editing an existing invite — see
+   * SimpleConstructor's `fresh` branch, the only place these are read).
+   * Schema-driven so the constructor itself never hardcodes per-category
+   * copy — see the task's own "no Wedding-only behavior in the component"
+   * requirement.
+   */
+  defaultValueKk?: string;
+  defaultValueRu?: string;
 }
 
 export interface EventFormSchema {
@@ -54,8 +64,16 @@ const WEDDING_FORM_SCHEMA: EventFormSchema = {
     { key: "address", type: "text", required: true, order: 7, labelKk: "Мекенжай", labelRu: "Адрес", placeholderKk: "Алматы, әл-Фараби даңғылы 77", placeholderRu: "Алматы, пр. аль-Фараби 77" },
     { key: "bgImageUrl", type: "image", required: true, order: 8, labelKk: "Негізгі фото", labelRu: "Главное фото" },
     { key: "mapLink", type: "url", required: false, order: 9, labelKk: "Карта сілтемесі", labelRu: "Ссылка на карту", placeholderKk: "https://2gis.kz/...", placeholderRu: "https://2gis.kz/..." },
-    { key: "invitationText", type: "textarea", required: false, order: 10, labelKk: "Шақыру мәтіні", labelRu: "Текст приглашения" },
-    { key: "programText", type: "textarea", required: false, order: 11, labelKk: "Бағдарлама", labelRu: "Программа" },
+    {
+      key: "invitationText", type: "textarea", required: false, order: 10, labelKk: "Шақыру мәтіні", labelRu: "Текст приглашения",
+      defaultValueKk: "Құрметті ағайын-туыс, бауырлар, құда-жекжат, дос-жарандар!\nСіздерді қуанышымызға ортақ болып,\nүйлену тойымыздың қадірлі қонағы болуға шақырамыз.",
+      defaultValueRu: "Дорогие родные, друзья и близкие!\nПриглашаем вас разделить с нами радость и стать почётными гостями нашей свадьбы.",
+    },
+    {
+      key: "programText", type: "textarea", required: false, order: 11, labelKk: "Бағдарлама", labelRu: "Программа",
+      defaultValueKk: "18:00 — Қонақтарды қарсы алу\n19:00 — Той басталады\n21:00 — Би кеші",
+      defaultValueRu: "18:00 — Встреча гостей\n19:00 — Начало торжества\n21:00 — Танцевальный вечер",
+    },
     { key: "note", type: "textarea", required: false, order: 12, labelKk: "Қосымша ескерту", labelRu: "Дополнительное примечание" },
   ],
 };
@@ -74,7 +92,11 @@ const SUNDET_FORM_SCHEMA: EventFormSchema = {
     { key: "age", type: "text", required: false, order: 8, labelKk: "Жасы", labelRu: "Возраст", placeholderKk: "5 жас", placeholderRu: "5 лет" },
     { key: "hosts", type: "text", required: false, order: 9, labelKk: "Той иелері", labelRu: "Организаторы торжества" },
     { key: "mapLink", type: "url", required: false, order: 10, labelKk: "Карта сілтемесі", labelRu: "Ссылка на карту" },
-    { key: "invitationText", type: "textarea", required: false, order: 11, labelKk: "Шақыру мәтіні", labelRu: "Текст приглашения" },
+    {
+      key: "invitationText", type: "textarea", required: false, order: 11, labelKk: "Шақыру мәтіні", labelRu: "Текст приглашения",
+      defaultValueKk: "Құрметті ағайын-туыс, дос-жарандар!\nБаламыздың сүндет тойына қадірлі қонақ болуға шақырамыз.",
+      defaultValueRu: "Дорогие родные и друзья!\nПриглашаем вас стать почётными гостями на сүндет той нашего сына.",
+    },
   ],
 };
 
