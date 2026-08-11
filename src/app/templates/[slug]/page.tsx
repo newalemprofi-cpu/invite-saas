@@ -6,7 +6,16 @@ import { getTemplate, localizeTemplate } from "@/lib/templates";
 import { getAdminConfig } from "@/lib/admin-config";
 import { resolveLang } from "@/lib/i18n";
 import { getSiteContent } from "@/lib/site-content";
+import { getWeddingLayout } from "@/lib/wedding-template-layouts";
+import { WeddingHero } from "@/components/wedding/WeddingHero";
 import { TemplateCreateButton } from "./TemplateCreateButton";
+
+/** Mirrors lib/storage.ts's getPublicUrl() — kept local since storage.ts pulls in the AWS SDK. */
+function mediaSrc(key: string): string {
+  if (!key) return "";
+  if (/^https?:\/\//i.test(key) || key.startsWith("/")) return key;
+  return `/api/media/${key.split("/").map(encodeURIComponent).join("/")}`;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -130,6 +139,10 @@ export default async function TemplateDetailPage({ params, searchParams }: Props
       ? t.heroInviteBirthday
       : t.heroInviteGeneric;
 
+  // One of the 5 flagship Wedding templates — every other template keeps
+  // the existing generic phone mockup below, completely unchanged.
+  const weddingLayout = getWeddingLayout(tmpl.slug);
+
   const colorVars = {
     "--color-primary": content.primaryColor,
     "--color-primary-foreground": content.primaryColorForeground,
@@ -166,47 +179,68 @@ export default async function TemplateDetailPage({ params, searchParams }: Props
           <div className="flex justify-center lg:sticky lg:top-24">
             <div className="phone-frame w-[260px]">
               <div className="phone-screen" style={{ height: 520 }}>
-                <div className={`h-full bg-gradient-to-br ${tmpl.gradient} flex flex-col`}>
-                  <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
-                    <div>
-                      <p className="label-caps mb-2" style={{ color: tmpl.textMuted }}>
-                        {heroLine}
-                      </p>
-                      <p className="font-serif text-2xl font-semibold leading-tight" style={{ color: tmpl.textDark }}>
-                        {tmpl.demoName1}
-                        {tmpl.demoName2 ? ` & ${tmpl.demoName2}` : ""}
-                      </p>
+                {weddingLayout ? (
+                  <WeddingHero
+                    compact
+                    layout={weddingLayout}
+                    tokens={{ accent: tmpl.accent, textDark: tmpl.textDark, textMuted: tmpl.textMuted, isDark: tmpl.dark, bg: tmpl.bg }}
+                    data={{
+                      name: tmpl.demoName1,
+                      partner: tmpl.demoName2 || null,
+                      hostsLine: null,
+                      date: "2026-06-15",
+                      time: "18:00",
+                      location: "Алматы",
+                      address: null,
+                      message: null,
+                      note: null,
+                      age: null,
+                      photoUrl: tmpl.demoImage ? mediaSrc(tmpl.demoImage) : tmpl.previewImage ? mediaSrc(tmpl.previewImage) : null,
+                    }}
+                  />
+                ) : (
+                  <div className={`h-full bg-gradient-to-br ${tmpl.gradient} flex flex-col`}>
+                    <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
+                      <div>
+                        <p className="label-caps mb-2" style={{ color: tmpl.textMuted }}>
+                          {heroLine}
+                        </p>
+                        <p className="font-serif text-2xl font-semibold leading-tight" style={{ color: tmpl.textDark }}>
+                          {tmpl.demoName1}
+                          {tmpl.demoName2 ? ` & ${tmpl.demoName2}` : ""}
+                        </p>
+                      </div>
+                      <div
+                        className="w-full h-px opacity-30"
+                        style={{ background: `linear-gradient(90deg, transparent, ${tmpl.accent}, transparent)` }}
+                      />
+                      <div style={{ color: tmpl.textMuted }}>
+                        <p className="font-serif text-lg">15 маусым 2026</p>
+                        <p className="text-sm mt-0.5">18:00 · Алматы</p>
+                      </div>
+                      <button
+                        className="mt-1 px-5 py-2 rounded-full text-sm font-semibold text-white"
+                        style={{ background: tmpl.accent }}
+                      >
+                        {t.rsvp}
+                      </button>
                     </div>
                     <div
-                      className="w-full h-px opacity-30"
-                      style={{ background: `linear-gradient(90deg, transparent, ${tmpl.accent}, transparent)` }}
-                    />
-                    <div style={{ color: tmpl.textMuted }}>
-                      <p className="font-serif text-lg">15 маусым 2026</p>
-                      <p className="text-sm mt-0.5">18:00 · Алматы</p>
-                    </div>
-                    <button
-                      className="mt-1 px-5 py-2 rounded-full text-sm font-semibold text-white"
-                      style={{ background: tmpl.accent }}
+                      className="px-4 py-3 flex justify-around"
+                      style={{
+                        background: tmpl.dark ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.3)",
+                        borderTop: `1px solid ${tmpl.dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)"}`,
+                      }}
                     >
-                      {t.rsvp}
-                    </button>
+                      {[{ n: "32", l: t.days }, { n: "14", l: t.hours }, { n: "27", l: t.mins }].map((tk) => (
+                        <div key={tk.l} className="text-center">
+                          <p className="font-serif text-xl font-bold" style={{ color: tmpl.textDark }}>{tk.n}</p>
+                          <p className="text-xs" style={{ color: tmpl.textMuted }}>{tk.l}</p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div
-                    className="px-4 py-3 flex justify-around"
-                    style={{
-                      background: tmpl.dark ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.3)",
-                      borderTop: `1px solid ${tmpl.dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)"}`,
-                    }}
-                  >
-                    {[{ n: "32", l: t.days }, { n: "14", l: t.hours }, { n: "27", l: t.mins }].map((tk) => (
-                      <div key={tk.l} className="text-center">
-                        <p className="font-serif text-xl font-bold" style={{ color: tmpl.textDark }}>{tk.n}</p>
-                        <p className="text-xs" style={{ color: tmpl.textMuted }}>{tk.l}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </div>

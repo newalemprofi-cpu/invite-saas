@@ -3,6 +3,8 @@
 import type { Template } from "@/lib/templates";
 import type { EditorData } from "./EditorClient";
 import { useSingleAudioPreview } from "./useSingleAudioPreview";
+import { getWeddingLayout } from "@/lib/wedding-template-layouts";
+import { WeddingHero } from "@/components/wedding/WeddingHero";
 
 interface Props {
   data: EditorData;
@@ -24,6 +26,14 @@ export function InvitePreview({ data, template }: Props) {
   const textMuted = template?.textMuted || "#78716C";
   const isDark = template?.dark || false;
 
+  // One of the 5 flagship Wedding templates (see lib/wedding-template-
+  // layouts.ts) — null for every other template, which keeps rendering
+  // exactly as before this feature. When set, the customer's main photo is
+  // rendered ENTIRELY inside the hero composition below (WeddingHero), not
+  // as a whole-page background — see the contentBg/bgType override just
+  // below for why the generic image-background layers are skipped here.
+  const weddingLayout = getWeddingLayout(template?.slug);
+
   // Ordered sections (enabled only)
   const orderedEnabled = data.sections.filter((s) => s.enabled).map((s) => s.id);
   const has = (id: string) => orderedEnabled.includes(id);
@@ -39,7 +49,13 @@ export function InvitePreview({ data, template }: Props) {
   // the content layer is transparent so the absolute media shows through.
   // For color/gradient: outer has no bg, content layer carries the actual background.
   let contentBg: React.CSSProperties = {};
-  if (bgType === "color") {
+  if (weddingLayout) {
+    // The photo lives inside WeddingHero's own composition (full-bleed /
+    // top-band / framed / fade / arched) — the page behind it stays a flat
+    // template color, matching every one of the 5 designs' own spec
+    // ("ivory content area", "cream page", "dark background", …).
+    contentBg = { background: fallbackBg };
+  } else if (bgType === "color") {
     contentBg = { background: data.bgColor || fallbackBg };
   } else if (bgType === "gradient") {
     contentBg = { background: data.bgGradient || fallbackBg };
@@ -52,10 +68,10 @@ export function InvitePreview({ data, template }: Props) {
   return (
     <div
       className="relative h-full overflow-hidden flex flex-col"
-      style={bgType === "image" || bgType === "video" ? { background: fallbackBg } : {}}
+      style={!weddingLayout && (bgType === "image" || bgType === "video") ? { background: fallbackBg } : {}}
     >
       {/* Background layers */}
-      {bgType === "image" && data.bgImageUrl && (
+      {!weddingLayout && bgType === "image" && data.bgImageUrl && (
         <div
           className="absolute inset-0"
           style={{
@@ -68,7 +84,7 @@ export function InvitePreview({ data, template }: Props) {
           }}
         />
       )}
-      {bgType === "video" && data.bgVideoUrl && (
+      {!weddingLayout && bgType === "video" && data.bgVideoUrl && (
         <video
           className="absolute inset-0 w-full h-full object-cover"
           src={data.bgVideoUrl}
@@ -77,14 +93,42 @@ export function InvitePreview({ data, template }: Props) {
         />
       )}
       {/* Overlay */}
-      {(bgType === "image" || bgType === "video") && data.bgOverlay && data.bgOverlay !== "rgba(0,0,0,0)" && (
+      {!weddingLayout && (bgType === "image" || bgType === "video") && data.bgOverlay && data.bgOverlay !== "rgba(0,0,0,0)" && (
         <div className="absolute inset-0" style={{ background: data.bgOverlay }} />
       )}
 
       {/* Content scroll */}
       <div className="relative z-10 h-full overflow-y-auto flex flex-col" style={contentBg}>
         {orderedEnabled.map((id) => {
-          const card = { background: isDark ? "rgba(0,0,0,0.25)" : "rgba(255,255,255,0.55)", borderTop: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)"}` };
+          const card = weddingLayout
+            ? { background: weddingLayout.sectionCardBg, borderTop: `1px solid ${weddingLayout.sectionCardBorder}` }
+            : { background: isDark ? "rgba(0,0,0,0.25)" : "rgba(255,255,255,0.55)", borderTop: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)"}` };
+
+          if (id === "hero" && weddingLayout) return (
+            <div key="hero" className="shrink-0" style={{ minHeight: 300 }}>
+              <WeddingHero
+                compact
+                layout={weddingLayout}
+                tokens={{ accent, textDark, textMuted, isDark, bg: fallbackBg }}
+                data={{
+                  name: data.groomName,
+                  partner: data.brideName || null,
+                  hostsLine: data.hosts || data.parents || null,
+                  date: data.date || null,
+                  time: data.time || null,
+                  location: data.location || null,
+                  address: data.address || null,
+                  message: data.invitationText || null,
+                  // note is rendered once, unconditionally, below the
+                  // section list already (see the trailing data.note block)
+                  // — kept out of WeddingHero here to avoid showing it twice.
+                  note: null,
+                  age: data.age || null,
+                  photoUrl: data.bgImageUrl || null,
+                }}
+              />
+            </div>
+          );
 
           if (id === "hero") return (
             <div key="hero" className="relative flex flex-col items-center justify-center gap-3 p-5 text-center min-h-[180px]">

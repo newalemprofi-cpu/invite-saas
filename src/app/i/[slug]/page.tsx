@@ -12,6 +12,8 @@ import { MusicPlayer } from "./MusicPlayer";
 import { Countdown } from "./Countdown";
 import { getYoutubeEmbedUrl } from "@/lib/youtube";
 import { readFeatureState } from "@/lib/entitlements";
+import { getWeddingLayout } from "@/lib/wedding-template-layouts";
+import { WeddingHero } from "@/components/wedding/WeddingHero";
 
 interface Section { id: string; enabled: boolean }
 
@@ -212,6 +214,9 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
     ? (getTemplate(newSlug) ?? (await getDbTemplate(newSlug)) ?? null)
     : null;
   const legacy = THEMES.find((t) => t.id === d.theme) ?? THEMES[0];
+  // One of the 5 flagship Wedding templates — null for every other
+  // template/legacy invite, which keeps rendering exactly as before.
+  const weddingLayout = getWeddingLayout(newSlug);
 
   const accent = d.accentColor || tmpl?.accent || legacy.accent;
   const textDark = tmpl?.textDark || legacy.textColor;
@@ -283,121 +288,151 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
       )}
 
       {/* ── Hero ── */}
-      <section className="relative min-h-screen flex flex-col items-center justify-center px-6 py-20 overflow-hidden">
-        {/* Background layers */}
-        {bgType === "image" && d.bgImageUrl ? (
-          <>
-            <div
-              className="absolute inset-0"
-              style={{
-                backgroundImage: `url(${d.bgImageUrl})`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-                filter: d.bgBlur ? `blur(${d.bgBlur}px)` : undefined,
-                opacity: d.bgOpacity ?? 1,
-                transform: "scale(1.05)",
+      <section className={`relative min-h-screen overflow-hidden ${weddingLayout ? "flex flex-col" : "flex flex-col items-center justify-center px-6 py-20"}`}>
+        {weddingLayout ? (
+          // The 5 flagship Wedding templates: the photo lives ENTIRELY
+          // inside WeddingHero's own composition (full-bleed / top-band /
+          // framed / fade / arched) — no separate whole-section background
+          // image layer, no ambient glow circles, no Zaure ornaments (that
+          // slug never has a weddingLayout entry, so it's mutually
+          // exclusive with this branch already).
+          <div className="flex-1 flex flex-col">
+            <WeddingHero
+              layout={weddingLayout}
+              tokens={{ accent, textDark, textMuted, isDark, bg: heroBg }}
+              data={{
+                name,
+                partner,
+                hostsLine,
+                date: d.date ?? null,
+                time: d.time ?? null,
+                location: location ?? null,
+                address: d.address ?? null,
+                message: has("invitation_text") ? message ?? null : null,
+                note: d.note ?? null,
+                age: d.age ?? null,
+                photoUrl: d.bgImageUrl ?? null,
               }}
             />
-            {d.bgOverlay && d.bgOverlay !== "rgba(0,0,0,0)" && (
-              <div className="absolute inset-0" style={{ background: d.bgOverlay }} />
-            )}
-          </>
-        ) : bgType === "video" && d.bgVideoUrl ? (
-          <>
-            <video
-              className="absolute inset-0 w-full h-full object-cover"
-              src={d.bgVideoUrl}
-              autoPlay muted loop playsInline
-              style={{ opacity: d.bgOpacity ?? 1 }}
-            />
-            {d.bgOverlay && d.bgOverlay !== "rgba(0,0,0,0)" && (
-              <div className="absolute inset-0" style={{ background: d.bgOverlay }} />
-            )}
-          </>
-        ) : (
-          <div className={`absolute inset-0 bg-gradient-to-br ${gradient}`} style={{ background: heroBg }} />
-        )}
-
-        {/* Ambient glow */}
-        <div className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full pointer-events-none" style={{ background: `radial-gradient(circle,${accent}20,transparent 70%)` }} />
-        <div className="absolute -bottom-32 -left-32 w-80 h-80 rounded-full pointer-events-none" style={{ background: `radial-gradient(circle,${accent}15,transparent 70%)` }} />
-
-        {/* Zaure Premium floral corner ornaments */}
-        {isZaurePremium && (
-          <>
-            <div className="absolute top-0 left-0 w-32 h-32 pointer-events-none z-[5]"><ZaureFloralCorner /></div>
-            <div className="absolute top-0 right-0 w-32 h-32 pointer-events-none z-[5]"><ZaureFloralCorner mirror /></div>
-            <div className="absolute bottom-0 left-0 w-24 h-24 pointer-events-none z-[5]"><ZaureFloralCorner vflip /></div>
-            <div className="absolute bottom-0 right-0 w-24 h-24 pointer-events-none z-[5]"><ZaureFloralCorner mirror vflip /></div>
-          </>
-        )}
-
-        <div className="relative z-10 w-full max-w-md mx-auto text-center flex flex-col items-center gap-6">
-          {has("hero") && (
-            <>
-              <p className="label-caps" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.35)" }}>
-                Сізді шақырамыз
-              </p>
-              <h1 className="heading-display text-4xl sm:text-5xl break-words" style={{ color: textDark }}>
-                {displayName}
-              </h1>
-              {d.age && (
-                <p className="text-sm" style={{ color: textMuted }}>{d.age}</p>
-              )}
-            </>
-          )}
-
-          {hostsLine && (
-            <p className="text-sm" style={{ color: textMuted }}>{hostsLine}</p>
-          )}
-
-          <div className="flex items-center gap-4 w-full px-4">
-            <div className="flex-1 h-px opacity-25" style={{ background: accent }} />
-            <span className="opacity-40" style={{ color: accent, fontSize: isZaurePremium ? "0.7rem" : "0.875rem", letterSpacing: isZaurePremium ? "0.35em" : undefined }}>
-              {isZaurePremium ? "◆ ◆ ◆" : "◆"}
-            </span>
-            <div className="flex-1 h-px opacity-25" style={{ background: accent }} />
           </div>
+        ) : (
+          <>
+            {/* Background layers */}
+            {bgType === "image" && d.bgImageUrl ? (
+              <>
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    backgroundImage: `url(${d.bgImageUrl})`,
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                    filter: d.bgBlur ? `blur(${d.bgBlur}px)` : undefined,
+                    opacity: d.bgOpacity ?? 1,
+                    transform: "scale(1.05)",
+                  }}
+                />
+                {d.bgOverlay && d.bgOverlay !== "rgba(0,0,0,0)" && (
+                  <div className="absolute inset-0" style={{ background: d.bgOverlay }} />
+                )}
+              </>
+            ) : bgType === "video" && d.bgVideoUrl ? (
+              <>
+                <video
+                  className="absolute inset-0 w-full h-full object-cover"
+                  src={d.bgVideoUrl}
+                  autoPlay muted loop playsInline
+                  style={{ opacity: d.bgOpacity ?? 1 }}
+                />
+                {d.bgOverlay && d.bgOverlay !== "rgba(0,0,0,0)" && (
+                  <div className="absolute inset-0" style={{ background: d.bgOverlay }} />
+                )}
+              </>
+            ) : (
+              <div className={`absolute inset-0 bg-gradient-to-br ${gradient}`} style={{ background: heroBg }} />
+            )}
 
-          {/* Not gated on has("date") — "date" was never a real toggleable
-              section id (see DEFAULT_SECTIONS in invite-editor-data.ts), so
-              that guard could never be true and this line never rendered.
-              The constructor's own live preview (InvitePreview.tsx) already
-              shows date/time unconditionally whenever the hero has data;
-              this matches that and actually reflects saved changes. */}
-          {d.date && (
-            <div className="flex flex-col items-center gap-1.5">
-              <p className="font-serif text-xl sm:text-2xl font-semibold" style={{ color: textDark }}>{fmt(d.date)}</p>
-              {d.time && <p className="text-sm" style={{ color: textMuted }}>Сағат {d.time}</p>}
-            </div>
-          )}
+            {/* Ambient glow */}
+            <div className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full pointer-events-none" style={{ background: `radial-gradient(circle,${accent}20,transparent 70%)` }} />
+            <div className="absolute -bottom-32 -left-32 w-80 h-80 rounded-full pointer-events-none" style={{ background: `radial-gradient(circle,${accent}15,transparent 70%)` }} />
 
-          {location && (
-            <div className="flex flex-col items-center gap-1.5">
-              <p className="font-semibold text-base" style={{ color: textDark }}>{location}</p>
-              {d.address && <p className="text-sm" style={{ color: textMuted }}>{d.address}</p>}
-              {/* MAP is a paid add-on (§15/§18): the address TEXT above is
-                  always shown (base event info), only the "open in map app"
-                  link requires entitlement. */}
-              {mapUrl && isEntitledTo("map") && (
-                <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="text-sm underline underline-offset-2 hover:opacity-80" style={{ color: accent }}>
-                  Картада ашу ↗
-                </a>
+            {/* Zaure Premium floral corner ornaments */}
+            {isZaurePremium && (
+              <>
+                <div className="absolute top-0 left-0 w-32 h-32 pointer-events-none z-[5]"><ZaureFloralCorner /></div>
+                <div className="absolute top-0 right-0 w-32 h-32 pointer-events-none z-[5]"><ZaureFloralCorner mirror /></div>
+                <div className="absolute bottom-0 left-0 w-24 h-24 pointer-events-none z-[5]"><ZaureFloralCorner vflip /></div>
+                <div className="absolute bottom-0 right-0 w-24 h-24 pointer-events-none z-[5]"><ZaureFloralCorner mirror vflip /></div>
+              </>
+            )}
+
+            <div className="relative z-10 w-full max-w-md mx-auto text-center flex flex-col items-center gap-6">
+              {has("hero") && (
+                <>
+                  <p className="label-caps" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.35)" }}>
+                    Сізді шақырамыз
+                  </p>
+                  <h1 className="heading-display text-4xl sm:text-5xl break-words" style={{ color: textDark }}>
+                    {displayName}
+                  </h1>
+                  {d.age && (
+                    <p className="text-sm" style={{ color: textMuted }}>{d.age}</p>
+                  )}
+                </>
+              )}
+
+              {hostsLine && (
+                <p className="text-sm" style={{ color: textMuted }}>{hostsLine}</p>
+              )}
+
+              <div className="flex items-center gap-4 w-full px-4">
+                <div className="flex-1 h-px opacity-25" style={{ background: accent }} />
+                <span className="opacity-40" style={{ color: accent, fontSize: isZaurePremium ? "0.7rem" : "0.875rem", letterSpacing: isZaurePremium ? "0.35em" : undefined }}>
+                  {isZaurePremium ? "◆ ◆ ◆" : "◆"}
+                </span>
+                <div className="flex-1 h-px opacity-25" style={{ background: accent }} />
+              </div>
+
+              {/* Not gated on has("date") — "date" was never a real toggleable
+                  section id (see DEFAULT_SECTIONS in invite-editor-data.ts), so
+                  that guard could never be true and this line never rendered.
+                  The constructor's own live preview (InvitePreview.tsx) already
+                  shows date/time unconditionally whenever the hero has data;
+                  this matches that and actually reflects saved changes. */}
+              {d.date && (
+                <div className="flex flex-col items-center gap-1.5">
+                  <p className="font-serif text-xl sm:text-2xl font-semibold" style={{ color: textDark }}>{fmt(d.date)}</p>
+                  {d.time && <p className="text-sm" style={{ color: textMuted }}>Сағат {d.time}</p>}
+                </div>
+              )}
+
+              {location && (
+                <div className="flex flex-col items-center gap-1.5">
+                  <p className="font-semibold text-base" style={{ color: textDark }}>{location}</p>
+                  {d.address && <p className="text-sm" style={{ color: textMuted }}>{d.address}</p>}
+                  {/* MAP is a paid add-on (§15/§18): the address TEXT above is
+                      always shown (base event info), only the "open in map app"
+                      link requires entitlement. */}
+                  {mapUrl && isEntitledTo("map") && (
+                    <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="text-sm underline underline-offset-2 hover:opacity-80" style={{ color: accent }}>
+                      Картада ашу ↗
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {has("invitation_text") && message && (
+                <div className="w-full rounded-2xl px-6 py-4 text-sm leading-relaxed italic text-center"
+                  style={{ background: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.04)", color: textMuted }}>
+                  &ldquo;{message}&rdquo;
+                </div>
+              )}
+
+              {d.note && (
+                <p className="text-xs leading-relaxed" style={{ color: textMuted }}>{d.note}</p>
               )}
             </div>
-          )}
-
-          {has("invitation_text") && message && (
-            <div className="w-full rounded-2xl px-6 py-4 text-sm leading-relaxed italic text-center"
-              style={{ background: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.04)", color: textMuted }}>
-              &ldquo;{message}&rdquo;
-            </div>
-          )}
-
-          {d.note && (
-            <p className="text-xs leading-relaxed" style={{ color: textMuted }}>{d.note}</p>
-          )}
-        </div>
+          </>
+        )}
 
         {has("rsvp") && isEntitledTo("rsvp") && (
           <div className="absolute bottom-7 inset-x-0 flex flex-col items-center gap-2 pointer-events-none">

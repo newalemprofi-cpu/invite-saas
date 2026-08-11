@@ -1,11 +1,77 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
-import { TEMPLATE_FILTERS, localizeTemplate } from "@/lib/templates";
+import { TEMPLATE_FILTERS, localizeTemplate, type Template } from "@/lib/templates";
 import { getDbTemplates } from "@/lib/db-templates";
 import { getAdminConfig } from "@/lib/admin-config";
 import { resolveLang } from "@/lib/i18n";
 import { getSiteContent } from "@/lib/site-content";
+import { getWeddingLayout } from "@/lib/wedding-template-layouts";
+
+/**
+ * Compact (h-48) composition cue for the grid card's fallback — NOT the
+ * full WeddingHero (that composition needs far more vertical room than a
+ * landscape card affords), but a small, faithful visual hint of the same
+ * photoMode so the 5 flagship templates are still recognizable at a glance
+ * per "Template card = compact representation" without ever falling back
+ * to a plain gradient-only placeholder.
+ */
+function WeddingCardCue({ tmpl, name }: { tmpl: Template; name: string }) {
+  const layout = getWeddingLayout(tmpl.slug)!;
+  const textColor = tmpl.textDark;
+
+  if (layout.photoMode === "top-band") {
+    return (
+      <div className="h-48 flex flex-col" style={{ background: tmpl.dark ? "#1C1917" : "#FFFDF8" }}>
+        <div className={`h-[42%] bg-gradient-to-br ${tmpl.gradient} relative shrink-0`}>
+          <div className="absolute inset-x-0 bottom-0 h-0.5" style={{ background: tmpl.accent, opacity: 0.6 }} />
+        </div>
+        <div className="flex-1 flex items-center justify-center px-3">
+          <p className="font-serif text-sm font-semibold text-center leading-tight" style={{ color: textColor }}>{name}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (layout.photoMode === "framed-oval") {
+    return (
+      <div className="h-48 flex flex-col items-center justify-center gap-2" style={{ background: "linear-gradient(180deg,#F7FAF3,#F0F5EA)" }}>
+        <div className={`w-16 h-16 rounded-full bg-gradient-to-br ${tmpl.gradient}`} style={{ boxShadow: `0 0 0 2px #F7FAF3, 0 0 0 3px ${tmpl.accent}55` }} />
+        <p className="font-serif text-sm font-semibold text-center leading-tight px-3" style={{ color: textColor }}>{name}</p>
+      </div>
+    );
+  }
+
+  if (layout.photoMode === "fade-dark") {
+    return (
+      <div className="h-48 flex flex-col overflow-hidden" style={{ background: "linear-gradient(180deg,#211D19,#151210)" }}>
+        <div className={`h-[55%] bg-gradient-to-br ${tmpl.gradient} shrink-0`} style={{ maskImage: "linear-gradient(180deg,black 0%,transparent 100%)", WebkitMaskImage: "linear-gradient(180deg,black 0%,transparent 100%)" }} />
+        <div className="flex-1 flex items-center justify-center px-3 -mt-4">
+          <p className="font-serif text-sm font-semibold text-center leading-tight" style={{ color: tmpl.accent }}>{name}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (layout.photoMode === "arched-frame") {
+    return (
+      <div className="h-48 flex flex-col items-center justify-center gap-2" style={{ background: "linear-gradient(180deg,#FBF4E7,#F5EAD4)" }}>
+        <div className={`w-14 h-16 bg-gradient-to-br ${tmpl.gradient}`} style={{ borderRadius: "50% 50% 4px 4px", boxShadow: `0 0 0 1px ${tmpl.accent}66` }} />
+        <p className="font-serif text-sm font-semibold text-center leading-tight px-3" style={{ color: textColor }}>{name}</p>
+      </div>
+    );
+  }
+
+  // full-bleed (Romantic): text anchored at the bottom over the gradient,
+  // matching the real composition's own "photo dominant, text over it" cue.
+  return (
+    <div className={`h-48 bg-gradient-to-br ${tmpl.gradient} flex flex-col justify-end p-4`}>
+      <div className="rounded-lg px-2 py-1.5" style={{ background: "rgba(255,255,255,0.55)" }}>
+        <p className="font-serif text-sm font-semibold text-center leading-tight" style={{ color: textColor }}>{name}</p>
+      </div>
+    </div>
+  );
+}
 
 export const dynamic = "force-dynamic";
 
@@ -136,6 +202,8 @@ export default async function TemplatesPage({
                 {tmpl.previewImage ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={tmpl.previewImage} alt={localized.name} className="h-48 w-full object-cover" loading="lazy" />
+                ) : getWeddingLayout(tmpl.slug) ? (
+                  <WeddingCardCue tmpl={tmpl} name={`${tmpl.demoName1}${tmpl.demoName2 ? ` & ${tmpl.demoName2}` : ""}`} />
                 ) : (
                   <div
                     className={`h-48 bg-gradient-to-br ${tmpl.gradient} flex flex-col items-center justify-center gap-3 p-5`}

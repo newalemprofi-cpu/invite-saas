@@ -35,9 +35,19 @@ function rowToTemplate(t: InviteTemplate, price: number): Template {
   };
 }
 
+// Guards the backfill below to run at most once per server process — the
+// SAME per-process-flag pattern backfillTranslations() already uses just
+// below. Deliberately NOT "only when the table is completely empty"
+// anymore: that would mean a template added to the TEMPLATES array after a
+// database was first seeded (e.g. these 5 new Wedding templates, added to
+// an already-seeded production DB) would never appear. `skipDuplicates`
+// makes re-attempting the full list on every already-seeded row a safe,
+// idempotent no-op — this is a data backfill, not a schema migration.
+let templatesBackfilled = false;
+
 async function seedIfEmpty(): Promise<void> {
-  const count = await db.inviteTemplate.count();
-  if (count > 0) return;
+  if (templatesBackfilled) return;
+  templatesBackfilled = true; // set eagerly: never retry within this process
   await db.inviteTemplate.createMany({
     data: TEMPLATES.map((t) => ({
       title: t.name,
