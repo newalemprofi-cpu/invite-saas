@@ -5,11 +5,13 @@ import { getObjectStream, statFile, isStorageConfigured } from "@/lib/storage";
 export const runtime = "nodejs";
 
 // Only these top-level prefixes are ever created by this app (see
-// /api/uploads, /api/uploads/anonymous, lib/data/invites.ts, and
-// music/recommended/ from /admin/music — src/lib/recommended-tracks.ts).
-// Restricting the proxy to them means it can never be used to fetch some
-// unrelated object that happens to also live in the bucket.
-const ALLOWED_PREFIXES = ["temp/", "invites/", "music/"];
+// /api/uploads, /api/uploads/anonymous, lib/data/invites.ts,
+// music/recommended/ from /admin/music — src/lib/recommended-tracks.ts,
+// site/ from /admin/site — src/app/admin/site/actions.ts, and templates/
+// from /admin/templates — src/app/admin/templates/actions.ts). Restricting
+// the proxy to them means it can never be used to fetch some unrelated
+// object that happens to also live in the bucket.
+const ALLOWED_PREFIXES = ["temp/", "invites/", "music/", "templates/", "site/"];
 
 /**
  * Reconstructs and validates the object key from a catch-all route's path
