@@ -1,19 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Lang } from "@/lib/i18n";
 import type { Template } from "@/lib/templates";
 import type { EventFormSchema, EventFormField } from "@/lib/event-schema";
 import type { FeaturePricingConfig } from "@/lib/feature-pricing";
 import type { PlayableTrack } from "@/lib/recommended-tracks";
-import type { UploadTarget } from "@/lib/useUpload";
+import { useUpload, type UploadTarget } from "@/lib/useUpload";
 import { FEATURE_KEYS, type FeatureKey } from "@/lib/features";
 import { calculateInvitePrice, lineItemTitle } from "@/lib/pricing";
 import { buildFreshEditorData, editorDataToSaveBody, type EditorData } from "@/lib/invite-editor-data";
 import { loadAnonymousDraft, saveAnonymousDraft, createDraftToken } from "@/lib/anonymousDraft";
 import { InvitePreview } from "@/app/edit/[inviteId]/InvitePreview";
-import { ImageUploadField, GalleryUploader, MusicUploader } from "@/app/edit/[inviteId]/uploads";
+import { GalleryUploader, MusicUploader, ERROR_MESSAGES } from "@/app/edit/[inviteId]/uploads";
 import { useSingleAudioPreview } from "@/app/edit/[inviteId]/useSingleAudioPreview";
 
 interface Props {
@@ -193,6 +193,23 @@ function mediaSrc(key: string): string {
   if (!key) return "";
   if (/^https?:\/\//i.test(key) || key.startsWith("/")) return key;
   return `/api/media/${key.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+/**
+ * Deterministic kk-KZ-style thousands grouping (space-separated), used
+ * instead of `n.toLocaleString("kk-KZ")`. The two disagree in some real
+ * environments — this file's server render (Node's own ICU data) and a
+ * browser's Intl implementation can silently format the exact same number
+ * differently, which is a genuine React hydration mismatch: it discards and
+ * regenerates the mismatched subtree client-side, which was observed to
+ * detach the Save/Continue button's click handler in that subtree entirely.
+ * No pricing value or logic changes here — purely deterministic formatting
+ * of the same number `calculateInvitePrice()` already produced.
+ */
+function formatKzt(n: number): string {
+  const rounded = Math.round(n);
+  const sign = rounded < 0 ? "-" : "";
+  return sign + Math.abs(rounded).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
 
 function scrollToInvalidField(key: string) {
@@ -381,6 +398,11 @@ export function SimpleConstructor({
         return;
       }
       setSaveState("saved");
+      // Redirect to the invite list only AFTER the PATCH is confirmed
+      // persisted — same inviteId, no new invite, status untouched (PATCH
+      // never writes status). Dashboard is a force-dynamic server
+      // component, so it re-fetches fresh data on this navigation.
+      router.push(`/dashboard?lang=${lang}`);
     } catch {
       setSaveState("error");
       setSaveErrorMsg(t.saveError);
@@ -389,7 +411,7 @@ export function SimpleConstructor({
 
   const ctaLabel = isEdit
     ? saveState === "saving" ? t.saving : t.saveChanges
-    : `${priceBreakdown.total.toLocaleString("kk-KZ")} ₸ — ${t.continue}`;
+    : `${formatKzt(priceBreakdown.total)} ₸ — ${t.continue}`;
   const statusMessage = isEdit
     ? saveState === "saved" ? t.saveSuccess : saveState === "error" ? (saveErrorMsg ?? t.saveError) : null
     : null;
@@ -495,20 +517,13 @@ export function SimpleConstructor({
           {imageField && (
             <Section title={t.mainPhoto}>
               <div data-field-key={imageField.key}>
-                <div
-                  style={
-                    attemptedSubmit && invalidKeys.has(imageField.key)
-                      ? { outline: "2px solid #dc2626", outlineOffset: 2, borderRadius: 12 }
-                      : undefined
-                  }
-                >
-                  <ImageUploadField
-                    target={uploadTarget}
-                    lang={lang}
-                    value={data.bgImageUrl}
-                    onChange={(url) => setData((prev) => ({ ...prev, bgImageUrl: url, bgType: url ? "image" : "color" }))}
-                  />
-                </div>
+                <MainPhotoUpload
+                  target={uploadTarget}
+                  lang={lang}
+                  value={data.bgImageUrl}
+                  onChange={(url) => setData((prev) => ({ ...prev, bgImageUrl: url, bgType: url ? "image" : "color" }))}
+                  hasError={attemptedSubmit && invalidKeys.has(imageField.key)}
+                />
                 {attemptedSubmit && invalidKeys.has(imageField.key) && (
                   <p className="mt-1 text-xs text-red-500">{t.fieldRequiredImageError}</p>
                 )}
@@ -664,6 +679,107 @@ function DynamicField({
   );
 }
 
+const MAIN_PHOTO_LABELS = {
+  kk: { upload: "Сурет жүктеу", hint: "JPG, PNG, WEBP · 8 МБ дейін", replace: "Ауыстыру", remove: "Өшіру", uploading: "Жүктелуде..." },
+  ru: { upload: "Загрузить изображение", hint: "JPG, PNG, WEBP · до 8 МБ", replace: "Заменить", remove: "Удалить", uploading: "Загрузка..." },
+} as const;
+
+/**
+ * A visually obvious dropzone-style card for the SimpleConstructor main
+ * photo only — deliberately NOT a change to the shared ImageUploadField
+ * (also used by the legacy EditorClient and the admin template CMS, both
+ * out of scope here). Uses the SAME useUpload hook / upload endpoint /
+ * storage flow as ImageUploadField, so nothing about the backend changes —
+ * this is a presentation-only component.
+ */
+function MainPhotoUpload({
+  target, lang, value, onChange, hasError,
+}: {
+  target: UploadTarget;
+  lang: Lang;
+  value: string;
+  onChange: (url: string) => void;
+  hasError?: boolean;
+}) {
+  const { upload, uploading, error, clearError } = useUpload(target);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const L = MAIN_PHOTO_LABELS[lang];
+  const err = error ? ERROR_MESSAGES[lang][error] : null;
+
+  async function handleFiles(files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    const result = await upload(file, "image");
+    if (result) onChange(result.url);
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        className="hidden"
+        onChange={(e) => handleFiles(e.target.files)}
+      />
+      {value ? (
+        <div className="relative rounded-2xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={value} alt="" className="w-full h-48 object-cover" />
+          <div className="absolute inset-x-0 bottom-0 flex gap-2 p-3" style={{ background: "linear-gradient(transparent, rgba(0,0,0,0.6))" }}>
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              disabled={uploading}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white"
+              style={{ background: "rgba(0,0,0,0.5)" }}
+            >
+              {uploading ? L.uploading : L.replace}
+            </button>
+            <button
+              type="button"
+              onClick={() => { onChange(""); clearError(); }}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white"
+              style={{ background: "rgba(220,38,38,0.75)" }}
+            >
+              {L.remove}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          className="w-full flex flex-col items-center justify-center gap-3 py-12 rounded-2xl transition-colors hover:bg-[rgba(196,150,62,0.06)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          style={{
+            background: "var(--cream)",
+            border: `2px dashed ${hasError ? "#dc2626" : "var(--border)"}`,
+            color: "var(--charcoal)",
+            opacity: uploading ? 0.6 : 1,
+            outlineColor: "var(--gold)",
+          }}
+        >
+          <UploadIcon />
+          <span className="text-sm font-semibold">{uploading ? L.uploading : L.upload}</span>
+          <span className="text-xs" style={{ color: "var(--muted)" }}>{L.hint}</span>
+        </button>
+      )}
+      {err && <p className="text-xs text-red-500">{err}</p>}
+    </div>
+  );
+}
+
+function UploadIcon() {
+  return (
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ color: "var(--gold)" }}>
+      <path d="M12 15.5V4M12 4L7.5 8.5M12 4l4.5 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4.5 15.5v2.75A1.75 1.75 0 006.25 20h11.5a1.75 1.75 0 001.75-1.75V15.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function FeatureCard({
   config, lang, selected, onToggle, t, children,
 }: {
@@ -694,7 +810,7 @@ function FeatureCard({
       </div>
       <p className="text-xs leading-relaxed flex-1" style={{ color: "var(--muted)" }}>{desc}</p>
       <div className="flex items-center justify-between mt-1">
-        <span className="text-sm font-semibold" style={{ color: "var(--gold-dark)" }}>+{config.price.toLocaleString("kk-KZ")} ₸</span>
+        <span className="text-sm font-semibold" style={{ color: "var(--gold-dark)" }}>+{formatKzt(config.price)} ₸</span>
         <button
           type="button"
           onClick={onToggle}
@@ -877,18 +993,18 @@ function PriceSummary({
       <p className="label-caps" style={{ color: "var(--gold)" }}>{t.priceSummary}</p>
       <div className="flex items-center justify-between text-sm" style={{ color: "#FAF8F3" }}>
         <span>{t.base}</span>
-        <span>{breakdown.basePrice.toLocaleString("kk-KZ")} ₸</span>
+        <span>{formatKzt(breakdown.basePrice)} ₸</span>
       </div>
       {breakdown.lineItems.map((item) => (
         <div key={item.key} className="flex items-center justify-between text-sm" style={{ color: "#D6D0C4" }}>
           <span>{lineItemTitle(item, lang)}</span>
-          <span>{item.price.toLocaleString("kk-KZ")} ₸</span>
+          <span>{formatKzt(item.price)} ₸</span>
         </div>
       ))}
       <div className="h-px" style={{ background: "rgba(255,255,255,0.15)" }} />
       <div className="flex items-center justify-between font-semibold" style={{ color: "#FAF8F3" }}>
         <span>{t.total}</span>
-        <span>{breakdown.total.toLocaleString("kk-KZ")} ₸</span>
+        <span>{formatKzt(breakdown.total)} ₸</span>
       </div>
       {statusMessage && (
         <p className="text-xs text-center" style={{ color: statusTone === "error" ? "#f87171" : "#4ade80" }}>{statusMessage}</p>

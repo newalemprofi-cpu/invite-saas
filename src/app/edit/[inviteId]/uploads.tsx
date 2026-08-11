@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useUpload, type UploadErrorCode, type UploadTarget } from "@/lib/useUpload";
 import type { Lang } from "@/lib/i18n";
 
-const ERROR_MESSAGES: Record<Lang, Record<UploadErrorCode, string>> = {
+export const ERROR_MESSAGES: Record<Lang, Record<UploadErrorCode, string>> = {
   kk: {
     UNAUTHORIZED: "Жүйеге қайта кіріңіз",
     FORBIDDEN: "Бұл әрекетке рұқсатыңыз жоқ",
