@@ -11,8 +11,8 @@ interface Props {
 }
 
 const LABELS = {
-  kk: { create: "✨ Осы шаблонмен жасау", creating: "Ашылуда..." },
-  ru: { create: "✨ Создать по этому шаблону", creating: "Открывается..." },
+  kk: { create: "Осы шаблонды таңдаймын", creating: "Ашылуда..." },
+  ru: { create: "Выбрать этот шаблон", creating: "Открывается..." },
 } as const;
 
 export function TemplateCreateButton({ templateSlug, lang, eventCategory }: Props) {

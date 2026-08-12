@@ -5,9 +5,8 @@ import { getDbTemplate } from "@/lib/db-templates";
 import { getTemplate, localizeTemplate } from "@/lib/templates";
 import { getAdminConfig } from "@/lib/admin-config";
 import { resolveLang } from "@/lib/i18n";
-import { getSiteContent } from "@/lib/site-content";
-import { getWeddingLayout } from "@/lib/wedding-template-layouts";
-import { WeddingHero } from "@/components/wedding/WeddingHero";
+import { FEATURE_KEYS } from "@/lib/features";
+import { InvitationView, type D } from "@/app/i/[slug]/InvitationView";
 import { TemplateCreateButton } from "./TemplateCreateButton";
 
 /** Mirrors lib/storage.ts's getPublicUrl() — kept local since storage.ts pulls in the AWS SDK. */
@@ -21,7 +20,7 @@ export const dynamic = "force-dynamic";
 
 interface Props {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ lang?: string; error?: string; eventCategory?: string }>;
+  searchParams: Promise<{ lang?: string; eventCategory?: string }>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -29,7 +28,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const tmpl = (await getDbTemplate(slug)) ?? getTemplate(slug);
   if (!tmpl) return {};
   return {
-    title: `${tmpl.nameKk} — Шаблон — Шақыру`,
+    title: `${tmpl.nameKk} — Толық көру — Шақыру`,
     description: tmpl.descKk,
   };
 }
@@ -55,297 +54,147 @@ const CATEGORY_LABEL = {
 
 const T = {
   kk: {
-    back: "← Шаблондар",
-    heroInviteWedding: "Үйлену тойға шақырамыз",
-    heroInviteBirthday: "Туылған күнге шақырамыз",
-    heroInviteGeneric: "Іс-шараға шақырамыз",
-    rsvp: "Қатысуымды растау ✓",
-    premium: "Premium",
-    whatsIncluded: "Не кіреді?",
-    features: [
-      "Кері санақ таймері",
-      "Қатысуды растау формасы",
-      "Карта сілтемесі",
-      "WhatsApp байланысы",
-      "Жеке шақыру хаты",
-      "90 күн белсенді сілтеме",
-    ],
-    startingPrice: "Бастаушы баға",
+    back: "← Шаблондарға",
+    ctaKicker: "Осы дизайн ұнады ма?",
+    choosePrimary: "Осы шаблонды таңдаймын",
     waCta: "WhatsApp арқылы тапсырыс беру",
     freeReg: "Тіркелу тегін · Жариялаған кезде ғана төлем",
-    noTemplates: "Бұл санатта шаблондар жоқ",
-    footer: "Қазақстандық премиум цифрлы шақыру сервисі",
-    errorBanner: "Шақыруды жасау кезінде қате шықты. Қайталап көріңіз.",
-    days: "күн",
-    hours: "сағ",
-    mins: "мин",
   },
   ru: {
-    back: "← Шаблоны",
-    heroInviteWedding: "Приглашаем на свадьбу",
-    heroInviteBirthday: "Приглашаем на день рождения",
-    heroInviteGeneric: "Приглашаем на мероприятие",
-    rsvp: "Подтвердить участие ✓",
-    premium: "Premium",
-    whatsIncluded: "Что входит?",
-    features: [
-      "Таймер обратного отсчёта",
-      "Форма подтверждения участия",
-      "Ссылка на карту",
-      "Связь через WhatsApp",
-      "Персональный текст приглашения",
-      "90 дней активная ссылка",
-    ],
-    startingPrice: "Стартовая цена",
+    back: "← К шаблонам",
+    ctaKicker: "Понравился этот дизайн?",
+    choosePrimary: "Выбрать этот шаблон",
     waCta: "Заказать через WhatsApp",
     freeReg: "Регистрация бесплатна · Оплата только при публикации",
-    noTemplates: "В этой категории пока нет шаблонов",
-    footer: "Премиальный сервис цифровых приглашений в Казахстане",
-    errorBanner: "Не удалось создать приглашение. Попробуйте ещё раз.",
-    days: "дн",
-    hours: "ч",
-    mins: "мин",
   },
 } as const;
 
-export default async function TemplateDetailPage({ params, searchParams }: Props) {
+// Demo invitation copy — template/demo content only, never real customer
+// data, matching the exact style already used for the constructor's own
+// schema-driven defaults (lib/event-schema.ts).
+const DEMO_TEXT = {
+  kk: {
+    invitationText: "Құрметті ағайын-туыс, бауырлар, құда-жекжат, дос-жарандар!\nСіздерді қуанышымызға ортақ болып,\nтойымыздың қадірлі қонағы болуға шақырамыз.",
+    programText: "18:00 — Қонақтарды қарсы алу\n19:00 — Той басталады\n21:00 — Би кеші",
+    location: "Grand Hall",
+    address: "Алматы, әл-Фараби даңғылы 77",
+  },
+  ru: {
+    invitationText: "Дорогие родные, друзья и близкие!\nПриглашаем вас разделить с нами радость и стать почётными гостями нашего торжества.",
+    programText: "18:00 — Встреча гостей\n19:00 — Начало торжества\n21:00 — Танцевальный вечер",
+    location: "Grand Hall",
+    address: "Алматы, пр. аль-Фараби 77",
+  },
+} as const;
+
+/**
+ * The full invitation demo — "Толық көру" from a template card lands here.
+ * Renders the EXACT SAME InvitationView the real published invitation uses
+ * (/i/[slug]), fed with synthetic content built only from the template's
+ * own existing demo fields (demoName1/demoName2/demoImage/previewImage) —
+ * never real customer data, and no Invite row is ever created or touched
+ * just by viewing this page.
+ */
+export default async function TemplateDemoPage({ params, searchParams }: Props) {
   const { slug } = await params;
-  const { lang: langParam, error, eventCategory } = await searchParams;
+  const { lang: langParam, eventCategory } = await searchParams;
   const lang = resolveLang(langParam);
   const t = T[lang];
 
-  const [tmpl, config, content] = await Promise.all([
-    getDbTemplate(slug).then((t) => t ?? getTemplate(slug) ?? null),
+  const [tmpl, config] = await Promise.all([
+    getDbTemplate(slug).then((row) => row ?? getTemplate(slug) ?? null),
     getAdminConfig(),
-    getSiteContent(),
   ]);
-
   if (!tmpl) notFound();
 
   const localized = localizeTemplate(tmpl, lang);
+  const categoryLabel = CATEGORY_LABEL[lang][tmpl.category as keyof (typeof CATEGORY_LABEL)["kk"]] ?? tmpl.category;
   const langLabel = lang === "ru" ? "Русский" : "Қазақша";
-  const categoryLabel =
-    CATEGORY_LABEL[lang][tmpl.category as keyof (typeof CATEGORY_LABEL)["kk"]] ?? tmpl.category;
-  const waText = encodeURIComponent(
-    `Сәлем! Онлайн шақыру жасатқым келеді. Тіл: ${langLabel}. Мереке: ${categoryLabel}. Шаблон: ${localized.name}.`
-  );
+  const waMessage =
+    lang === "ru"
+      ? `Здравствуйте! Хочу заказать онлайн-приглашение.\nЯзык: ${langLabel}.\nМероприятие: ${categoryLabel}.\nШаблон: ${localized.name}.`
+      : `Сәлем! Онлайн шақыру жасатқым келеді.\nТіл: ${langLabel}.\nМереке: ${categoryLabel}.\nШаблон: ${localized.name}.`;
   const waPhone = config.orderWhatsapp.replace(/\D/g, "");
-  const waHref = `https://wa.me/${waPhone}?text=${waText}`;
+  const waHref = `https://wa.me/${waPhone}?text=${encodeURIComponent(waMessage)}`;
 
-  const heroLine =
-    tmpl.category === "wedding"
-      ? t.heroInviteWedding
-      : tmpl.category === "birthday"
-      ? t.heroInviteBirthday
-      : t.heroInviteGeneric;
+  const backHref = `/templates?lang=${lang}&cat=${encodeURIComponent(tmpl.category)}${eventCategory ? `&eventCategory=${encodeURIComponent(eventCategory)}` : ""}`;
 
-  // One of the 5 flagship Wedding templates — every other template keeps
-  // the existing generic phone mockup below, completely unchanged.
-  const weddingLayout = getWeddingLayout(tmpl.slug);
+  // Demo data — built only from the template's own existing config, never
+  // hardcoded per-slug customer-looking content.
+  const demoPhoto = tmpl.demoImage ? mediaSrc(tmpl.demoImage) : tmpl.previewImage ? mediaSrc(tmpl.previewImage) : null;
+  const galleryUrls = Array.from(new Set([tmpl.demoImage, tmpl.previewImage].filter((k): k is string => !!k))).map(mediaSrc);
+  const demo = DEMO_TEXT[lang];
+  // Always ~4 months out (never a fixed calendar date) so the countdown
+  // section always shows a real, non-zero, non-expired value no matter when
+  // the demo is viewed.
+  const demoDate = new Date();
+  demoDate.setMonth(demoDate.getMonth() + 4);
+  const demoDateStr = demoDate.toISOString().slice(0, 10);
 
-  const colorVars = {
-    "--color-primary": content.primaryColor,
-    "--color-primary-foreground": content.primaryColorForeground,
-  } as React.CSSProperties;
+  const d: D = {
+    templateSlug: tmpl.slug,
+    groomName: tmpl.demoName1,
+    brideName: tmpl.demoName2 ?? null,
+    date: demoDateStr,
+    time: "18:00",
+    location: demo.location,
+    address: demo.address,
+    invitationText: demo.invitationText,
+    programText: demo.programText,
+    bgImageUrl: demoPhoto,
+    bgType: demoPhoto ? "image" : "color",
+    galleryUrls,
+    sections: [
+      { id: "hero", enabled: true },
+      { id: "countdown", enabled: true },
+      { id: "invitation_text", enabled: true },
+      { id: "gallery", enabled: galleryUrls.length > 0 },
+      { id: "program", enabled: true },
+      { id: "rsvp", enabled: true },
+      { id: "wishes", enabled: true },
+    ],
+  };
 
   return (
-    <div
-      className="min-h-screen"
-      style={{ background: "var(--ivory)", fontFamily: "var(--font-montserrat)", ...colorVars }}
-    >
-      {/* Nav */}
-      <header
-        className="sticky top-0 z-40 backdrop-blur"
-        style={{ background: "rgba(250,248,243,0.9)", borderBottom: "1px solid var(--border)" }}
+    <div style={{ background: "var(--ivory)" }}>
+      {/* Subtle floating back-nav — a small overlay pill, never a full-width
+          bar competing with the invitation's own hero design. Readable over
+          both light and dark templates. */}
+      <Link
+        href={backHref}
+        className="fixed top-4 left-4 z-[60] inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium backdrop-blur transition-opacity hover:opacity-80"
+        style={{ background: "rgba(28,25,23,0.55)", color: "#FAF8F3" }}
       >
-        <nav className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link
-            href={`/templates?lang=${lang}`}
-            className="flex items-center gap-2 text-sm font-medium"
-            style={{ color: "var(--muted)" }}
-          >
-            {t.back}
-          </Link>
-          <Link href="/" className="font-serif text-xl font-semibold" style={{ color: "var(--charcoal)" }}>
-            Шақыру
-          </Link>
-          <div className="w-24" />
-        </nav>
-      </header>
+        {t.back}
+      </Link>
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-12">
-        <div className="grid lg:grid-cols-2 gap-12 items-start">
-          {/* Phone preview */}
-          <div className="flex justify-center lg:sticky lg:top-24">
-            <div className="phone-frame w-[260px]">
-              <div className="phone-screen" style={{ height: 520 }}>
-                {weddingLayout ? (
-                  <WeddingHero
-                    compact
-                    layout={weddingLayout}
-                    tokens={{ accent: tmpl.accent, textDark: tmpl.textDark, textMuted: tmpl.textMuted, isDark: tmpl.dark, bg: tmpl.bg }}
-                    data={{
-                      name: tmpl.demoName1,
-                      partner: tmpl.demoName2 || null,
-                      hostsLine: null,
-                      date: "2026-06-15",
-                      time: "18:00",
-                      location: "Алматы",
-                      address: null,
-                      message: null,
-                      note: null,
-                      age: null,
-                      photoUrl: tmpl.demoImage ? mediaSrc(tmpl.demoImage) : tmpl.previewImage ? mediaSrc(tmpl.previewImage) : null,
-                    }}
-                  />
-                ) : (
-                  <div className={`h-full bg-gradient-to-br ${tmpl.gradient} flex flex-col`}>
-                    <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
-                      <div>
-                        <p className="label-caps mb-2" style={{ color: tmpl.textMuted }}>
-                          {heroLine}
-                        </p>
-                        <p className="font-serif text-2xl font-semibold leading-tight" style={{ color: tmpl.textDark }}>
-                          {tmpl.demoName1}
-                          {tmpl.demoName2 ? ` & ${tmpl.demoName2}` : ""}
-                        </p>
-                      </div>
-                      <div
-                        className="w-full h-px opacity-30"
-                        style={{ background: `linear-gradient(90deg, transparent, ${tmpl.accent}, transparent)` }}
-                      />
-                      <div style={{ color: tmpl.textMuted }}>
-                        <p className="font-serif text-lg">15 маусым 2026</p>
-                        <p className="text-sm mt-0.5">18:00 · Алматы</p>
-                      </div>
-                      <button
-                        className="mt-1 px-5 py-2 rounded-full text-sm font-semibold text-white"
-                        style={{ background: tmpl.accent }}
-                      >
-                        {t.rsvp}
-                      </button>
-                    </div>
-                    <div
-                      className="px-4 py-3 flex justify-around"
-                      style={{
-                        background: tmpl.dark ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.3)",
-                        borderTop: `1px solid ${tmpl.dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)"}`,
-                      }}
-                    >
-                      {[{ n: "32", l: t.days }, { n: "14", l: t.hours }, { n: "27", l: t.mins }].map((tk) => (
-                        <div key={tk.l} className="text-center">
-                          <p className="font-serif text-xl font-bold" style={{ color: tmpl.textDark }}>{tk.n}</p>
-                          <p className="text-xs" style={{ color: tmpl.textMuted }}>{tk.l}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+      {/* The full, real invitation — same renderer as the published site. */}
+      <InvitationView d={d} tmpl={tmpl} entitled={FEATURE_KEYS} wishes={[]} isPreview={false} invite={null} />
 
-          {/* Info + CTA */}
-          <div className="flex flex-col gap-8">
-            <div>
-              <div className="flex items-center gap-3 mb-3">
-                {tmpl.isPremium && (
-                  <span
-                    className="label-caps px-3 py-1 rounded-full"
-                    style={{ background: "rgba(196,150,62,0.12)", color: "var(--gold-dark)", border: "1px solid rgba(196,150,62,0.2)" }}
-                  >
-                    {t.premium}
-                  </span>
-                )}
-                <span
-                  className="label-caps px-3 py-1 rounded-full"
-                  style={{ background: "rgba(28,25,23,0.06)", color: "var(--muted)" }}
-                >
-                  {categoryLabel}
-                </span>
-              </div>
-              <h1 className="heading-display text-4xl sm:text-5xl mb-3" style={{ color: "var(--charcoal)" }}>
-                {localized.name}
-              </h1>
-              <p className="text-base leading-relaxed" style={{ color: "var(--muted)" }}>
-                {localized.description}
-              </p>
-            </div>
-
-            {/* Tags */}
-            {localized.tags.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {localized.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="px-3 py-1 rounded-full text-xs font-medium"
-                    style={{ background: "white", color: "var(--muted)", border: "1px solid var(--border)" }}
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {/* Included features */}
-            <div className="rounded-2xl p-6" style={{ background: "white", border: "1px solid var(--border)" }}>
-              <h3 className="font-semibold mb-4" style={{ color: "var(--charcoal)" }}>{t.whatsIncluded}</h3>
-              <ul className="flex flex-col gap-3">
-                {t.features.map((f) => (
-                  <li key={f} className="flex items-center gap-3 text-sm" style={{ color: "var(--charcoal)" }}>
-                    <span style={{ color: "var(--gold)" }}>✓</span> {f}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {error && (
-              <div
-                className="rounded-xl p-4 text-sm"
-                style={{ background: "rgba(239,68,68,0.08)", color: "#dc2626", border: "1px solid rgba(239,68,68,0.2)" }}
-              >
-                {t.errorBanner}
-              </div>
-            )}
-
-            {/* Price + CTA */}
-            <div
-              className="rounded-2xl p-6 flex flex-col gap-5"
-              style={{ background: "var(--charcoal)" }}
+      {/* SaaS controls around the demo — deliberately styled with the
+          platform's own ivory/gold/charcoal language (not the template's
+          accent colors) so they never read as invitation content. */}
+      <div className="py-14 px-4" style={{ background: "var(--ivory)", borderTop: "4px solid var(--gold)" }}>
+        <div className="max-w-md mx-auto flex flex-col items-center gap-5 text-center">
+          <p className="label-caps" style={{ color: "var(--gold)" }}>{t.ctaKicker}</p>
+          <div className="w-full flex flex-col gap-3">
+            <TemplateCreateButton templateSlug={tmpl.slug} lang={lang} eventCategory={eventCategory} />
+            <a
+              href={waHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2.5 w-full py-3 rounded-xl text-sm font-semibold transition-opacity hover:opacity-90"
+              style={{ background: "#25D366", color: "white" }}
             >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs mb-1" style={{ color: "#6E6560" }}>{t.startingPrice}</p>
-                  <p className="font-serif text-3xl font-bold" style={{ color: "#FAF8F3" }}>
-                    {config.price.toLocaleString("kk-KZ")}{" "}
-                    <span className="text-xl font-normal" style={{ color: "var(--gold)" }}>₸</span>
-                  </p>
-                </div>
-              </div>
-
-              <TemplateCreateButton templateSlug={tmpl.slug} lang={lang} eventCategory={eventCategory} />
-
-              {/* WhatsApp alternative */}
-              <a
-                href={waHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2.5 w-full py-3 rounded-xl text-sm font-semibold transition-opacity hover:opacity-90"
-                style={{ background: "#25D366", color: "white" }}
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-                </svg>
-                {t.waCta}
-              </a>
-
-              <p className="text-xs text-center" style={{ color: "#6E6560" }}>
-                {t.freeReg}
-              </p>
-            </div>
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+              </svg>
+              {t.waCta}
+            </a>
           </div>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>{t.freeReg}</p>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
