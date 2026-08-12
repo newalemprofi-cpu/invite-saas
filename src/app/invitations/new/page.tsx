@@ -7,6 +7,7 @@ import { getEnabledRecommendedTracks } from "@/lib/recommended-tracks";
 import { getEventFormSchema } from "@/lib/event-schema";
 import { getFeaturePricing } from "@/lib/feature-pricing";
 import { getAdminConfig } from "@/lib/admin-config";
+import { getSession } from "@/lib/auth";
 import { EditorClient } from "@/app/edit/[inviteId]/EditorClient";
 import { SimpleConstructor } from "./SimpleConstructor";
 
@@ -54,11 +55,12 @@ export default async function NewInvitationPage({ searchParams }: Props) {
     // Same STYLE BUCKET (tmpl.category, e.g. "wedding") as the initial
     // template — this is exactly the set of templates that are visually
     // compatible/switchable without changing the event schema (§5/§21).
-    const [featurePricing, adminConfig, sameCategoryTemplates, recommendedTracks] = await Promise.all([
+    const [featurePricing, adminConfig, sameCategoryTemplates, recommendedTracks, session] = await Promise.all([
       getFeaturePricing(),
       getAdminConfig(),
       getDbTemplates({ cat: tmpl.category, activeOnly: true }),
       getEnabledRecommendedTracks(),
+      getSession(),
     ]);
     return (
       <SimpleConstructor
@@ -70,6 +72,7 @@ export default async function NewInvitationPage({ searchParams }: Props) {
         featurePricing={featurePricing}
         basePrice={adminConfig.price}
         recommendedTracks={recommendedTracks}
+        isAuthenticated={!!session}
       />
     );
   }

@@ -26,6 +26,10 @@ interface Props {
   /** Required when mode="edit" — the persisted invite's own data, never a
    * template's demo content. */
   initialData?: EditorData;
+  /** Whether the current visitor has a session — only meaningful in
+   * "create" mode (edit mode is always authenticated already, enforced by
+   * its own route). Decides the back-navigation link's label/destination. */
+  isAuthenticated?: boolean;
   template: Template;
   templates: Template[];
   schema: EventFormSchema;
@@ -91,6 +95,10 @@ const T = {
     saveSuccess: "Өзгерістер сақталды",
     saveError: "Сақтау кезінде қате шықты. Қайталап көріңіз.",
     galleryLimitReached: "Ең көбі 10 фото жүктеуге болады",
+    backToDashboard: "← Менің шақыруларым",
+    backToTemplates: "← Шаблондарға қайту",
+    draftSaved: "Сақталды",
+    unsavedChangesConfirm: "Сақталмаған өзгерістер бар. Шығасыз ба?",
   },
   ru: {
     basicInfo: "Основная информация",
@@ -134,6 +142,10 @@ const T = {
     saveSuccess: "Изменения сохранены",
     saveError: "Ошибка при сохранении. Попробуйте снова.",
     galleryLimitReached: "Можно загрузить не более 10 фотографий",
+    backToDashboard: "← Мои приглашения",
+    backToTemplates: "← Вернуться к шаблонам",
+    draftSaved: "Сохранено",
+    unsavedChangesConfirm: "Есть несохранённые изменения. Выйти?",
   },
 } as const;
 
@@ -179,6 +191,10 @@ interface ConstructorCopy {
   saveSuccess: string;
   saveError: string;
   galleryLimitReached: string;
+  backToDashboard: string;
+  backToTemplates: string;
+  draftSaved: string;
+  unsavedChangesConfirm: string;
 }
 
 function fieldLabel(f: EventFormField, lang: Lang) {
@@ -222,7 +238,7 @@ function scrollToInvalidField(key: string) {
 }
 
 export function SimpleConstructor({
-  mode = "create", inviteId, initialData,
+  mode = "create", inviteId, initialData, isAuthenticated = false,
   template, templates, schema, eventCategoryId, lang, featurePricing, basePrice, recommendedTracks,
 }: Props) {
   const router = useRouter();
@@ -282,6 +298,15 @@ export function SimpleConstructor({
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveErrorMsg, setSaveErrorMsg] = useState<string | null>(null);
+  // CREATE mode: flips true once the debounced localStorage autosave below
+  // has actually run for the current `data` — never faked, and reset back
+  // to false the instant something changes again.
+  const [draftSaved, setDraftSaved] = useState(false);
+  // EDIT mode: snapshot of the data as of the last successful PATCH (or the
+  // initial DB load) — compared against current `data` to decide whether
+  // leaving via the back link needs a confirmation. Not state: changing it
+  // must never trigger a re-render on its own.
+  const savedDataRef = useRef<EditorData>(data);
 
   const currentTemplate = templates.find((tm) => tm.slug === selectedTemplateSlug) ?? template;
 
@@ -297,16 +322,22 @@ export function SimpleConstructor({
     if (isEdit) return;
     const timer = setTimeout(() => {
       saveAnonymousDraft({ token: draftToken, templateSlug: data.templateSlug || template.slug, lang, data, updatedAt: Date.now() });
+      setDraftSaved(true);
     }, 400);
     return () => clearTimeout(timer);
   }, [data, template.slug, lang, draftToken, isEdit]);
 
-  const set = <K extends keyof EditorData>(key: K, value: EditorData[K]) => {
-    // Once a save succeeds, the "saved" confirmation clears itself the
-    // moment the customer edits anything else (so it doesn't linger next to
-    // stale content forever) — done inline in the event handler, not a
-    // useEffect, so there's nothing to "synchronize" after the fact.
+  // Once a save succeeds (or a debounced autosave completes), the "saved"
+  // confirmation clears itself the moment the customer edits anything else
+  // — done inline in each event handler that touches `data`, not a
+  // useEffect, so there's nothing to "synchronize" after the fact.
+  const markDirty = () => {
     setSaveState((s) => (s === "saved" ? "idle" : s));
+    setDraftSaved(false);
+  };
+
+  const set = <K extends keyof EditorData>(key: K, value: EditorData[K]) => {
+    markDirty();
     setData((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -325,6 +356,7 @@ export function SimpleConstructor({
   );
 
   const toggleFeature = (key: FeatureKey) => {
+    markDirty();
     setData((prev) => {
       const nowSelected = !prev.selectedFeatures.includes(key);
       const selectedFeatures = nowSelected
@@ -398,6 +430,7 @@ export function SimpleConstructor({
         return;
       }
       setSaveState("saved");
+      savedDataRef.current = data;
       // Redirect to the invite list only AFTER the PATCH is confirmed
       // persisted — same inviteId, no new invite, status untouched (PATCH
       // never writes status). Dashboard is a force-dynamic server
@@ -409,12 +442,39 @@ export function SimpleConstructor({
     }
   };
 
+  // Exit navigation (Part 1) — deliberately does NOT run runValidation():
+  // leaving the constructor is an abandon action, not a submit, so an
+  // incomplete form must never block it.
+  const handleBack = () => {
+    if (isEdit) {
+      const hasUnsavedChanges = JSON.stringify(data) !== JSON.stringify(savedDataRef.current);
+      if (hasUnsavedChanges && !window.confirm(t.unsavedChangesConfirm)) return;
+      router.push(`/dashboard?lang=${lang}`);
+      return;
+    }
+    // CREATE mode: force-flush the draft (same pattern as handleContinue)
+    // so the very last keystroke is never lost to the 400ms debounce.
+    saveAnonymousDraft({ token: draftToken, templateSlug: data.templateSlug || template.slug, lang, data, updatedAt: Date.now() });
+    if (isAuthenticated) {
+      router.push(`/dashboard?lang=${lang}`);
+    } else {
+      router.push(`/templates?lang=${lang}&cat=${encodeURIComponent(template.category)}`);
+    }
+  };
+
   const ctaLabel = isEdit
     ? saveState === "saving" ? t.saving : t.saveChanges
     : `${formatKzt(priceBreakdown.total)} ₸ — ${t.continue}`;
   const statusMessage = isEdit
     ? saveState === "saved" ? t.saveSuccess : saveState === "error" ? (saveErrorMsg ?? t.saveError) : null
     : null;
+
+  // Back-navigation link (Part 1): authenticated users (edit mode is always
+  // authenticated; create mode only when a session was actually found) go
+  // to the dashboard, anonymous create-mode visitors go back to the same
+  // event-category template list they came from.
+  const backLabel = isEdit || isAuthenticated ? t.backToDashboard : t.backToTemplates;
+  const topStatusLabel = isEdit ? (saveState === "saved" ? t.draftSaved : null) : draftSaved ? t.draftSaved : null;
 
   // mapLink is part of the base EventFormSchema (so it's still validated/
   // labeled centrally) but rendered inside the MAP feature card instead of
@@ -451,6 +511,21 @@ export function SimpleConstructor({
         {/* LEFT: form + features */}
         <div className="flex flex-col gap-8 min-w-0">
           <div>
+            {/* Exit navigation — visually secondary to the primary CTA,
+                never crowds the header even at 360px (wraps if needed). */}
+            <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+              <button
+                type="button"
+                onClick={handleBack}
+                className="text-xs sm:text-sm font-medium transition-colors hover:opacity-70"
+                style={{ color: "var(--muted)" }}
+              >
+                {backLabel}
+              </button>
+              {topStatusLabel && (
+                <span className="text-xs" style={{ color: "var(--gold-dark)" }}>{topStatusLabel}</span>
+              )}
+            </div>
             <h1 className="heading-display text-2xl sm:text-3xl" style={{ color: "var(--charcoal)" }}>
               {lang === "ru" ? currentTemplate.nameRu : currentTemplate.nameKk}
             </h1>
@@ -521,7 +596,7 @@ export function SimpleConstructor({
                   target={uploadTarget}
                   lang={lang}
                   value={data.bgImageUrl}
-                  onChange={(url) => setData((prev) => ({ ...prev, bgImageUrl: url, bgType: url ? "image" : "color" }))}
+                  onChange={(url) => { markDirty(); setData((prev) => ({ ...prev, bgImageUrl: url, bgType: url ? "image" : "color" })); }}
                   hasError={attemptedSubmit && invalidKeys.has(imageField.key)}
                 />
                 {attemptedSubmit && invalidKeys.has(imageField.key) && (
