@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
 import { SwipeTrack } from "@/components/invitation/SwipeTrack";
+import { KazakhSectionHeading, KAZAKH_ETHNO_SURFACE } from "@/components/wedding/KazakhOrnament";
 
 const schema = z.object({
   name: z.string().min(1, "Атыңызды енгізіңіз").max(100),
@@ -44,6 +45,11 @@ interface Props {
    * convention either way, matching RSVPForm's identical precedent.
    * Defaults "kk". */
   lang?: Lang;
+  /** Kazakh Ethno visual treatment ONLY — ornament divider under the
+   * kicker, warm ivory section surface, and a gold-bordered/gold-button
+   * submission card instead of the plain cream/white every other template
+   * keeps unchanged. Defaults false. */
+  ornament?: boolean;
 }
 
 const SECTION_TEXT: Record<Lang, { kicker: string; heading: string; navPrev: string; navNext: string; wishCaption: string }> = {
@@ -103,7 +109,7 @@ const SAMPLE_WISH_DATES = [new Date(2026, 6, 16), new Date(2026, 6, 10)];
  * be confused with the pre-existing static `wishesText` block rendered
  * right above this in page.tsx (the couple's own message TO guests).
  */
-export function WishesWall({ inviteId, wishes, accent, cardBg, cardBorder, sectionDivider, demo = false, lang = "kk" }: Props) {
+export function WishesWall({ inviteId, wishes, accent, cardBg, cardBorder, sectionDivider, demo = false, lang = "kk", ornament = false }: Props) {
   const t = SECTION_TEXT[lang];
   const [list, setList] = useState<Wish[]>(() =>
     demo
@@ -149,9 +155,16 @@ export function WishesWall({ inviteId, wishes, accent, cardBg, cardBorder, secti
   });
 
   return (
-    <section className="py-16 sm:py-20 px-4" style={{ background: "var(--cream)", borderTop: sectionDivider }}>
+    <section
+      className={ornament ? "py-11 sm:py-14 px-4" : "py-16 sm:py-20 px-4"}
+      style={{ background: ornament ? KAZAKH_ETHNO_SURFACE.cream : "var(--cream)", borderTop: sectionDivider }}
+    >
       <div className="max-w-md mx-auto">
-        <p className="invite-kicker text-center mb-3" style={{ color: "var(--gold)" }}>{t.kicker}</p>
+        {ornament ? (
+          <KazakhSectionHeading label={t.kicker} accent={accent} className="mb-3" />
+        ) : (
+          <p className="invite-kicker text-center mb-3" style={{ color: "var(--gold)" }}>{t.kicker}</p>
+        )}
         <h2 className="heading-display invite-headline mb-6 text-center" style={{ color: "var(--charcoal)" }}>
           {t.heading}
         </h2>
@@ -177,7 +190,12 @@ export function WishesWall({ inviteId, wishes, accent, cardBg, cardBorder, secti
           </SwipeTrack>
         )}
 
-        <form onSubmit={onSubmit} className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-5 flex flex-col gap-4" noValidate>
+        <form
+          onSubmit={onSubmit}
+          className="rounded-2xl shadow-sm p-5 flex flex-col gap-4"
+          style={ornament ? { background: KAZAKH_ETHNO_SURFACE.ivory, border: `1px solid ${accent}40` } : { background: "white", border: "1px solid #F4F4F5" }}
+          noValidate
+        >
           <Input label="Аты-жөніңіз" placeholder="Айдар Сейітов" autoComplete="name" error={errors.name?.message} {...register("name")} />
           <Textarea label="Тілегіңіз" placeholder="Бақытты болыңыздар!" rows={3} error={errors.message?.message} {...register("message")} />
           {serverError && (
@@ -186,7 +204,7 @@ export function WishesWall({ inviteId, wishes, accent, cardBg, cardBorder, secti
           {success && !serverError && (
             <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">✓ Тілегіңіз жіберілді, рахмет!</p>
           )}
-          <Button type="submit" loading={isPending} className="w-full">
+          <Button type="submit" loading={isPending} className="w-full" style={ornament ? { background: accent, color: KAZAKH_ETHNO_SURFACE.ivory } : undefined}>
             Жіберу
           </Button>
         </form>

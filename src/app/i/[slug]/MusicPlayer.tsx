@@ -19,6 +19,11 @@ interface Props {
    * opposite top-left corner) — still fully draggable either way.
    */
   avoidBottom?: boolean;
+  /** Kazakh Ethno visual treatment ONLY — a thin warm-ivory ring around the
+   * accent-colored circle, echoing the hero's own double-hairline frame.
+   * Audio behavior, positioning and drag/safe-area logic are completely
+   * unaffected either way. Defaults false. */
+  ornament?: boolean;
 }
 
 const BUTTON_SIZE = 52;
@@ -66,7 +71,7 @@ function savePos(pos: Pos) {
  * bar, no volume control, no background pill — see the task this was built
  * for ("FINAL UI FIX") for why those were all deliberately removed.
  */
-export function MusicPlayer({ url, accent, loop = true, autoplay = false, avoidBottom = false }: Props) {
+export function MusicPlayer({ url, accent, loop = true, autoplay = false, avoidBottom = false, ornament = false }: Props) {
   const [playing, setPlaying] = useState(false);
   // null = not yet positioned by JS; render at the CSS-only default
   // (bottom-right, safe-area aware — or top-right when avoidBottom, see
@@ -248,7 +253,7 @@ export function MusicPlayer({ url, accent, loop = true, autoplay = false, avoidB
         width: BUTTON_SIZE,
         height: BUTTON_SIZE,
         background: accent,
-        boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+        boxShadow: ornament ? `0 4px 16px rgba(0,0,0,0.22), 0 0 0 2px #FBF6EA, 0 0 0 3px ${accent}55` : "0 4px 16px rgba(0,0,0,0.25)",
         touchAction: "none",
         cursor: "grab",
       }}

@@ -2,6 +2,7 @@
 
 import { SwipeTrack } from "./SwipeTrack";
 import type { WeddingDecorPreset } from "@/lib/wedding-template-layouts";
+import { KazakhCorner } from "@/components/wedding/KazakhOrnament";
 
 export type GalleryVariant = WeddingDecorPreset | "default";
 
@@ -38,11 +39,25 @@ export function GalleryCarousel({ urls, accent, variant, labelPrev, labelNext }:
       {urls.map((url, i) => (
         <div
           key={url + i}
-          className={`aspect-[4/5] overflow-hidden ${frame.frameClassName}`}
+          className={`relative aspect-[4/5] overflow-hidden ${frame.frameClassName}`}
           style={frame.frameStyle}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={url} alt="" className={`w-full h-full object-cover ${frame.imageClassName}`} draggable={false} />
+          {/* Kazakh Ethno signature — two small corner accents echoing the
+              hero frame, restrained enough not to compete with the photo
+              itself (§15 — "photos must remain the focus"). Every other
+              variant renders none of this. */}
+          {variant === "ethno" && (
+            <>
+              <div className="absolute top-2.5 left-2.5 w-4 h-4 pointer-events-none" aria-hidden="true">
+                <KazakhCorner accent={accent} className="w-full h-full" />
+              </div>
+              <div className="absolute bottom-2.5 right-2.5 w-4 h-4 pointer-events-none rotate-180" aria-hidden="true">
+                <KazakhCorner accent={accent} className="w-full h-full" />
+              </div>
+            </>
+          )}
         </div>
       ))}
     </SwipeTrack>

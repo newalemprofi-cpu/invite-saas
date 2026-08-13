@@ -14,6 +14,7 @@ import { WeddingHero } from "@/components/wedding/WeddingHero";
 import { GalleryCarousel, type GalleryVariant } from "@/components/invitation/GalleryCarousel";
 import { ProgramTimeline } from "@/components/invitation/ProgramTimeline";
 import { LocationSection } from "@/components/invitation/LocationSection";
+import { KazakhSectionHeading, KazakhDivider, KAZAKH_ETHNO_SURFACE } from "@/components/wedding/KazakhOrnament";
 
 /** Consistent vertical rhythm for every major content section (§7) — one
  * token instead of arbitrary per-section py-10/py-12/py-14 values. */
@@ -175,6 +176,33 @@ function ZaureFloralCorner({ mirror = false, vflip = false }: { mirror?: boolean
   );
 }
 
+/**
+ * Every section kicker in this file goes through here so Kazakh Ethno
+ * picks up its ornament divider (KazakhSectionHeading) consistently, while
+ * every other template renders the exact same plain `.invite-kicker`
+ * paragraph it always has — same classes, same color, same DOM shape, just
+ * reached through one shared component instead of copy-pasted 12 times.
+ * `className` accounts for the divider's own extra height so vertical
+ * rhythm doesn't grow when ornament is added. Declared at module scope
+ * (not inside InvitationView) per the React Compiler purity rule —
+ * components must never be created during another component's render.
+ */
+function SectionKicker({
+  label, accent, isEthno, className = "mb-4", color = "var(--gold)",
+}: {
+  label: string;
+  accent: string;
+  isEthno: boolean;
+  className?: string;
+  color?: string;
+}) {
+  return isEthno ? (
+    <KazakhSectionHeading label={label} accent={accent} className={className} />
+  ) : (
+    <p className={`invite-kicker ${className}`} style={{ color }}>{label}</p>
+  );
+}
+
 function resolveEnabledBlocks(d: D): string[] {
   if (d.sections && d.sections.length > 0) {
     return d.sections.filter((s) => s.enabled).map((s) => s.id);
@@ -200,6 +228,11 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
   // One of the 5 flagship Wedding templates — null for every other
   // template/legacy invite, which keeps rendering exactly as before.
   const weddingLayout = getWeddingLayout(newSlug);
+  // The ONLY template this task's Kazakh-identity redesign touches — every
+  // branch below that reads this stays byte-identical to before for the
+  // other 4 flagship templates and every legacy/non-wedding template
+  // (weddingLayout null or decorPreset !== "ethno").
+  const isEthno = weddingLayout?.decorPreset === "ethno";
 
   const accent = d.accentColor || tmpl?.accent || legacy.accent;
   const textDark = tmpl?.textDark || legacy.textColor;
@@ -253,9 +286,20 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
         { time: "21:00", label: "Би кеші" },
       ];
 
-  const cardBg = isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.04)";
-  const cardBorder = isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)";
+  const cardBg = isEthno ? `${accent}12` : (isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.04)");
+  const cardBorder = isEthno ? `${accent}38` : (isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)");
 
+  // Kazakh Ethno gets a visibly tighter vertical rhythm (a ~30% reduction —
+  // the other 4 templates keep the original SECTION_PY untouched) and its
+  // own slightly warmer ivory/cream surface tones. Both are plain string/
+  // function values (never a global CSS override), so nothing outside this
+  // one template's render path can be affected.
+  const sectionPy = isEthno ? "py-11 sm:py-14 px-4" : SECTION_PY;
+  const sectionBg = (base: "ivory" | "cream" | "darkOrCream"): string => {
+    if (base === "darkOrCream") return isDark ? "#1C1917" : (isEthno ? KAZAKH_ETHNO_SURFACE.cream : "var(--cream)");
+    if (!isEthno) return base === "ivory" ? "var(--ivory)" : "var(--cream)";
+    return base === "ivory" ? KAZAKH_ETHNO_SURFACE.ivory : KAZAKH_ETHNO_SURFACE.cream;
+  };
   // A subtle top hairline on every major section (§7) — keeps sections
   // visually distinct even where two adjacent sections happen to share the
   // same background (which/whether that happens depends on which optional
@@ -292,6 +336,7 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
           loop={d.musicLoop ?? true}
           autoplay={d.musicAutoplay ?? false}
           avoidBottom={demo}
+          ornament={isEthno}
         />
       )}
 
@@ -423,9 +468,9 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
       {/* ── Hosts (§ target hierarchy item 2) — moved out of the hero, which
           now only carries the kicker/names/photo (§4). ── */}
       {hostsLine && (
-        <section className={SECTION_PY} style={{ background: "var(--cream)", borderTop: sectionDivider }}>
+        <section className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto text-center">
-            <p className="invite-kicker mb-4" style={{ color: "var(--gold)" }}>Той иелері</p>
+            <SectionKicker label="Той иелері" accent={accent} isEthno={isEthno} className="mb-4" />
             <p className="invite-body leading-relaxed" style={{ color: "var(--charcoal)" }}>{hostsLine}</p>
           </div>
         </section>
@@ -436,9 +481,9 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
           DEFAULT_SECTIONS in invite-editor-data.ts), so this always reflects
           whatever the customer actually saved. ── */}
       {d.date && (
-        <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
+        <section className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto text-center flex flex-col items-center gap-2">
-            <p className="invite-kicker mb-1" style={{ color: "var(--gold)" }}>Күні мен уақыты</p>
+            <SectionKicker label="Күні мен уақыты" accent={accent} isEthno={isEthno} className="mb-1" />
             <p className="heading-display invite-headline font-semibold" style={{ color: "var(--charcoal)" }}>{fmt(d.date)}</p>
             {d.time && <p className="invite-caption" style={{ color: "var(--muted)" }}>Сағат {d.time}</p>}
           </div>
@@ -449,10 +494,16 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
           no longer carries (§4), given its own quiet moment instead of
           competing with the photo. ── */}
       {((has("invitation_text") && message) || d.note) && (
-        <section className={SECTION_PY} style={{ background: "var(--cream)", borderTop: sectionDivider }}>
+        <section className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto flex flex-col items-center gap-4 text-center">
+            {isEthno && <KazakhDivider accent={accent} />}
             {has("invitation_text") && message && (
-              <p className="invite-body leading-relaxed italic" style={{ color: "var(--charcoal)" }}>&ldquo;{message}&rdquo;</p>
+              // Restrained, not fully-italic ceremonial styling for Kazakh
+              // Ethno (§10 — "do not make the entire paragraph overly
+              // italic"): non-italic body copy with quote marks doing the
+              // ceremonial signaling instead. Other templates keep the
+              // original italic treatment untouched.
+              <p className={`invite-body leading-relaxed ${isEthno ? "" : "italic"}`} style={{ color: "var(--charcoal)" }}>&ldquo;{message}&rdquo;</p>
             )}
             {d.note && <p className="invite-caption leading-relaxed" style={{ color: "var(--muted)" }}>{d.note}</p>}
           </div>
@@ -461,21 +512,19 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
 
       {/* ── Countdown (§ item 4) ── */}
       {has("countdown") && d.date && (
-        <section className={SECTION_PY} style={{ background: isDark ? "#1C1917" : "var(--cream)", borderTop: sectionDivider }}>
+        <section className={sectionPy} style={{ background: sectionBg("darkOrCream"), borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto text-center">
-            <p className="invite-kicker mb-8" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "var(--gold)" }}>
-              Іс-шараға дейін
-            </p>
-            <Countdown targetDate={d.date} targetTime={d.time} accent={accent} textMuted={isDark ? "rgba(255,255,255,0.45)" : "var(--muted)"} serverNow={nowMs} />
+            <SectionKicker label="Іс-шараға дейін" accent={accent} isEthno={isEthno} className="mb-8" color={isDark ? "rgba(255,255,255,0.4)" : "var(--gold)"} />
+            <Countdown targetDate={d.date} targetTime={d.time} accent={accent} textMuted={isDark ? "rgba(255,255,255,0.45)" : "var(--muted)"} serverNow={nowMs} ornament={isEthno} />
           </div>
         </section>
       )}
 
       {/* ── Love Story ── */}
       {has("love_story") && d.loveStory && (
-        <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
+        <section className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto text-center">
-            <p className="invite-kicker mb-5" style={{ color: "var(--gold)" }}>Біздің тарих</p>
+            <SectionKicker label="Біздің тарих" accent={accent} isEthno={isEthno} className="mb-5" />
             <p className="invite-body leading-relaxed" style={{ color: "var(--charcoal)" }}>{d.loveStory}</p>
           </div>
         </section>
@@ -487,9 +536,9 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
           link hides the whole block instead of iframing raw customer input
           (see src/lib/youtube.ts). */}
       {has("video_section") && videoEmbedUrl && (
-        <section className={SECTION_PY} style={{ background: "var(--cream)", borderTop: sectionDivider }}>
+        <section className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
           <div className="max-w-2xl mx-auto">
-            <p className="invite-kicker text-center mb-6" style={{ color: "var(--gold)" }}>Бейне</p>
+            <SectionKicker label="Бейне" accent={accent} isEthno={isEthno} className="text-center mb-6" />
             <div className="aspect-video rounded-2xl overflow-hidden">
               <iframe
                 src={videoEmbedUrl}
@@ -514,13 +563,13 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
           "HH:MM — ..." lines at all. The stored programText string itself
           is never touched. */}
       {has("program") && (
-        <section className={SECTION_PY} style={{ background: "var(--cream)", borderTop: sectionDivider }}>
+        <section className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto">
-            <p className="invite-kicker text-center mb-8" style={{ color: "var(--gold)" }}>Бағдарлама</p>
+            <SectionKicker label="Бағдарлама" accent={accent} isEthno={isEthno} className="text-center mb-8" />
             {(!d.programItems || d.programItems.length === 0) && d.programText ? (
-              <ProgramTimeline text={d.programText} accent={accent} textDark="var(--charcoal)" textMuted="var(--muted)" />
+              <ProgramTimeline text={d.programText} accent={accent} textDark="var(--charcoal)" textMuted="var(--muted)" ornament={isEthno} />
             ) : (
-              <ProgramTimeline items={programItems} accent={accent} textDark="var(--charcoal)" textMuted="var(--muted)" />
+              <ProgramTimeline items={programItems} accent={accent} textDark="var(--charcoal)" textMuted="var(--muted)" ornament={isEthno} />
             )}
           </div>
         </section>
@@ -528,9 +577,9 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
 
       {/* ── Dress Code ── */}
       {has("dress_code") && d.dressCode && (
-        <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
+        <section className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto text-center">
-            <p className="invite-kicker mb-4" style={{ color: "var(--gold)" }}>Dress Code</p>
+            <SectionKicker label={isEthno ? "ДРЕСС-КОД" : "Dress Code"} accent={accent} isEthno={isEthno} className="mb-4" />
             <div className="rounded-2xl p-6" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
               <p className="invite-body" style={{ color: "var(--charcoal)" }}>{d.dressCode}</p>
             </div>
@@ -544,7 +593,7 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
           same authoritative rule the old inline-hero + separate Map block
           enforced between them before this restructuring. ── */}
       {(location || d.address) && (
-        <section className={SECTION_PY} style={{ background: "var(--cream)", borderTop: sectionDivider }}>
+        <section className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
           <LocationSection
             location={location ?? null}
             address={d.address ?? null}
@@ -554,6 +603,7 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
             textDark="var(--charcoal)"
             textMuted="var(--muted)"
             accent={accent}
+            ornament={isEthno}
           />
         </section>
       )}
@@ -566,17 +616,17 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
           ordered `galleryUrls`, still capped at 10 by the existing
           constructor/storage limit — this component never touches either. */}
       {has("gallery") && gallery.length > 0 && isEntitledTo("gallery") && (
-        <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
-          <p className="invite-kicker text-center mb-8" style={{ color: "var(--gold)" }}>Галерея</p>
+        <section className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
+          <SectionKicker label="Галерея" accent={accent} isEthno={isEthno} className="text-center mb-8" />
           <GalleryCarousel urls={gallery} accent={accent} variant={galleryVariant} labelPrev="Алдыңғы сурет" labelNext="Келесі сурет" />
         </section>
       )}
 
       {/* ── WhatsApp / Contacts ── */}
       {(has("whatsapp") || has("contacts")) && (d.whatsapp || d.organizerPhone || d.contactsText) && (
-        <section className={SECTION_PY} style={{ background: isDark ? "#1C1917" : "var(--cream)", borderTop: sectionDivider }}>
+        <section className={sectionPy} style={{ background: sectionBg("darkOrCream"), borderTop: sectionDivider }}>
           <div className="max-w-sm mx-auto text-center flex flex-col items-center gap-4">
-            <p className="invite-kicker" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "var(--gold)" }}>Байланыс</p>
+            <SectionKicker label="Байланыс" accent={accent} isEthno={isEthno} className="" color={isDark ? "rgba(255,255,255,0.4)" : "var(--gold)"} />
             {d.contactsText && (
               <p className="invite-body" style={{ color: "var(--charcoal)" }}>{d.contactsText}</p>
             )}
@@ -601,9 +651,9 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
       {/* ── Wishes (§ item 8 — owner's own static message to guests, always
           free, unrelated to the WISHES paid add-on below) ── */}
       {has("wishes") && (
-        <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
+        <section className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto text-center">
-            <p className="invite-kicker mb-4" style={{ color: "var(--gold)" }}>Тілектер</p>
+            <SectionKicker label="Тілектер" accent={accent} isEthno={isEthno} className="mb-4" />
             <div className="rounded-2xl p-6" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
               <p className="invite-body leading-relaxed" style={{ color: "var(--charcoal)" }}>
                 {d.wishesText || "Тілектеріңізді жазыңыз..."}
@@ -623,17 +673,17 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
           neither — unchanged from before this task. */}
       {isEntitledTo("wishes") && (
         invite?.status === "PUBLISHED" ? (
-          <WishesWall inviteId={invite.id} wishes={wishes} accent={accent} cardBg={cardBg} cardBorder={cardBorder} sectionDivider={sectionDivider} />
+          <WishesWall inviteId={invite.id} wishes={wishes} accent={accent} cardBg={cardBg} cardBorder={cardBorder} sectionDivider={sectionDivider} ornament={isEthno} />
         ) : demo ? (
-          <WishesWall demo lang={lang} accent={accent} cardBg={cardBg} cardBorder={cardBorder} sectionDivider={sectionDivider} />
+          <WishesWall demo lang={lang} accent={accent} cardBg={cardBg} cardBorder={cardBorder} sectionDivider={sectionDivider} ornament={isEthno} />
         ) : null
       )}
 
       {/* ── Gift Info ── */}
       {has("gift_info") && d.giftInfo && (
-        <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
+        <section className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto text-center">
-            <p className="invite-kicker mb-4" style={{ color: "var(--gold)" }}>Сыйлық ақпараты</p>
+            <SectionKicker label="Сыйлық ақпараты" accent={accent} isEthno={isEthno} className="mb-4" />
             <div className="rounded-2xl p-6" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
               <p className="invite-body font-mono" style={{ color: "var(--charcoal)" }}>{d.giftInfo}</p>
             </div>
@@ -643,22 +693,22 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
 
       {/* ── RSVP (§ item 9, paid add-on) ── */}
       {has("rsvp") && isEntitledTo("rsvp") && (
-        <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
+        <section className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto">
             <div className="text-center mb-7">
-              <p className="invite-kicker mb-2" style={{ color: "var(--gold)" }}>RSVP</p>
+              <SectionKicker label="RSVP" accent={accent} isEthno={isEthno} className="mb-2" />
               <h2 className="heading-display invite-headline mb-2" style={{ color: "var(--charcoal)" }}>Қатысасыз ба?</h2>
               <p className="invite-caption" style={{ color: "var(--muted)" }}>{d.rsvpText || "Жауабыңызды жіберіңіз"}</p>
             </div>
 
             {invite?.status === "PUBLISHED" ? (
-              <RSVPForm inviteId={invite.id} accent={accent} />
+              <RSVPForm inviteId={invite.id} accent={accent} ornament={isEthno} />
             ) : demo ? (
               // Full-looking, fully-interactive RSVP form so a prospective
               // customer sees the actual finished experience (§4/§10) —
               // RSVPForm's own `demo` prop guarantees submission never
               // reaches submitRSVP/the DB, only a local success state.
-              <RSVPForm demo accent={accent} lang={lang} />
+              <RSVPForm demo accent={accent} lang={lang} ornament={isEthno} />
             ) : (
               // Compact, visually intentional placeholder — a real
               // invite's own unpublished-preview state, unchanged from

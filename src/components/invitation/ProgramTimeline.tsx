@@ -38,6 +38,11 @@ interface Props {
   accent: string;
   textDark: string;
   textMuted: string;
+  /** Kazakh Ethno visual treatment ONLY (§12) — a small gold diamond marker
+   * instead of the plain dot every other template keeps unchanged. Parsing
+   * (parseProgramText/TIME_LINE_RE) and the structured-vs-free-text
+   * precedence above are completely untouched either way. Defaults false. */
+  ornament?: boolean;
 }
 
 /**
@@ -49,7 +54,7 @@ interface Props {
  * (e.g. genuinely free-form prose with no time markers at all) — the
  * stored string itself is never altered either way.
  */
-export function ProgramTimeline({ items, text, accent, textDark, textMuted }: Props) {
+export function ProgramTimeline({ items, text, accent, textDark, textMuted, ornament = false }: Props) {
   const structured = items && items.length > 0 ? items : text ? parseProgramText(text) : [];
 
   if (structured.length === 0) {
@@ -66,7 +71,11 @@ export function ProgramTimeline({ items, text, accent, textDark, textMuted }: Pr
       {structured.map((item, i) => (
         <div key={i} className="flex gap-4 relative">
           <div className="flex flex-col items-center">
-            <div className="w-3 h-3 rounded-full shrink-0 mt-2" style={{ background: accent }} />
+            {ornament ? (
+              <div className="w-2.5 h-2.5 shrink-0 mt-2.5 rotate-45" style={{ background: accent, opacity: 0.85 }} />
+            ) : (
+              <div className="w-3 h-3 rounded-full shrink-0 mt-2" style={{ background: accent }} />
+            )}
             {i < structured.length - 1 && <div className="w-px flex-1 my-1" style={{ background: `${accent}35` }} />}
           </div>
           <div className="pb-7">

@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import type { Lang } from "@/lib/i18n";
+import { KAZAKH_ETHNO_SURFACE } from "@/components/wedding/KazakhOrnament";
 
 const DEMO_SUCCESS_HINT: Record<Lang, string> = {
   kk: "Бұл — демо нұсқа. Нақты шақыруда жауабыңыз осылай қабылданады.",
@@ -59,15 +60,26 @@ function SuccessState({
   count,
   demo,
   lang,
+  accent,
+  ornament,
 }: {
   status: RSVPStatus;
   count: number;
   demo?: boolean;
   lang: Lang;
+  accent?: string;
+  ornament?: boolean;
 }) {
   const opt = STATUS_OPTIONS.find((s) => s.value === status)!;
   return (
-    <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-10 text-center flex flex-col items-center gap-3">
+    <div
+      className="rounded-2xl shadow-sm p-10 text-center flex flex-col items-center gap-3"
+      style={
+        ornament && accent
+          ? { background: KAZAKH_ETHNO_SURFACE.ivory, border: `1px solid ${accent}40` }
+          : { background: "white", border: "1px solid #F4F4F5" }
+      }
+    >
       <div className="text-5xl">🎉</div>
       <h3 className="text-xl font-bold text-zinc-900">Жауабыңыз қабылданды!</h3>
       <p className="text-zinc-500 text-sm">
@@ -113,9 +125,13 @@ interface RSVPFormProps {
    */
   demo?: boolean;
   lang?: Lang;
+  /** Kazakh Ethno visual treatment ONLY (§17) — an ivory/gold-bordered card
+   * and a gold primary button instead of the plain white/zinc + near-black
+   * button every other template keeps unchanged. Defaults false. */
+  ornament?: boolean;
 }
 
-export function RSVPForm({ inviteId, accent: _accent, demo = false, lang = "kk" }: RSVPFormProps) {
+export function RSVPForm({ inviteId, accent, demo = false, lang = "kk", ornament = false }: RSVPFormProps) {
   const [isPending, startTransition] = useTransition();
   const [outcome, setOutcome] = useState<
     "success" | "duplicate" | null
@@ -151,13 +167,18 @@ export function RSVPForm({ inviteId, accent: _accent, demo = false, lang = "kk" 
     });
   });
 
-  if (outcome === "success") return <SuccessState status={selectedStatus} count={count} demo={demo} lang={lang} />;
+  if (outcome === "success") return <SuccessState status={selectedStatus} count={count} demo={demo} lang={lang} accent={accent} ornament={ornament} />;
   if (outcome === "duplicate") return <DuplicateState />;
 
   return (
     <form
       onSubmit={onSubmit}
-      className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-5 flex flex-col gap-5"
+      className="rounded-2xl shadow-sm p-5 flex flex-col gap-5"
+      style={
+        ornament && accent
+          ? { background: KAZAKH_ETHNO_SURFACE.ivory, border: `1px solid ${accent}40` }
+          : { background: "white", border: "1px solid #F4F4F5" }
+      }
       noValidate
     >
       {/* Status selector */}
@@ -175,8 +196,11 @@ export function RSVPForm({ inviteId, accent: _accent, demo = false, lang = "kk" 
                 "flex flex-col items-center gap-1.5 py-3.5 rounded-xl border-2 text-xs font-semibold transition-all duration-150",
                 selectedStatus === opt.value
                   ? opt.activeClass
-                  : "border-zinc-100 text-zinc-500 hover:border-zinc-200 bg-white"
+                  : ornament
+                    ? "text-zinc-500 hover:opacity-80 bg-white"
+                    : "border-zinc-100 text-zinc-500 hover:border-zinc-200 bg-white"
               )}
+              style={ornament && selectedStatus !== opt.value && accent ? { borderColor: `${accent}30` } : undefined}
             >
               <span className="text-2xl leading-none">{opt.emoji}</span>
               {opt.label}
@@ -251,7 +275,13 @@ export function RSVPForm({ inviteId, accent: _accent, demo = false, lang = "kk" 
         </p>
       )}
 
-      <Button type="submit" loading={isPending} size="lg" className="w-full">
+      <Button
+        type="submit"
+        loading={isPending}
+        size="lg"
+        className="w-full"
+        style={ornament && accent ? { background: accent, color: KAZAKH_ETHNO_SURFACE.ivory } : undefined}
+      >
         Жауап жіберу
       </Button>
     </form>

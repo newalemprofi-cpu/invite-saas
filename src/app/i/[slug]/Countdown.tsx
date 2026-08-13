@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { KazakhCorner } from "@/components/wedding/KazakhOrnament";
 
 interface Props {
   targetDate: string;
@@ -27,6 +28,12 @@ interface Props {
    * client-only effect below.
    */
   serverNow: number;
+  /** Kazakh Ethno visual shell ONLY (§11) — a thin gold border, a tiny
+   * corner ornament, and a subtle cream gradient instead of the flat tint
+   * every other template keeps unchanged. Never touches the state/effect
+   * logic above (targetDate/targetTime/serverNow/tick cadence), only the
+   * cell's own decorative styling below. Defaults false. */
+  ornament?: boolean;
 }
 
 function computeRemaining(targetDate: string, targetTime: string | undefined, now: number) {
@@ -42,7 +49,7 @@ function computeRemaining(targetDate: string, targetTime: string | undefined, no
   };
 }
 
-export function Countdown({ targetDate, targetTime, accent, textMuted, serverNow }: Props) {
+export function Countdown({ targetDate, targetTime, accent, textMuted, serverNow, ornament = false }: Props) {
   const [rem, setRem] = useState(() => computeRemaining(targetDate, targetTime, serverNow));
   useEffect(() => {
     const id = setInterval(() => setRem(computeRemaining(targetDate, targetTime, Date.now())), 1000);
@@ -65,15 +72,30 @@ export function Countdown({ targetDate, targetTime, accent, textMuted, serverNow
       {units.map((u) => (
         <div key={u.l} className="flex flex-col items-center gap-2">
           <div
-            className="w-full aspect-square rounded-2xl flex items-center justify-center font-serif font-bold transition-all"
-            style={{
-              background: `${accent}14`,
-              border: `1px solid ${accent}30`,
-              color: accent,
-              fontSize: "clamp(1.5rem, 1.1rem + 3.5vw, 2.25rem)",
-              boxShadow: `0 4px 14px ${accent}12`,
-            }}
+            className="relative w-full aspect-square rounded-2xl flex items-center justify-center font-serif font-bold transition-all overflow-hidden"
+            style={
+              ornament
+                ? {
+                    backgroundImage: `linear-gradient(160deg, ${accent}1c, ${accent}0a)`,
+                    border: `1px solid ${accent}4a`,
+                    color: accent,
+                    fontSize: "clamp(1.5rem, 1.1rem + 3.5vw, 2.25rem)",
+                    boxShadow: `0 4px 14px ${accent}14`,
+                  }
+                : {
+                    background: `${accent}14`,
+                    border: `1px solid ${accent}30`,
+                    color: accent,
+                    fontSize: "clamp(1.5rem, 1.1rem + 3.5vw, 2.25rem)",
+                    boxShadow: `0 4px 14px ${accent}12`,
+                  }
+            }
           >
+            {ornament && (
+              <div className="absolute top-1 left-1 w-2.5 h-2.5 pointer-events-none" aria-hidden="true">
+                <KazakhCorner accent={accent} className="w-full h-full" />
+              </div>
+            )}
             {String(u.n).padStart(2, "0")}
           </div>
           <span className="invite-caption" style={{ color: textMuted }}>{u.l}</span>

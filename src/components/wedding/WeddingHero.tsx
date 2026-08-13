@@ -1,4 +1,5 @@
 import type { WeddingTemplateLayout } from "@/lib/wedding-template-layouts";
+import { KazakhDivider, KazakhWatermark, KAZAKH_ETHNO_SURFACE } from "./KazakhOrnament";
 
 /**
  * THE single rendering source of truth for a Wedding template's hero
@@ -136,15 +137,6 @@ function DarkGoldArc({ accent }: { accent: string }) {
   return (
     <svg viewBox="0 0 120 24" className="w-24 h-5 opacity-70" fill="none">
       <path d="M2 20 Q60 -4 118 20" stroke={accent} strokeWidth="1" strokeLinecap="round" opacity="0.55" />
-    </svg>
-  );
-}
-
-function EthnoOrnament({ accent }: { accent: string }) {
-  return (
-    <svg viewBox="0 0 80 20" className="w-14 h-4" fill="none">
-      <path d="M2 10 H30 M50 10 H78" stroke={accent} strokeWidth="1" opacity="0.5" />
-      <path d="M40 3 L46 10 L40 17 L34 10 Z" stroke={accent} strokeWidth="1" fill="none" opacity="0.6" />
     </svg>
   );
 }
@@ -350,11 +342,39 @@ export function WeddingHero({ data, tokens, layout, compact = false, minimal = f
   }
 
   /* 5 ── KAZAKH ETHNO: photo inside an arched ornamental frame — rounded
-     top, flat base, thin double border, restrained geometric accents. */
+     top, flat base, a slim double hairline border with a small arch-top
+     finial, and a large, extremely faint radial watermark seated behind
+     the whole composition (§20's "signature, not wallpaper" — one big
+     centered motif, never tiled). The photo is the dominant element: sized
+     up from the previous revision so it reads as the focal point, with the
+     couple's names remaining the primary typographic focal point directly
+     beneath it. */
   return (
-    <div className="w-full h-full flex-1 flex flex-col items-center overflow-y-auto overflow-x-hidden" style={{ background: "linear-gradient(180deg,#FBF4E7,#F5EAD4)" }}>
-      <div className={`relative shrink-0 ${compact ? "mt-5" : "mt-10"}`} style={{ aspectRatio: "3 / 4", width: compact ? "min(58%, 180px)" : "min(34%, 280px)" }}>
-        <div className="absolute -inset-1.5 pointer-events-none" style={{ borderRadius: "50% 50% 4px 4px", border: `1px solid ${tokens.accent}66` }} />
+    <div
+      className="relative w-full h-full flex-1 flex flex-col items-center overflow-y-auto overflow-x-hidden"
+      style={{ background: `linear-gradient(180deg,${KAZAKH_ETHNO_SURFACE.ivory},${KAZAKH_ETHNO_SURFACE.cream})` }}
+    >
+      <div className="absolute inset-x-0 top-0 flex justify-center pointer-events-none" aria-hidden="true">
+        <KazakhWatermark accent={tokens.accent} className={compact ? "w-[260px] h-[260px] -mt-4" : "w-[440px] h-[440px] -mt-6"} />
+      </div>
+      <div
+        className={`relative shrink-0 ${compact ? "mt-5" : "mt-10"}`}
+        style={{ aspectRatio: "3 / 4", width: compact ? "min(64%, 210px)" : "min(46%, 340px)" }}
+      >
+        {/* Arch-top finial — a small restrained pendant marking the peak of
+            the frame, not a heavy crown. */}
+        <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none" style={{ top: compact ? -7 : -10 }}>
+          <svg viewBox="0 0 20 14" className={compact ? "w-3 h-2" : "w-4 h-3"} fill="none" aria-hidden="true">
+            <path d="M10 13 L10 4" stroke={tokens.accent} strokeWidth="1" opacity="0.6" />
+            <path d="M4 4 Q10 -1 16 4" stroke={tokens.accent} strokeWidth="1" fill="none" opacity="0.6" />
+            <circle cx="10" cy="2.5" r="1.4" fill={tokens.accent} opacity="0.65" />
+          </svg>
+        </div>
+        {/* Slim double hairline — an outer ring plus a slightly inset second
+            ring, read together as an elegant thin frame rather than one
+            heavier golden border. */}
+        <div className="absolute -inset-2 pointer-events-none" style={{ borderRadius: "50% 50% 4px 4px", border: `1px solid ${tokens.accent}55` }} />
+        <div className="absolute -inset-0.5 pointer-events-none" style={{ borderRadius: "50% 50% 4px 4px", border: `1px solid ${tokens.accent}40` }} />
         <PhotoOrPlaceholder
           photoUrl={data.photoUrl}
           decorPreset={decorPreset}
@@ -363,14 +383,14 @@ export function WeddingHero({ data, tokens, layout, compact = false, minimal = f
         />
         <div className="absolute inset-0 pointer-events-none" style={{ borderRadius: "50% 50% 4px 4px", boxShadow: `inset 0 0 0 2px ${tokens.bg}` }} />
       </div>
-      <div className={`flex flex-col items-center ${pad} w-full`}>
+      <div className={`relative flex flex-col items-center ${pad} w-full`}>
         <HeroContent
             minimal={minimal}
           data={data}
           tokens={tokens}
           compact={compact}
           kickerLabel="Сізді шақырамыз"
-          divider={<EthnoOrnament accent={tokens.accent} />}
+          divider={<KazakhDivider accent={tokens.accent} className={compact ? "w-16 h-2.5" : undefined} />}
         />
       </div>
     </div>
