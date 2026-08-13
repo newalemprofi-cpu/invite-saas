@@ -55,7 +55,7 @@ export function ProgramTimeline({ items, text, accent, textDark, textMuted }: Pr
   if (structured.length === 0) {
     if (!text) return null;
     return (
-      <p className="text-sm leading-relaxed text-center whitespace-pre-line" style={{ color: textDark }}>
+      <p className="invite-body text-center whitespace-pre-line" style={{ color: textDark }}>
         {text}
       </p>
     );
@@ -66,16 +66,16 @@ export function ProgramTimeline({ items, text, accent, textDark, textMuted }: Pr
       {structured.map((item, i) => (
         <div key={i} className="flex gap-4 relative">
           <div className="flex flex-col items-center">
-            <div className="w-2.5 h-2.5 rounded-full shrink-0 mt-1.5" style={{ background: accent }} />
-            {i < structured.length - 1 && <div className="w-px flex-1 my-1" style={{ background: `${accent}30` }} />}
+            <div className="w-3 h-3 rounded-full shrink-0 mt-2" style={{ background: accent }} />
+            {i < structured.length - 1 && <div className="w-px flex-1 my-1" style={{ background: `${accent}35` }} />}
           </div>
-          <div className="pb-6">
+          <div className="pb-7">
             {item.time && (
-              <p className="text-sm font-semibold font-mono tracking-wide" style={{ color: accent }}>
+              <p className="invite-body font-semibold font-mono tracking-wide" style={{ color: accent }}>
                 {item.time}
               </p>
             )}
-            <p className="text-[15px] leading-snug mt-0.5" style={{ color: item.time ? textDark : textMuted }}>
+            <p className="invite-body mt-0.5" style={{ color: item.time ? textDark : textMuted }}>
               {item.label}
             </p>
           </div>

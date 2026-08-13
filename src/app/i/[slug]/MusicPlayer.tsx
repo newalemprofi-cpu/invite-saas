@@ -7,10 +7,22 @@ interface Props {
   accent: string;
   loop?: boolean;
   autoplay?: boolean;
+  /**
+   * true only on the template full-preview demo (/templates/[slug]), which
+   * has a non-fixed "Осы дизайн ұнады ма?" CTA bar sitting at the very
+   * bottom of the page (§13). Since this button is position:fixed to the
+   * VIEWPORT (not the page), a bottom-anchored default would sit on top
+   * of that CTA's buttons whenever the visitor scrolls to the bottom —
+   * unlike real `/i/[slug]` pages, which never have that bar at all. In
+   * that one case the button instead defaults to the top-right corner
+   * (clear of the CTA, and of the demo back button which lives in the
+   * opposite top-left corner) — still fully draggable either way.
+   */
+  avoidBottom?: boolean;
 }
 
 const BUTTON_SIZE = 52;
-const EDGE_PADDING = 12;
+const EDGE_PADDING = 16;
 const DRAG_THRESHOLD = 6;
 const STORAGE_KEY = "shaqyru:musicButtonPos";
 
@@ -54,12 +66,12 @@ function savePos(pos: Pos) {
  * bar, no volume control, no background pill — see the task this was built
  * for ("FINAL UI FIX") for why those were all deliberately removed.
  */
-export function MusicPlayer({ url, accent, loop = true, autoplay = false }: Props) {
+export function MusicPlayer({ url, accent, loop = true, autoplay = false, avoidBottom = false }: Props) {
   const [playing, setPlaying] = useState(false);
   // null = not yet positioned by JS; render at the CSS-only default
-  // (top-right, safe-area aware — see currentPixelPos()'s comment for why)
-  // so there's no server/client mismatch and no flash of an unpositioned
-  // button before hydration.
+  // (bottom-right, safe-area aware — or top-right when avoidBottom, see
+  // currentPixelPos()'s comment for why) so there's no server/client
+  // mismatch and no flash of an unpositioned button before hydration.
   const [pos, setPos] = useState<Pos | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dragRef = useRef<{
@@ -154,14 +166,16 @@ export function MusicPlayer({ url, accent, loop = true, autoplay = false }: Prop
 
   const currentPixelPos = (): Pos => {
     if (pos) return pos;
-    // Mirrors the CSS default (top-right, EDGE_PADDING from each edge) as
-    // real pixel coordinates, for the moment a drag starts before any
-    // saved/explicit position exists yet. Top-right (not bottom-left) is
-    // deliberate: it's clear of the demo back button (top-left), the
-    // bottom-anchored demo CTA bar, RSVP's status-choice buttons, and
-    // gallery/wishes carousel arrows — every one of which lives at the
-    // bottom or is horizontally centered, never in the top-right corner.
-    return clamp({ left: window.innerWidth - BUTTON_SIZE - EDGE_PADDING, top: EDGE_PADDING });
+    // Mirrors the CSS default as real pixel coordinates, for the moment a
+    // drag starts before any saved/explicit position exists yet.
+    // avoidBottom (demo only): top-right — clear of the demo back button
+    // (top-left) and the bottom-anchored demo CTA bar. Otherwise (real
+    // `/i/[slug]`, no CTA bar): bottom-right, per §11's explicit formula.
+    return clamp(
+      avoidBottom
+        ? { left: window.innerWidth - BUTTON_SIZE - EDGE_PADDING, top: EDGE_PADDING }
+        : { left: window.innerWidth - BUTTON_SIZE - EDGE_PADDING, top: window.innerHeight - BUTTON_SIZE - EDGE_PADDING }
+    );
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -210,10 +224,15 @@ export function MusicPlayer({ url, accent, loop = true, autoplay = false }: Prop
 
   const style: React.CSSProperties = pos
     ? { left: pos.left, top: pos.top }
-    : {
-        right: `max(${EDGE_PADDING}px, env(safe-area-inset-right))`,
-        top: `max(${EDGE_PADDING}px, env(safe-area-inset-top))`,
-      };
+    : avoidBottom
+      ? {
+          right: `max(${EDGE_PADDING}px, env(safe-area-inset-right))`,
+          top: `max(${EDGE_PADDING}px, env(safe-area-inset-top))`,
+        }
+      : {
+          right: `max(${EDGE_PADDING}px, env(safe-area-inset-right))`,
+          bottom: `max(${EDGE_PADDING}px, env(safe-area-inset-bottom))`,
+        };
 
   return (
     <button

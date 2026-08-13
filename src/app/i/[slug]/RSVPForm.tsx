@@ -9,6 +9,12 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
+import type { Lang } from "@/lib/i18n";
+
+const DEMO_SUCCESS_HINT: Record<Lang, string> = {
+  kk: "Бұл — демо нұсқа. Нақты шақыруда жауабыңыз осылай қабылданады.",
+  ru: "Это демо-версия. В реальном приглашении ваш ответ будет принят точно так же.",
+};
 
 const schema = z.object({
   name: z.string().min(1, "Атыңызды енгізіңіз").max(100),
@@ -51,9 +57,13 @@ const STATUS_OPTIONS: {
 function SuccessState({
   status,
   count,
+  demo,
+  lang,
 }: {
   status: RSVPStatus;
   count: number;
+  demo?: boolean;
+  lang: Lang;
 }) {
   const opt = STATUS_OPTIONS.find((s) => s.value === status)!;
   return (
@@ -67,6 +77,7 @@ function SuccessState({
           <span className="text-zinc-400"> · {count} адам</span>
         )}
       </p>
+      {demo && <p className="text-xs text-zinc-400 mt-1">{DEMO_SUCCESS_HINT[lang]}</p>}
     </div>
   );
 }
@@ -87,7 +98,24 @@ function DuplicateState() {
 
 // ─── Form ─────────────────────────────────────────────────────────────────────
 
-export function RSVPForm({ inviteId, accent: _accent }: { inviteId: string; accent?: string }) {
+interface RSVPFormProps {
+  /** Required for a real submission; never read when `demo` is true. */
+  inviteId?: string;
+  accent?: string;
+  /**
+   * true only for the template full-preview demo (/templates/[slug]) — the
+   * form is fully interactive (status buttons, name/phone/count/comment
+   * all genuinely work), but submitting never calls submitRSVP and never
+   * reaches the database: it locally simulates the exact same success
+   * state a real submission would show, so a prospective customer sees
+   * the complete finished experience without a real Guest row ever being
+   * created. Real `/i/[slug]` never passes this.
+   */
+  demo?: boolean;
+  lang?: Lang;
+}
+
+export function RSVPForm({ inviteId, accent: _accent, demo = false, lang = "kk" }: RSVPFormProps) {
   const [isPending, startTransition] = useTransition();
   const [outcome, setOutcome] = useState<
     "success" | "duplicate" | null
@@ -110,15 +138,20 @@ export function RSVPForm({ inviteId, accent: _accent }: { inviteId: string; acce
 
   const onSubmit = handleSubmit((data) => {
     setServerError(null);
+    if (demo) {
+      // Local-only — no network call, no Guest row, ever.
+      setOutcome("success");
+      return;
+    }
     startTransition(async () => {
-      const res = await submitRSVP(inviteId, data);
+      const res = await submitRSVP(inviteId as string, data);
       if ("success" in res) setOutcome("success");
       else if ("duplicate" in res) setOutcome("duplicate");
       else setServerError(res.error);
     });
   });
 
-  if (outcome === "success") return <SuccessState status={selectedStatus} count={count} />;
+  if (outcome === "success") return <SuccessState status={selectedStatus} count={count} demo={demo} lang={lang} />;
   if (outcome === "duplicate") return <DuplicateState />;
 
   return (

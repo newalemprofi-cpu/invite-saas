@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Wish } from "@prisma/client";
 import type { Template } from "@/lib/templates";
 import type { FeatureKey } from "@/lib/features";
+import type { Lang } from "@/lib/i18n";
 import { THEMES } from "@/types/invite";
 import { RSVPForm } from "./RSVPForm";
 import { WishesWall } from "./WishesWall";
@@ -100,11 +101,28 @@ export interface InvitationViewProps {
   isPreview?: boolean;
   /** Real DB context for the two genuinely interactive, write-capable
    * sections (RSVP submission, the guest wishes wall). Omitted entirely for
-   * the demo route — with no `invite`, both sections fall back to their
-   * OWN existing "not published yet" treatment, exactly what a customer's
-   * own fresh invitation already shows before they publish it. Nothing
-   * demo-specific was added to either section for this. */
+   * the demo route. */
   invite?: { id: string; status: string } | null;
+  /**
+   * true only for the template full-preview demo (/templates/[slug]).
+   * Lets RSVP/Wishes render a realistic, fully-interactive-LOOKING sample
+   * instead of the real-but-unpublished "not active yet" placeholder — a
+   * prospective customer should see the complete finished experience, not
+   * a locked section. Demo submissions are always local-only (no
+   * submitRSVP/submitWish call, no Invite/RSVP/Wish DB row ever created)
+   * — see RSVPForm's and WishesWall's own `demo` prop docs. Real
+   * `/i/[slug]` never passes this (defaults false), so its behavior is
+   * byte-for-byte unchanged.
+   */
+  demo?: boolean;
+  /** Locale for the handful of genuinely NEW demo-only strings this task
+   * introduces (sample wishes, etc). Every OTHER string in this component
+   * was already hardcoded Kazakh before this — that pre-existing
+   * convention is intentionally left alone (§16: preserve current
+   * localization rules), this prop only governs new demo content.
+   * Defaults "kk", matching that existing convention exactly, so
+   * `/i/[slug]` (which never passes it) is unaffected. */
+  lang?: Lang;
 }
 
 function fmt(s: string) {
@@ -174,7 +192,7 @@ function resolveEnabledBlocks(d: D): string[] {
  * capable sections). Whatever renders here is what the customer actually
  * receives once published — never a second, simplified re-implementation.
  */
-export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, invite = null }: InvitationViewProps) {
+export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, invite = null, demo = false, lang = "kk" }: InvitationViewProps) {
   const isEntitledTo = (key: string) => (entitled as readonly string[]).includes(key);
 
   const legacy = THEMES.find((t) => t.id === d.theme) ?? THEMES[0];
@@ -199,6 +217,16 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
   const message = d.invitationText ?? d.message;
   const gallery = d.galleryUrls ?? [];
   const hostsLine = d.hosts || d.parents || null;
+
+  // This Server Component renders exactly once per request (no client-side
+  // re-renders to go stale between), so a single Date.now() snapshot here
+  // is safe and deterministic for the whole render — unlike calling
+  // Date.now() from inside a Client Component's render/state initializer,
+  // which is what the purity rule is guarding against and what previously
+  // caused Countdown's intermittent SSR/hydration mismatch (see its
+  // `serverNow` prop doc for the full explanation).
+  // eslint-disable-next-line react-hooks/purity
+  const nowMs = Date.now();
 
   // Blocks — respect sections ordering if available
   const blocks = resolveEnabledBlocks(d);
@@ -263,6 +291,7 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
           accent={accent}
           loop={d.musicLoop ?? true}
           autoplay={d.musicAutoplay ?? false}
+          avoidBottom={demo}
         />
       )}
 
@@ -348,14 +377,14 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
             <div className="relative z-10 w-full max-w-md mx-auto text-center flex flex-col items-center gap-6">
               {has("hero") && (
                 <>
-                  <p className="label-caps" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.35)" }}>
+                  <p className="invite-hero-kicker" style={{ color: isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.4)" }}>
                     Сізді шақырамыз
                   </p>
-                  <h1 className="heading-display text-4xl sm:text-5xl break-words" style={{ color: textDark }}>
+                  <h1 className="heading-display invite-hero-name break-words" style={{ color: textDark }}>
                     {displayName}
                   </h1>
                   {d.age && (
-                    <p className="text-sm" style={{ color: textMuted }}>{d.age}</p>
+                    <p className="invite-caption" style={{ color: textMuted }}>{d.age}</p>
                   )}
                 </>
               )}
@@ -396,8 +425,8 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
       {hostsLine && (
         <section className={SECTION_PY} style={{ background: "var(--cream)", borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto text-center">
-            <p className="label-caps mb-3" style={{ color: "var(--gold)" }}>Той иелері</p>
-            <p className="text-base sm:text-lg leading-relaxed" style={{ color: "var(--charcoal)" }}>{hostsLine}</p>
+            <p className="invite-kicker mb-4" style={{ color: "var(--gold)" }}>Той иелері</p>
+            <p className="invite-body leading-relaxed" style={{ color: "var(--charcoal)" }}>{hostsLine}</p>
           </div>
         </section>
       )}
@@ -408,10 +437,10 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
           whatever the customer actually saved. ── */}
       {d.date && (
         <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
-          <div className="max-w-md mx-auto text-center flex flex-col items-center gap-1.5">
-            <p className="label-caps mb-1" style={{ color: "var(--gold)" }}>Күні мен уақыты</p>
-            <p className="font-serif text-2xl sm:text-3xl font-semibold" style={{ color: "var(--charcoal)" }}>{fmt(d.date)}</p>
-            {d.time && <p className="text-sm" style={{ color: "var(--muted)" }}>Сағат {d.time}</p>}
+          <div className="max-w-md mx-auto text-center flex flex-col items-center gap-2">
+            <p className="invite-kicker mb-1" style={{ color: "var(--gold)" }}>Күні мен уақыты</p>
+            <p className="heading-display invite-headline font-semibold" style={{ color: "var(--charcoal)" }}>{fmt(d.date)}</p>
+            {d.time && <p className="invite-caption" style={{ color: "var(--muted)" }}>Сағат {d.time}</p>}
           </div>
         </section>
       )}
@@ -423,9 +452,9 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
         <section className={SECTION_PY} style={{ background: "var(--cream)", borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto flex flex-col items-center gap-4 text-center">
             {has("invitation_text") && message && (
-              <p className="text-base leading-relaxed italic" style={{ color: "var(--charcoal)" }}>&ldquo;{message}&rdquo;</p>
+              <p className="invite-body leading-relaxed italic" style={{ color: "var(--charcoal)" }}>&ldquo;{message}&rdquo;</p>
             )}
-            {d.note && <p className="text-sm leading-relaxed" style={{ color: "var(--muted)" }}>{d.note}</p>}
+            {d.note && <p className="invite-caption leading-relaxed" style={{ color: "var(--muted)" }}>{d.note}</p>}
           </div>
         </section>
       )}
@@ -434,10 +463,10 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
       {has("countdown") && d.date && (
         <section className={SECTION_PY} style={{ background: isDark ? "#1C1917" : "var(--cream)", borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto text-center">
-            <p className="label-caps mb-8" style={{ color: isDark ? "rgba(255,255,255,0.35)" : "var(--gold)" }}>
+            <p className="invite-kicker mb-8" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "var(--gold)" }}>
               Іс-шараға дейін
             </p>
-            <Countdown targetDate={d.date} targetTime={d.time} accent={accent} textMuted={isDark ? "rgba(255,255,255,0.4)" : "var(--muted)"} />
+            <Countdown targetDate={d.date} targetTime={d.time} accent={accent} textMuted={isDark ? "rgba(255,255,255,0.45)" : "var(--muted)"} serverNow={nowMs} />
           </div>
         </section>
       )}
@@ -446,8 +475,8 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
       {has("love_story") && d.loveStory && (
         <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto text-center">
-            <p className="label-caps mb-5" style={{ color: "var(--gold)" }}>Біздің тарих</p>
-            <p className="text-base leading-relaxed" style={{ color: "var(--charcoal)" }}>{d.loveStory}</p>
+            <p className="invite-kicker mb-5" style={{ color: "var(--gold)" }}>Біздің тарих</p>
+            <p className="invite-body leading-relaxed" style={{ color: "var(--charcoal)" }}>{d.loveStory}</p>
           </div>
         </section>
       )}
@@ -460,7 +489,7 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
       {has("video_section") && videoEmbedUrl && (
         <section className={SECTION_PY} style={{ background: "var(--cream)", borderTop: sectionDivider }}>
           <div className="max-w-2xl mx-auto">
-            <p className="label-caps text-center mb-6" style={{ color: "var(--gold)" }}>Бейне</p>
+            <p className="invite-kicker text-center mb-6" style={{ color: "var(--gold)" }}>Бейне</p>
             <div className="aspect-video rounded-2xl overflow-hidden">
               <iframe
                 src={videoEmbedUrl}
@@ -487,7 +516,7 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
       {has("program") && (
         <section className={SECTION_PY} style={{ background: "var(--cream)", borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto">
-            <p className="label-caps text-center mb-8" style={{ color: "var(--gold)" }}>Бағдарлама</p>
+            <p className="invite-kicker text-center mb-8" style={{ color: "var(--gold)" }}>Бағдарлама</p>
             {(!d.programItems || d.programItems.length === 0) && d.programText ? (
               <ProgramTimeline text={d.programText} accent={accent} textDark="var(--charcoal)" textMuted="var(--muted)" />
             ) : (
@@ -501,9 +530,9 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
       {has("dress_code") && d.dressCode && (
         <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto text-center">
-            <p className="label-caps mb-4" style={{ color: "var(--gold)" }}>Dress Code</p>
+            <p className="invite-kicker mb-4" style={{ color: "var(--gold)" }}>Dress Code</p>
             <div className="rounded-2xl p-6" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
-              <p className="text-base" style={{ color: "var(--charcoal)" }}>{d.dressCode}</p>
+              <p className="invite-body" style={{ color: "var(--charcoal)" }}>{d.dressCode}</p>
             </div>
           </div>
         </section>
@@ -538,7 +567,7 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
           constructor/storage limit — this component never touches either. */}
       {has("gallery") && gallery.length > 0 && isEntitledTo("gallery") && (
         <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
-          <p className="label-caps text-center mb-8" style={{ color: "var(--gold)" }}>Галерея</p>
+          <p className="invite-kicker text-center mb-8" style={{ color: "var(--gold)" }}>Галерея</p>
           <GalleryCarousel urls={gallery} accent={accent} variant={galleryVariant} labelPrev="Алдыңғы сурет" labelNext="Келесі сурет" />
         </section>
       )}
@@ -547,9 +576,9 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
       {(has("whatsapp") || has("contacts")) && (d.whatsapp || d.organizerPhone || d.contactsText) && (
         <section className={SECTION_PY} style={{ background: isDark ? "#1C1917" : "var(--cream)", borderTop: sectionDivider }}>
           <div className="max-w-sm mx-auto text-center flex flex-col items-center gap-4">
-            <p className="label-caps" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "var(--gold)" }}>Байланыс</p>
+            <p className="invite-kicker" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "var(--gold)" }}>Байланыс</p>
             {d.contactsText && (
-              <p className="text-sm" style={{ color: "var(--charcoal)" }}>{d.contactsText}</p>
+              <p className="invite-body" style={{ color: "var(--charcoal)" }}>{d.contactsText}</p>
             )}
             {(d.whatsapp || d.organizerPhone) && (
               <a
@@ -574,9 +603,9 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
       {has("wishes") && (
         <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto text-center">
-            <p className="label-caps mb-4" style={{ color: "var(--gold)" }}>Тілектер</p>
+            <p className="invite-kicker mb-4" style={{ color: "var(--gold)" }}>Тілектер</p>
             <div className="rounded-2xl p-6" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
-              <p className="text-sm leading-relaxed" style={{ color: "var(--charcoal)" }}>
+              <p className="invite-body leading-relaxed" style={{ color: "var(--charcoal)" }}>
                 {d.wishesText || "Тілектеріңізді жазыңыз..."}
               </p>
             </div>
@@ -586,23 +615,27 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
 
       {/* ── Guest wishes wall (paid WISHES add-on) — guests writing BACK to
           the couple, a real persisted Wish[] model, distinct from the
-          static wishesText above. Only rendered when both entitled AND a
-          real, actually-published invite exists (guests can't submit to an
-          unpublished/preview/demo invite — the demo route never passes an
-          `invite`, so this is simply never true there). Internally shows a
-          swipeable one-at-a-time carousel once more than one wish exists
-          (§13) — see WishesWall.tsx. */}
-      {isEntitledTo("wishes") && invite?.status === "PUBLISHED" && (
-        <WishesWall inviteId={invite.id} wishes={wishes} accent={accent} cardBg={cardBg} cardBorder={cardBorder} sectionDivider={sectionDivider} />
+          static wishesText above. Real, published invites show the real
+          wall; the template demo shows a realistic sample instead of
+          nothing (§4/§7) — WishesWall's own `demo` prop guarantees no
+          submission ever reaches the server in that mode. A real invite
+          that ISN'T published yet (owner's own unpublished-preview) shows
+          neither — unchanged from before this task. */}
+      {isEntitledTo("wishes") && (
+        invite?.status === "PUBLISHED" ? (
+          <WishesWall inviteId={invite.id} wishes={wishes} accent={accent} cardBg={cardBg} cardBorder={cardBorder} sectionDivider={sectionDivider} />
+        ) : demo ? (
+          <WishesWall demo lang={lang} accent={accent} cardBg={cardBg} cardBorder={cardBorder} sectionDivider={sectionDivider} />
+        ) : null
       )}
 
       {/* ── Gift Info ── */}
       {has("gift_info") && d.giftInfo && (
         <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto text-center">
-            <p className="label-caps mb-4" style={{ color: "var(--gold)" }}>Сыйлық ақпараты</p>
+            <p className="invite-kicker mb-4" style={{ color: "var(--gold)" }}>Сыйлық ақпараты</p>
             <div className="rounded-2xl p-6" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
-              <p className="text-sm leading-relaxed font-mono" style={{ color: "var(--charcoal)" }}>{d.giftInfo}</p>
+              <p className="invite-body font-mono" style={{ color: "var(--charcoal)" }}>{d.giftInfo}</p>
             </div>
           </div>
         </section>
@@ -613,22 +646,29 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
         <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto">
             <div className="text-center mb-7">
-              <p className="label-caps mb-2" style={{ color: "var(--gold)" }}>RSVP</p>
-              <h2 className="heading-display text-3xl mb-2" style={{ color: "var(--charcoal)" }}>Қатысасыз ба?</h2>
-              <p className="text-sm" style={{ color: "var(--muted)" }}>{d.rsvpText || "Жауабыңызды жіберіңіз"}</p>
+              <p className="invite-kicker mb-2" style={{ color: "var(--gold)" }}>RSVP</p>
+              <h2 className="heading-display invite-headline mb-2" style={{ color: "var(--charcoal)" }}>Қатысасыз ба?</h2>
+              <p className="invite-caption" style={{ color: "var(--muted)" }}>{d.rsvpText || "Жауабыңызды жіберіңіз"}</p>
             </div>
 
             {invite?.status === "PUBLISHED" ? (
               <RSVPForm inviteId={invite.id} accent={accent} />
+            ) : demo ? (
+              // Full-looking, fully-interactive RSVP form so a prospective
+              // customer sees the actual finished experience (§4/§10) —
+              // RSVPForm's own `demo` prop guarantees submission never
+              // reaches submitRSVP/the DB, only a local success state.
+              <RSVPForm demo accent={accent} lang={lang} />
             ) : (
-              // Compact, visually intentional placeholder (§14) — no longer
-              // a large empty dashed card. Same message, same meaning
-              // (RSVP becomes active once the invite is published), just
+              // Compact, visually intentional placeholder — a real
+              // invite's own unpublished-preview state, unchanged from
+              // before this task. Same message, same meaning (RSVP
+              // becomes active once the invite is published), just
               // sized to read as a calm status note rather than a broken
               // empty section.
               <div className="rounded-2xl px-5 py-4 flex items-center gap-3 bg-white" style={{ border: "1px solid rgba(0,0,0,0.06)" }}>
                 <span className="text-lg shrink-0" aria-hidden>🔒</span>
-                <p className="text-sm leading-snug" style={{ color: "var(--muted)" }}>RSVP пішіні жарияланғаннан кейін белсенді болады</p>
+                <p className="invite-caption leading-snug" style={{ color: "var(--muted)" }}>RSVP пішіні жарияланғаннан кейін белсенді болады</p>
               </div>
             )}
           </div>

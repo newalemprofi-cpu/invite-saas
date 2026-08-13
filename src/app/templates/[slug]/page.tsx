@@ -73,12 +73,14 @@ const DEMO_TEXT = {
     programText: "18:00 — Қонақтарды қарсы алу\n19:00 — Той басталады\n21:00 — Би кеші",
     location: "Grand Hall",
     address: "Алматы, әл-Фараби даңғылы 77",
+    wishesText: "Сіздердің тілектеріңіз біз үшін өте қымбат. Осы қуанышты күнде жаныңызда болғандарыңызға рахмет!",
   },
   ru: {
     invitationText: "Дорогие родные, друзья и близкие!\nПриглашаем вас разделить с нами радость и стать почётными гостями нашего торжества.",
     programText: "18:00 — Встреча гостей\n19:00 — Начало торжества\n21:00 — Танцевальный вечер",
     location: "Grand Hall",
     address: "Алматы, пр. аль-Фараби 77",
+    wishesText: "Ваши пожелания очень ценны для нас. Спасибо, что вы рядом в этот радостный день!",
   },
 } as const;
 
@@ -125,7 +127,7 @@ export default async function TemplateDemoPage({ params, searchParams }: Props) 
   // placeholder copy below, so a template with zero admin-configured demo
   // content renders exactly as it always did (incremental migration, §12).
   const dc = tmpl.demoContent ?? {};
-  const demo = DEMO_TEXT[lang];
+  const demoText = DEMO_TEXT[lang];
 
   const configuredPhoto = dc.mainPhoto ? resolveStoredImage(dc.mainPhoto) : null;
   const demoPhoto = configuredPhoto ?? tmpl.demoImage ?? tmpl.previewImage ?? null;
@@ -157,12 +159,16 @@ export default async function TemplateDemoPage({ params, searchParams }: Props) 
     hosts: dc.hosts,
     date: demoDateStr,
     time: dc.time || "18:00",
-    location: dc.location || demo.location,
-    address: dc.address || demo.address,
+    location: dc.location || demoText.location,
+    address: dc.address || demoText.address,
     mapLink,
-    invitationText: (lang === "ru" ? dc.invitationTextRu : dc.invitationTextKk) || demo.invitationText,
-    programText: (lang === "ru" ? dc.programTextRu : dc.programTextKk) || demo.programText,
+    invitationText: (lang === "ru" ? dc.invitationTextRu : dc.invitationTextKk) || demoText.invitationText,
+    programText: (lang === "ru" ? dc.programTextRu : dc.programTextKk) || demoText.programText,
     note: lang === "ru" ? dc.noteRu : dc.noteKk,
+    // Not yet an admin-configurable demoContent field — a sensible
+    // localized default so the demo never shows the bare "Тілектеріңізді
+    // жазыңыз..." placeholder as if the section were empty (§4).
+    wishesText: demoText.wishesText,
     bgImageUrl: demoPhoto,
     bgType: demoPhoto ? "image" : "color",
     galleryUrls,
@@ -200,8 +206,12 @@ export default async function TemplateDemoPage({ params, searchParams }: Props) 
         {t.back}
       </Link>
 
-      {/* The full, real invitation — same renderer as the published site. */}
-      <InvitationView d={d} tmpl={tmpl} entitled={FEATURE_KEYS} wishes={[]} isPreview={false} invite={null} />
+      {/* The full, real invitation — same renderer as the published site.
+          demo=true switches RSVP/Wishes to realistic, non-persisting sample
+          presentations (§4/§14) and moves the floating music control clear
+          of the CTA bar below; lang governs only those genuinely new
+          demo-only strings. */}
+      <InvitationView d={d} tmpl={tmpl} entitled={FEATURE_KEYS} wishes={[]} isPreview={false} invite={null} demo lang={lang} />
 
       {/* SaaS controls around the demo — deliberately styled with the
           platform's own ivory/gold/charcoal language (not the template's

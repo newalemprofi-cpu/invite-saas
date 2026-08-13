@@ -168,15 +168,18 @@ function HeroContent({
   minimal?: boolean;
 }) {
   const displayName = data.partner ? `${data.name} & ${data.partner}` : data.name;
-  const nameSize = compact ? "text-xl" : "text-4xl sm:text-5xl";
-  const kickerSize = compact ? "text-[9px]" : "text-xs";
-  const bodySize = compact ? "text-[10px]" : "text-sm";
-  const gap = compact ? "gap-1.5" : "gap-4";
-  const shadow = overPhoto ? { textShadow: "0 1px 6px rgba(0,0,0,0.35)" } : undefined;
+  const nameSize = compact ? "text-xl" : "invite-hero-name";
+  const kickerClass = compact ? "label-caps text-[9px]" : "invite-hero-kicker";
+  const bodySize = compact ? "text-[10px]" : "invite-caption";
+  const gap = compact ? "gap-1.5" : "gap-5";
+  // A slightly stronger shadow than before — still a soft, natural falloff
+  // (never a hard outline/box), just enough extra headroom for arbitrary
+  // customer photos that are brighter or busier than the reference photo.
+  const shadow = overPhoto ? { textShadow: "0 2px 10px rgba(0,0,0,0.45), 0 1px 3px rgba(0,0,0,0.3)" } : undefined;
 
   return (
     <div className={`flex flex-col items-center text-center ${gap} w-full`}>
-      <p className={`label-caps ${kickerSize}`} style={{ color: tokens.textMuted, ...shadow }}>{kickerLabel}</p>
+      <p className={kickerClass} style={{ color: tokens.textMuted, ...shadow }}>{kickerLabel}</p>
       <h1 className={`heading-display font-semibold leading-tight break-words ${nameSize}`} style={{ color: tokens.textDark, ...shadow }}>
         {displayName || "—"}
       </h1>
@@ -218,9 +221,13 @@ export function WeddingHero({ data, tokens, layout, compact = false, minimal = f
     return (
       <div className="relative w-full h-full flex-1 flex flex-col overflow-hidden" style={{ background: tokens.bg }}>
         <PhotoOrPlaceholder photoUrl={data.photoUrl} decorPreset={decorPreset} className="absolute inset-0" />
+        {/* Slightly deeper than before (extra 55%/70% stops) for reliable
+            text contrast against arbitrary customer photos, without ever
+            darkening the photo's own upper two-thirds — the photo stays
+            the dominant, clearly visible element. */}
         <div
           className="absolute inset-0"
-          style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.08) 35%, rgba(255,247,244,0.94) 78%, rgba(255,247,244,0.98) 100%)" }}
+          style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.06) 0%, rgba(0,0,0,0.1) 32%, rgba(20,15,12,0.28) 55%, rgba(255,247,244,0.88) 72%, rgba(255,247,244,0.98) 100%)" }}
         />
         <div className={`relative z-10 mt-auto flex flex-col items-center ${pad} w-full`}>
           <HeroContent
@@ -335,6 +342,7 @@ export function WeddingHero({ data, tokens, layout, compact = false, minimal = f
             compact={compact}
             kickerLabel="Сізді шақырамыз"
             divider={<div className="w-10 h-px" style={{ background: tokens.accent, opacity: 0.45 }} />}
+            overPhoto
           />
         </div>
       </div>
