@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { parseTemplateDemoContent } from "@/lib/template-demo";
 
 function adminOnly() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -49,6 +51,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (body.tags !== undefined) data.tags = Array.isArray(body.tags) ? body.tags : [];
   if (body.tagsKk !== undefined) data.tagsKk = Array.isArray(body.tagsKk) ? body.tagsKk : [];
   if (body.tagsRu !== undefined) data.tagsRu = Array.isArray(body.tagsRu) ? body.tagsRu : [];
+  if (body.demoContent !== undefined) {
+    data.demoContent = parseTemplateDemoContent(body.demoContent) as unknown as Prisma.InputJsonValue;
+  }
 
   try {
     const tmpl = await db.inviteTemplate.update({ where: { id }, data });

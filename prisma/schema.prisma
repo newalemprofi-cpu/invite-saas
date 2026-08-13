@@ -509,6 +509,18 @@ model InviteTemplate {
   tags          String[] @default([])
   tagsKk        String[] @default([])
   tagsRu        String[] @default([])
+  // Admin-managed content for the full "Толық көру" demo (/templates/[slug])
+  // — see src/lib/template-demo.ts's TemplateDemoContent for the shape.
+  // Separate from previewImage/demoImage (compact catalog card assets) and
+  // from every visual-composition field above (bg/gradient/accent/...):
+  // this is customer-facing DEMO CONTENT only, never layout/photoMode. A
+  // plain nullable JSON column rather than a new model or a SiteSettings
+  // blob because it is 1:1 owned by this template row's own lifecycle (must
+  // survive a slug rename, must be deleted automatically when the template
+  // row is deleted) and is edited through this exact same admin Template
+  // CRUD path (/api/admin/templates/[id]) as every other field here —
+  // never a second storage mechanism for one entity.
+  demoContent   Json?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

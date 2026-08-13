@@ -8,13 +8,8 @@ import { resolveLang } from "@/lib/i18n";
 import { FEATURE_KEYS } from "@/lib/features";
 import { InvitationView, type D } from "@/app/i/[slug]/InvitationView";
 import { TemplateCreateButton } from "./TemplateCreateButton";
-
-/** Mirrors lib/storage.ts's getPublicUrl() — kept local since storage.ts pulls in the AWS SDK. */
-function mediaSrc(key: string): string {
-  if (!key) return "";
-  if (/^https?:\/\//i.test(key) || key.startsWith("/")) return key;
-  return `/api/media/${key.split("/").map(encodeURIComponent).join("/")}`;
-}
+import { resolveStoredImage } from "@/lib/storage";
+import { getEnabledRecommendedTracks } from "@/lib/recommended-tracks";
 
 export const dynamic = "force-dynamic";
 
@@ -90,10 +85,13 @@ const DEMO_TEXT = {
 /**
  * The full invitation demo — "Толық көру" from a template card lands here.
  * Renders the EXACT SAME InvitationView the real published invitation uses
- * (/i/[slug]), fed with synthetic content built only from the template's
- * own existing demo fields (demoName1/demoName2/demoImage/previewImage) —
- * never real customer data, and no Invite row is ever created or touched
- * just by viewing this page.
+ * (/i/[slug]), fed with the template's admin-configured demo content (see
+ * InviteTemplate.demoContent / lib/template-demo.ts, edited from Admin →
+ * Templates → "Толық демо") — falling back field-by-field to the template's
+ * existing demoName1/demoName2/demoImage/previewImage and generic localized
+ * placeholder copy for anything not yet configured. Never real customer
+ * data, and no Invite/RSVP/Wish/Payment row is ever created or touched just
+ * by viewing this page.
  */
 export default async function TemplateDemoPage({ params, searchParams }: Props) {
   const { slug } = await params;
@@ -101,9 +99,10 @@ export default async function TemplateDemoPage({ params, searchParams }: Props) 
   const lang = resolveLang(langParam);
   const t = T[lang];
 
-  const [tmpl, config] = await Promise.all([
+  const [tmpl, config, tracks] = await Promise.all([
     getDbTemplate(slug).then((row) => row ?? getTemplate(slug) ?? null),
     getAdminConfig(),
+    getEnabledRecommendedTracks(),
   ]);
   if (!tmpl) notFound();
 
@@ -119,37 +118,63 @@ export default async function TemplateDemoPage({ params, searchParams }: Props) 
 
   const backHref = `/templates?lang=${lang}&cat=${encodeURIComponent(tmpl.category)}${eventCategory ? `&eventCategory=${encodeURIComponent(eventCategory)}` : ""}`;
 
-  // Demo data — built only from the template's own existing config, never
-  // hardcoded per-slug customer-looking content.
-  const demoPhoto = tmpl.demoImage ? mediaSrc(tmpl.demoImage) : tmpl.previewImage ? mediaSrc(tmpl.previewImage) : null;
-  const galleryUrls = Array.from(new Set([tmpl.demoImage, tmpl.previewImage].filter((k): k is string => !!k))).map(mediaSrc);
+  // Demo data (§11/§12): admin-configured content (InviteTemplate.demoContent
+  // — see lib/template-demo.ts) takes priority field-by-field; any field the
+  // admin hasn't set yet falls back to the template's existing
+  // demoName1/demoName2/demoImage/previewImage or the generic localized
+  // placeholder copy below, so a template with zero admin-configured demo
+  // content renders exactly as it always did (incremental migration, §12).
+  const dc = tmpl.demoContent ?? {};
   const demo = DEMO_TEXT[lang];
-  // Always ~4 months out (never a fixed calendar date) so the countdown
-  // section always shows a real, non-zero, non-expired value no matter when
-  // the demo is viewed.
-  const demoDate = new Date();
-  demoDate.setMonth(demoDate.getMonth() + 4);
-  const demoDateStr = demoDate.toISOString().slice(0, 10);
+
+  const configuredPhoto = dc.mainPhoto ? resolveStoredImage(dc.mainPhoto) : null;
+  const demoPhoto = configuredPhoto ?? tmpl.demoImage ?? tmpl.previewImage ?? null;
+
+  const configuredGallery = dc.gallery && dc.gallery.length > 0
+    ? dc.gallery.map((key) => resolveStoredImage(key)).filter((u): u is string => !!u)
+    : null;
+  const galleryUrls = configuredGallery ?? Array.from(new Set([tmpl.demoImage, tmpl.previewImage].filter((k): k is string => !!k)));
+
+  // Never a permanently-hardcoded date (§8): admin's own configured date if
+  // set, else always ~4 months out from "now" so the countdown section
+  // always shows a real, non-zero, non-expired value no matter when the
+  // demo is viewed.
+  let demoDateStr = dc.date;
+  if (!demoDateStr) {
+    const fallbackDate = new Date();
+    fallbackDate.setMonth(fallbackDate.getMonth() + 4);
+    demoDateStr = fallbackDate.toISOString().slice(0, 10);
+  }
+
+  const track = dc.musicTrackId ? tracks.find((tr) => tr.id === dc.musicTrackId) : undefined;
+
+  const mapLink = dc.mapLink || undefined;
 
   const d: D = {
     templateSlug: tmpl.slug,
-    groomName: tmpl.demoName1,
-    brideName: tmpl.demoName2 ?? null,
+    groomName: dc.groomName || tmpl.demoName1,
+    brideName: dc.brideName ?? tmpl.demoName2 ?? null,
+    hosts: dc.hosts,
     date: demoDateStr,
-    time: "18:00",
-    location: demo.location,
-    address: demo.address,
-    invitationText: demo.invitationText,
-    programText: demo.programText,
+    time: dc.time || "18:00",
+    location: dc.location || demo.location,
+    address: dc.address || demo.address,
+    mapLink,
+    invitationText: (lang === "ru" ? dc.invitationTextRu : dc.invitationTextKk) || demo.invitationText,
+    programText: (lang === "ru" ? dc.programTextRu : dc.programTextKk) || demo.programText,
+    note: lang === "ru" ? dc.noteRu : dc.noteKk,
     bgImageUrl: demoPhoto,
     bgType: demoPhoto ? "image" : "color",
     galleryUrls,
+    musicUrl: track?.url,
+    musicEnabled: !!track,
     sections: [
       { id: "hero", enabled: true },
       { id: "countdown", enabled: true },
       { id: "invitation_text", enabled: true },
       { id: "gallery", enabled: galleryUrls.length > 0 },
       { id: "program", enabled: true },
+      { id: "map", enabled: !!mapLink },
       { id: "rsvp", enabled: true },
       { id: "wishes", enabled: true },
     ],

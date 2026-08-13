@@ -4,6 +4,8 @@ import { useState, useEffect, useTransition, useRef } from "react";
 import type { InviteTemplate } from "@prisma/client";
 import { uploadTemplateImageAction, removeTemplateImageAction } from "./actions";
 import { TEMPLATE_FILTERS } from "@/lib/templates";
+import { parseTemplateDemoContent, type TemplateDemoContent } from "@/lib/template-demo";
+import { TemplateDemoEditor, type DemoTrackOption } from "./TemplateDemoEditor";
 
 interface FormState {
   title: string;
@@ -32,6 +34,7 @@ interface FormState {
   tags: string;
   tagsKk: string;
   tagsRu: string;
+  demo: TemplateDemoContent;
 }
 
 const EMPTY: FormState = {
@@ -41,6 +44,7 @@ const EMPTY: FormState = {
   bg: "#FAF8F3", gradient: "from-amber-50 via-stone-50 to-rose-50",
   accent: "#C4963E", textDark: "#1C1917", textMuted: "#78716C",
   dark: false, emoji: "✨", demoName1: "", demoName2: "", tags: "", tagsKk: "", tagsRu: "",
+  demo: {},
 };
 
 // Single canonical style-bucket source (§3/§4) — mirrors exactly what
@@ -72,14 +76,16 @@ function toForm(t: InviteTemplate): FormState {
     textDark: t.textDark, textMuted: t.textMuted, dark: t.dark,
     emoji: t.emoji, demoName1: t.demoName1, demoName2: t.demoName2 ?? "",
     tags: t.tags.join(", "), tagsKk: t.tagsKk.join(", "), tagsRu: t.tagsRu.join(", "),
+    demo: parseTemplateDemoContent(t.demoContent),
   };
 }
 
-export function TemplatesManager() {
+export function TemplatesManager({ tracks = [] }: { tracks?: DemoTrackOption[] }) {
   const [templates, setTemplates] = useState<InviteTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [panel, setPanel] = useState<"none" | "create" | string>("none");
   const [form, setForm] = useState<FormState>(EMPTY);
+  const [tab, setTab] = useState<"card" | "demo">("card");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -96,8 +102,8 @@ export function TemplatesManager() {
   const set = (k: keyof FormState, v: unknown) =>
     setForm((p) => ({ ...p, [k]: v }));
 
-  const openCreate = () => { setForm(EMPTY); setPanel("create"); setError(null); };
-  const openEdit = (t: InviteTemplate) => { setForm(toForm(t)); setPanel(t.id); setError(null); };
+  const openCreate = () => { setForm(EMPTY); setPanel("create"); setError(null); setTab("card"); };
+  const openEdit = (t: InviteTemplate) => { setForm(toForm(t)); setPanel(t.id); setError(null); setTab("card"); };
   const close = () => setPanel("none");
 
   const save = async () => {
@@ -115,6 +121,7 @@ export function TemplatesManager() {
         nameRu: form.nameRu || null,
         descriptionRu: form.descriptionRu || null,
         demoName2: form.demoName2 || null,
+        demoContent: form.demo,
       };
       const url =
         panel === "create"
@@ -270,13 +277,35 @@ export function TemplatesManager() {
               <h2 className="font-bold text-lg" style={{ color: "var(--charcoal)" }}>
                 {panel === "create" ? "Жаңа шаблон" : "Шаблонды өзгерту"}
               </h2>
-              <button
-                onClick={close}
-                className="text-2xl leading-none"
-                style={{ color: "var(--muted)" }}
-              >
-                ×
-              </button>
+              <div className="flex items-center gap-3">
+                {panel !== "create" && form.slug && (
+                  <a
+                    href={`/templates/${encodeURIComponent(form.slug)}?lang=kk`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-semibold"
+                    style={{ color: "var(--gold-dark)" }}
+                  >
+                    Демоны көру ↗
+                  </a>
+                )}
+                <button
+                  onClick={close}
+                  className="text-2xl leading-none"
+                  style={{ color: "var(--muted)" }}
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            {/* Tabs: card/catalog config vs full-demo content (§3) — kept as
+                two clearly separate sections rather than one long form, per
+                the task's explicit instruction not to blend implementation
+                (visual composition) with content editing. */}
+            <div className="shrink-0 flex px-6 pt-3 gap-1" style={{ borderBottom: "1px solid var(--border)" }}>
+              <TabButton label="Карточка / Каталог" active={tab === "card"} onClick={() => setTab("card")} />
+              <TabButton label="Толық демо" active={tab === "demo"} onClick={() => setTab("demo")} />
             </div>
 
             {/* Scrollable form */}
@@ -287,6 +316,16 @@ export function TemplatesManager() {
                 </p>
               )}
 
+              {tab === "demo" ? (
+                <TemplateDemoEditor
+                  templateId={panel === "create" || panel === "none" ? null : panel}
+                  slug={form.slug}
+                  value={form.demo}
+                  onChange={(patch) => set("demo", { ...form.demo, ...patch })}
+                  tracks={tracks}
+                />
+              ) : (
+                <>
               {/* Basic */}
               <Section label="Негізгі ақпарат">
                 <FI label="Атауы *" value={form.title} onChange={(v) => set("title", v)} />
@@ -352,6 +391,8 @@ export function TemplatesManager() {
                   placeholder="from-amber-50 via-stone-50 to-rose-50"
                 />
               </Section>
+                </>
+              )}
 
               <button
                 onClick={save}
@@ -383,6 +424,22 @@ function Tag({ label }: { label: string }) {
     >
       {label}
     </span>
+  );
+}
+
+function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="px-4 py-2.5 text-sm font-semibold -mb-px"
+      style={{
+        color: active ? "var(--charcoal)" : "var(--muted)",
+        borderBottom: active ? "2px solid var(--gold)" : "2px solid transparent",
+      }}
+    >
+      {label}
+    </button>
   );
 }
 

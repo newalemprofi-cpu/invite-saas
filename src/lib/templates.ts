@@ -1,3 +1,5 @@
+import type { TemplateDemoContent } from "@/lib/template-demo";
+
 export interface Template {
   id: string;
   slug: string;
@@ -32,6 +34,8 @@ export interface Template {
   // rowToTemplate() in db-templates.ts from real DB rows.
   previewImage?: string | null;
   demoImage?: string | null;
+  /** Admin-managed content for the full "Толық көру" demo — see lib/template-demo.ts. Absent/undefined for the hardcoded seed TEMPLATES below; only ever populated by rowToTemplate() from a real DB row. */
+  demoContent?: TemplateDemoContent | null;
 }
 
 export type TemplateCategory =

@@ -3,6 +3,7 @@ import { TEMPLATES } from "@/lib/templates";
 import type { Template, TemplateCategory } from "@/lib/templates";
 import type { InviteTemplate } from "@prisma/client";
 import { resolveStoredImage } from "@/lib/storage";
+import { parseTemplateDemoContent } from "@/lib/template-demo";
 
 function rowToTemplate(t: InviteTemplate, price: number): Template {
   return {
@@ -32,6 +33,7 @@ function rowToTemplate(t: InviteTemplate, price: number): Template {
     demoName2: t.demoName2 ?? undefined,
     previewImage: resolveStoredImage(t.previewImage),
     demoImage: resolveStoredImage(t.demoImage),
+    demoContent: parseTemplateDemoContent(t.demoContent),
   };
 }
 
