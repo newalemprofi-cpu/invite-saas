@@ -10,6 +10,13 @@ import { Countdown } from "./Countdown";
 import { getYoutubeEmbedUrl } from "@/lib/youtube";
 import { getWeddingLayout } from "@/lib/wedding-template-layouts";
 import { WeddingHero } from "@/components/wedding/WeddingHero";
+import { GalleryCarousel, type GalleryVariant } from "@/components/invitation/GalleryCarousel";
+import { ProgramTimeline } from "@/components/invitation/ProgramTimeline";
+import { LocationSection } from "@/components/invitation/LocationSection";
+
+/** Consistent vertical rhythm for every major content section (§7) — one
+ * token instead of arbitrary per-section py-10/py-12/py-14 values. */
+const SECTION_PY = "py-16 sm:py-20 px-4";
 
 export interface Section { id: string; enabled: boolean }
 
@@ -221,6 +228,21 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
   const cardBg = isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.04)";
   const cardBorder = isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)";
 
+  // A subtle top hairline on every major section (§7) — keeps sections
+  // visually distinct even where two adjacent sections happen to share the
+  // same background (which/whether that happens depends on which optional
+  // sections a given invite actually has enabled), without ever looking
+  // like a stack of dashboard cards. A single light-oriented hairline
+  // (not isDark-branched) because almost every section below the hero
+  // already uses the codebase's existing "always ivory/cream" convention
+  // regardless of template darkness (see cardBg/cardBorder above for the
+  // same established pattern) — the two sections that stay isDark-aware
+  // (Countdown, WhatsApp) already get their separation from the background
+  // color jump itself, so a barely-visible dark-on-dark hairline there
+  // would add nothing.
+  const sectionDivider = "1px solid rgba(28,25,23,0.06)";
+  const galleryVariant: GalleryVariant = weddingLayout?.decorPreset ?? "default";
+
   return (
     <div className="min-h-screen" style={{ fontFamily }}>
       {isPreview && (
@@ -255,6 +277,7 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
           // exclusive with this branch already).
           <div className="flex-1 flex flex-col">
             <WeddingHero
+              minimal
               layout={weddingLayout}
               tokens={{ accent, textDark, textMuted, isDark, bg: heroBg }}
               data={{
@@ -337,10 +360,6 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
                 </>
               )}
 
-              {hostsLine && (
-                <p className="text-sm" style={{ color: textMuted }}>{hostsLine}</p>
-              )}
-
               <div className="flex items-center gap-4 w-full px-4">
                 <div className="flex-1 h-px opacity-25" style={{ background: accent }} />
                 <span className="opacity-40" style={{ color: accent, fontSize: isZaurePremium ? "0.7rem" : "0.875rem", letterSpacing: isZaurePremium ? "0.35em" : undefined }}>
@@ -348,45 +367,6 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
                 </span>
                 <div className="flex-1 h-px opacity-25" style={{ background: accent }} />
               </div>
-
-              {/* Not gated on has("date") — "date" was never a real toggleable
-                  section id (see DEFAULT_SECTIONS in invite-editor-data.ts), so
-                  that guard could never be true and this line never rendered.
-                  The constructor's own live preview (InvitePreview.tsx) already
-                  shows date/time unconditionally whenever the hero has data;
-                  this matches that and actually reflects saved changes. */}
-              {d.date && (
-                <div className="flex flex-col items-center gap-1.5">
-                  <p className="font-serif text-xl sm:text-2xl font-semibold" style={{ color: textDark }}>{fmt(d.date)}</p>
-                  {d.time && <p className="text-sm" style={{ color: textMuted }}>Сағат {d.time}</p>}
-                </div>
-              )}
-
-              {location && (
-                <div className="flex flex-col items-center gap-1.5">
-                  <p className="font-semibold text-base" style={{ color: textDark }}>{location}</p>
-                  {d.address && <p className="text-sm" style={{ color: textMuted }}>{d.address}</p>}
-                  {/* MAP is a paid add-on: the address TEXT above is always
-                      shown (base event info), only the "open in map app"
-                      link requires entitlement. */}
-                  {mapUrl && isEntitledTo("map") && (
-                    <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="text-sm underline underline-offset-2 hover:opacity-80" style={{ color: accent }}>
-                      Картада ашу ↗
-                    </a>
-                  )}
-                </div>
-              )}
-
-              {has("invitation_text") && message && (
-                <div className="w-full rounded-2xl px-6 py-4 text-sm leading-relaxed italic text-center"
-                  style={{ background: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.04)", color: textMuted }}>
-                  &ldquo;{message}&rdquo;
-                </div>
-              )}
-
-              {d.note && (
-                <p className="text-xs leading-relaxed" style={{ color: textMuted }}>{d.note}</p>
-              )}
             </div>
           </>
         )}
@@ -411,9 +391,48 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
         </div>
       )}
 
-      {/* ── Countdown ── */}
+      {/* ── Hosts (§ target hierarchy item 2) — moved out of the hero, which
+          now only carries the kicker/names/photo (§4). ── */}
+      {hostsLine && (
+        <section className={SECTION_PY} style={{ background: "var(--cream)", borderTop: sectionDivider }}>
+          <div className="max-w-md mx-auto text-center">
+            <p className="label-caps mb-3" style={{ color: "var(--gold)" }}>Той иелері</p>
+            <p className="text-base sm:text-lg leading-relaxed" style={{ color: "var(--charcoal)" }}>{hostsLine}</p>
+          </div>
+        </section>
+      )}
+
+      {/* ── Date + Time (§ item 3) — same "not gated on has('date')" reasoning
+          as before: "date" was never a real toggleable section id (see
+          DEFAULT_SECTIONS in invite-editor-data.ts), so this always reflects
+          whatever the customer actually saved. ── */}
+      {d.date && (
+        <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
+          <div className="max-w-md mx-auto text-center flex flex-col items-center gap-1.5">
+            <p className="label-caps mb-1" style={{ color: "var(--gold)" }}>Күні мен уақыты</p>
+            <p className="font-serif text-2xl sm:text-3xl font-semibold" style={{ color: "var(--charcoal)" }}>{fmt(d.date)}</p>
+            {d.time && <p className="text-sm" style={{ color: "var(--muted)" }}>Сағат {d.time}</p>}
+          </div>
+        </section>
+      )}
+
+      {/* ── Invitation message + note — the "long invitation copy" the hero
+          no longer carries (§4), given its own quiet moment instead of
+          competing with the photo. ── */}
+      {((has("invitation_text") && message) || d.note) && (
+        <section className={SECTION_PY} style={{ background: "var(--cream)", borderTop: sectionDivider }}>
+          <div className="max-w-md mx-auto flex flex-col items-center gap-4 text-center">
+            {has("invitation_text") && message && (
+              <p className="text-base leading-relaxed italic" style={{ color: "var(--charcoal)" }}>&ldquo;{message}&rdquo;</p>
+            )}
+            {d.note && <p className="text-sm leading-relaxed" style={{ color: "var(--muted)" }}>{d.note}</p>}
+          </div>
+        </section>
+      )}
+
+      {/* ── Countdown (§ item 4) ── */}
       {has("countdown") && d.date && (
-        <section className="py-14 px-4" style={{ background: isDark ? "#1C1917" : "var(--cream)" }}>
+        <section className={SECTION_PY} style={{ background: isDark ? "#1C1917" : "var(--cream)", borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto text-center">
             <p className="label-caps mb-8" style={{ color: isDark ? "rgba(255,255,255,0.35)" : "var(--gold)" }}>
               Іс-шараға дейін
@@ -425,27 +444,10 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
 
       {/* ── Love Story ── */}
       {has("love_story") && d.loveStory && (
-        <section className="py-14 px-4" style={{ background: "var(--ivory)" }}>
+        <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto text-center">
             <p className="label-caps mb-5" style={{ color: "var(--gold)" }}>Біздің тарих</p>
             <p className="text-base leading-relaxed" style={{ color: "var(--charcoal)" }}>{d.loveStory}</p>
-          </div>
-        </section>
-      )}
-
-      {/* ── Gallery ── */}
-      {has("gallery") && gallery.length > 0 && isEntitledTo("gallery") && (
-        <section className="py-14 px-4" style={{ background: "var(--ivory)" }}>
-          <div className="max-w-2xl mx-auto">
-            <p className="label-caps text-center mb-8" style={{ color: "var(--gold)" }}>Галерея</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {gallery.map((url, i) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <div key={i} className="aspect-square rounded-2xl overflow-hidden">
-                  <img src={url} alt="" className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" />
-                </div>
-              ))}
-            </div>
           </div>
         </section>
       )}
@@ -456,7 +458,7 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
           link hides the whole block instead of iframing raw customer input
           (see src/lib/youtube.ts). */}
       {has("video_section") && videoEmbedUrl && (
-        <section className="py-14 px-4" style={{ background: "var(--cream)" }}>
+        <section className={SECTION_PY} style={{ background: "var(--cream)", borderTop: sectionDivider }}>
           <div className="max-w-2xl mx-auto">
             <p className="label-caps text-center mb-6" style={{ color: "var(--gold)" }}>Бейне</p>
             <div className="aspect-video rounded-2xl overflow-hidden">
@@ -472,33 +474,24 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
         </section>
       )}
 
-      {/* ── Program ──
-          §7's approved Wedding form offers a single free-text "Бағдарлама"
-          field (programText), distinct from the advanced editor's
-          structured programItems timeline. When the customer used the
-          simple constructor (programText set, programItems empty), show
-          their text as-is instead of the hardcoded demo timeline. */}
+      {/* ── Program (§ item 5) — a vertical timeline instead of a single
+          text-dump paragraph (§9). ProgramTimeline itself preserves the
+          exact existing precedence (structured programItems > parsed
+          programText > nothing) and the exact same hardcoded generic
+          fallback timeline when the invite genuinely has neither — only the
+          free-text branch's presentation actually changes, from one
+          unscannable paragraph to parsed timeline entries, falling back to
+          the original plain paragraph if the text has no recognizable
+          "HH:MM — ..." lines at all. The stored programText string itself
+          is never touched. */}
       {has("program") && (
-        <section className="py-14 px-4" style={{ background: "var(--cream)" }}>
+        <section className={SECTION_PY} style={{ background: "var(--cream)", borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto">
             <p className="label-caps text-center mb-8" style={{ color: "var(--gold)" }}>Бағдарлама</p>
             {(!d.programItems || d.programItems.length === 0) && d.programText ? (
-              <p className="text-sm leading-relaxed text-center" style={{ color: "var(--charcoal)" }}>{d.programText}</p>
+              <ProgramTimeline text={d.programText} accent={accent} textDark="var(--charcoal)" textMuted="var(--muted)" />
             ) : (
-              <div className="flex flex-col gap-0">
-                {programItems.map((item, i) => (
-                  <div key={i} className="flex gap-4 relative">
-                    <div className="flex flex-col items-center">
-                      <div className="w-3 h-3 rounded-full shrink-0 mt-1" style={{ background: accent }} />
-                      {i < programItems.length - 1 && <div className="w-px flex-1 my-1" style={{ background: `${accent}30` }} />}
-                    </div>
-                    <div className="pb-5">
-                      <p className="text-sm font-semibold font-mono" style={{ color: accent }}>{item.time}</p>
-                      <p className="text-sm" style={{ color: "var(--charcoal)" }}>{item.label}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <ProgramTimeline items={programItems} accent={accent} textDark="var(--charcoal)" textMuted="var(--muted)" />
             )}
           </div>
         </section>
@@ -506,7 +499,7 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
 
       {/* ── Dress Code ── */}
       {has("dress_code") && d.dressCode && (
-        <section className="py-12 px-4" style={{ background: "var(--ivory)" }}>
+        <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto text-center">
             <p className="label-caps mb-4" style={{ color: "var(--gold)" }}>Dress Code</p>
             <div className="rounded-2xl p-6" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
@@ -516,23 +509,43 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
         </section>
       )}
 
-      {/* ── Map (paid add-on) ── */}
-      {has("map") && mapUrl && isEntitledTo("map") && (
-        <section className="py-10 px-4" style={{ background: "var(--ivory)" }}>
-          <div className="max-w-md mx-auto text-center">
-            <p className="label-caps mb-5" style={{ color: "var(--gold)" }}>Орын</p>
-            {location && <p className="text-base font-semibold mb-3" style={{ color: "var(--charcoal)" }}>{location}</p>}
-            {d.address && <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>{d.address}</p>}
-            <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="btn-outline inline-flex">
-              Картада ашу ↗
-            </a>
-          </div>
+      {/* ── Location (§ item 6) — venue/address text is always shown (base
+          event info); only the "Картада ашу" button requires both the
+          "map" section to be enabled and the map entitlement, exactly the
+          same authoritative rule the old inline-hero + separate Map block
+          enforced between them before this restructuring. ── */}
+      {(location || d.address) && (
+        <section className={SECTION_PY} style={{ background: "var(--cream)", borderTop: sectionDivider }}>
+          <LocationSection
+            location={location ?? null}
+            address={d.address ?? null}
+            mapUrl={has("map") && mapUrl && isEntitledTo("map") ? mapUrl : null}
+            kickerLabel="Орналасқан жері"
+            buttonLabel="Картада ашу ↗"
+            textDark="var(--charcoal)"
+            textMuted="var(--muted)"
+            accent={accent}
+          />
+        </section>
+      )}
+
+      {/* ── Gallery (§ item 7) — a swipeable carousel instead of a fixed
+          grid (§11), one dominant photo at a time on mobile, with a
+          template-specific frame (§12) but shared swipe/arrow/pagination
+          behavior for all 5 flagship templates and every other template
+          alike (see GalleryCarousel + SwipeTrack). Still the exact same
+          ordered `galleryUrls`, still capped at 10 by the existing
+          constructor/storage limit — this component never touches either. */}
+      {has("gallery") && gallery.length > 0 && isEntitledTo("gallery") && (
+        <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
+          <p className="label-caps text-center mb-8" style={{ color: "var(--gold)" }}>Галерея</p>
+          <GalleryCarousel urls={gallery} accent={accent} variant={galleryVariant} labelPrev="Алдыңғы сурет" labelNext="Келесі сурет" />
         </section>
       )}
 
       {/* ── WhatsApp / Contacts ── */}
       {(has("whatsapp") || has("contacts")) && (d.whatsapp || d.organizerPhone || d.contactsText) && (
-        <section className="py-10 px-4" style={{ background: isDark ? "#1C1917" : "var(--cream)" }}>
+        <section className={SECTION_PY} style={{ background: isDark ? "#1C1917" : "var(--cream)", borderTop: sectionDivider }}>
           <div className="max-w-sm mx-auto text-center flex flex-col items-center gap-4">
             <p className="label-caps" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "var(--gold)" }}>Байланыс</p>
             {d.contactsText && (
@@ -556,10 +569,10 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
         </section>
       )}
 
-      {/* ── Wishes (owner's own static message to guests — always free,
-          unrelated to the WISHES paid add-on below) ── */}
+      {/* ── Wishes (§ item 8 — owner's own static message to guests, always
+          free, unrelated to the WISHES paid add-on below) ── */}
       {has("wishes") && (
-        <section className="py-12 px-4" style={{ background: "var(--ivory)" }}>
+        <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto text-center">
             <p className="label-caps mb-4" style={{ color: "var(--gold)" }}>Тілектер</p>
             <div className="rounded-2xl p-6" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
@@ -576,14 +589,16 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
           static wishesText above. Only rendered when both entitled AND a
           real, actually-published invite exists (guests can't submit to an
           unpublished/preview/demo invite — the demo route never passes an
-          `invite`, so this is simply never true there). */}
+          `invite`, so this is simply never true there). Internally shows a
+          swipeable one-at-a-time carousel once more than one wish exists
+          (§13) — see WishesWall.tsx. */}
       {isEntitledTo("wishes") && invite?.status === "PUBLISHED" && (
-        <WishesWall inviteId={invite.id} wishes={wishes} accent={accent} cardBg={cardBg} cardBorder={cardBorder} />
+        <WishesWall inviteId={invite.id} wishes={wishes} accent={accent} cardBg={cardBg} cardBorder={cardBorder} sectionDivider={sectionDivider} />
       )}
 
       {/* ── Gift Info ── */}
       {has("gift_info") && d.giftInfo && (
-        <section className="py-12 px-4" style={{ background: "var(--cream)" }}>
+        <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto text-center">
             <p className="label-caps mb-4" style={{ color: "var(--gold)" }}>Сыйлық ақпараты</p>
             <div className="rounded-2xl p-6" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
@@ -593,11 +608,11 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
         </section>
       )}
 
-      {/* ── RSVP (paid add-on) ── */}
+      {/* ── RSVP (§ item 9, paid add-on) ── */}
       {has("rsvp") && isEntitledTo("rsvp") && (
-        <section className="py-14 px-4" style={{ background: "var(--ivory)" }}>
+        <section className={SECTION_PY} style={{ background: "var(--ivory)", borderTop: sectionDivider }}>
           <div className="max-w-md mx-auto">
-            <div className="text-center mb-8">
+            <div className="text-center mb-7">
               <p className="label-caps mb-2" style={{ color: "var(--gold)" }}>RSVP</p>
               <h2 className="heading-display text-3xl mb-2" style={{ color: "var(--charcoal)" }}>Қатысасыз ба?</h2>
               <p className="text-sm" style={{ color: "var(--muted)" }}>{d.rsvpText || "Жауабыңызды жіберіңіз"}</p>
@@ -606,8 +621,14 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
             {invite?.status === "PUBLISHED" ? (
               <RSVPForm inviteId={invite.id} accent={accent} />
             ) : (
-              <div className="rounded-2xl p-10 text-center" style={{ border: "1px dashed var(--border)", background: "white" }}>
-                <p className="text-sm" style={{ color: "var(--muted)" }}>RSVP пішіні жарияланғаннан кейін белсенді болады</p>
+              // Compact, visually intentional placeholder (§14) — no longer
+              // a large empty dashed card. Same message, same meaning
+              // (RSVP becomes active once the invite is published), just
+              // sized to read as a calm status note rather than a broken
+              // empty section.
+              <div className="rounded-2xl px-5 py-4 flex items-center gap-3 bg-white" style={{ border: "1px solid rgba(0,0,0,0.06)" }}>
+                <span className="text-lg shrink-0" aria-hidden>🔒</span>
+                <p className="text-sm leading-snug" style={{ color: "var(--muted)" }}>RSVP пішіні жарияланғаннан кейін белсенді болады</p>
               </div>
             )}
           </div>

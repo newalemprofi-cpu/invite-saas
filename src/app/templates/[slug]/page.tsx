@@ -184,11 +184,18 @@ export default async function TemplateDemoPage({ params, searchParams }: Props) 
     <div style={{ background: "var(--ivory)" }}>
       {/* Subtle floating back-nav — a small overlay pill, never a full-width
           bar competing with the invitation's own hero design. Readable over
-          both light and dark templates. */}
+          both light and dark templates. Fixed top-LEFT, safe-area aware —
+          deliberately the opposite corner from the floating music control
+          (top-right, see MusicPlayer.tsx), so the two never overlap. */}
       <Link
         href={backHref}
-        className="fixed top-4 left-4 z-[60] inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium backdrop-blur transition-opacity hover:opacity-80"
-        style={{ background: "rgba(28,25,23,0.55)", color: "#FAF8F3" }}
+        className="fixed z-[60] inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium backdrop-blur transition-opacity hover:opacity-80"
+        style={{
+          top: "max(1rem, env(safe-area-inset-top))",
+          left: "max(1rem, env(safe-area-inset-left))",
+          background: "rgba(28,25,23,0.55)",
+          color: "#FAF8F3",
+        }}
       >
         {t.back}
       </Link>

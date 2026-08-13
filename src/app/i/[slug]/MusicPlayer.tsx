@@ -57,8 +57,9 @@ function savePos(pos: Pos) {
 export function MusicPlayer({ url, accent, loop = true, autoplay = false }: Props) {
   const [playing, setPlaying] = useState(false);
   // null = not yet positioned by JS; render at the CSS-only default
-  // (bottom-left, safe-area aware) so there's no server/client mismatch and
-  // no flash of an unpositioned button before hydration.
+  // (top-right, safe-area aware — see currentPixelPos()'s comment for why)
+  // so there's no server/client mismatch and no flash of an unpositioned
+  // button before hydration.
   const [pos, setPos] = useState<Pos | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dragRef = useRef<{
@@ -153,10 +154,14 @@ export function MusicPlayer({ url, accent, loop = true, autoplay = false }: Prop
 
   const currentPixelPos = (): Pos => {
     if (pos) return pos;
-    // Mirrors the CSS default (bottom-left, EDGE_PADDING from each edge) as
+    // Mirrors the CSS default (top-right, EDGE_PADDING from each edge) as
     // real pixel coordinates, for the moment a drag starts before any
-    // saved/explicit position exists yet.
-    return clamp({ left: EDGE_PADDING, top: window.innerHeight - BUTTON_SIZE - EDGE_PADDING });
+    // saved/explicit position exists yet. Top-right (not bottom-left) is
+    // deliberate: it's clear of the demo back button (top-left), the
+    // bottom-anchored demo CTA bar, RSVP's status-choice buttons, and
+    // gallery/wishes carousel arrows — every one of which lives at the
+    // bottom or is horizontally centered, never in the top-right corner.
+    return clamp({ left: window.innerWidth - BUTTON_SIZE - EDGE_PADDING, top: EDGE_PADDING });
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -206,8 +211,8 @@ export function MusicPlayer({ url, accent, loop = true, autoplay = false }: Prop
   const style: React.CSSProperties = pos
     ? { left: pos.left, top: pos.top }
     : {
-        left: `max(${EDGE_PADDING}px, env(safe-area-inset-left))`,
-        bottom: `max(${EDGE_PADDING}px, env(safe-area-inset-bottom))`,
+        right: `max(${EDGE_PADDING}px, env(safe-area-inset-right))`,
+        top: `max(${EDGE_PADDING}px, env(safe-area-inset-top))`,
       };
 
   return (

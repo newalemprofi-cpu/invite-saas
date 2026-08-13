@@ -46,6 +46,20 @@ interface WeddingHeroProps {
    * detail mockup); false = full public page viewport. Only affects scale
    * (fonts/padding), never the underlying composition. */
   compact?: boolean;
+  /**
+   * true = show ONLY the kicker + names (+ age, if present) — hosts,
+   * date/time, venue/address, the invitation message and the note are all
+   * omitted here and rendered by the caller in their own dedicated
+   * sections instead. Default false preserves the exact original
+   * everything-in-the-hero behavior, so InvitePreview.tsx (the
+   * constructor's live/dashboard preview, which also renders this
+   * component and is explicitly out of scope for this change) needs zero
+   * edits — only InvitationView.tsx (the real public page + template
+   * demo) opts into `minimal`. The decorative divider ornament is NOT
+   * gated by this flag: it carries no information, only the template's
+   * visual identity, which must stay regardless of how much text is shown.
+   */
+  minimal?: boolean;
 }
 
 function fmtDate(s: string): string {
@@ -138,7 +152,7 @@ function EthnoOrnament({ accent }: { accent: string }) {
 /* ── Shared hero-content block (names/hosts/date/venue/message/note) ───── */
 
 function HeroContent({
-  data, tokens, compact, kickerLabel, divider, overPhoto,
+  data, tokens, compact, kickerLabel, divider, overPhoto, minimal,
 }: {
   data: WeddingHeroData;
   tokens: WeddingHeroTokens;
@@ -150,6 +164,8 @@ function HeroContent({
    * name stay readable regardless of how bright/busy the photo is,
    * independent of the gradient overlay beneath it. */
   overPhoto?: boolean;
+  /** See WeddingHeroProps.minimal. */
+  minimal?: boolean;
 }) {
   const displayName = data.partner ? `${data.name} & ${data.partner}` : data.name;
   const nameSize = compact ? "text-xl" : "text-4xl sm:text-5xl";
@@ -164,10 +180,10 @@ function HeroContent({
       <h1 className={`heading-display font-semibold leading-tight break-words ${nameSize}`} style={{ color: tokens.textDark, ...shadow }}>
         {displayName || "—"}
       </h1>
-      {data.age && <p className={bodySize} style={{ color: tokens.textMuted }}>{data.age}</p>}
-      {data.hostsLine && <p className={bodySize} style={{ color: tokens.textMuted }}>{data.hostsLine}</p>}
+      {data.age && <p className={bodySize} style={{ color: tokens.textMuted, ...shadow }}>{data.age}</p>}
+      {!minimal && data.hostsLine && <p className={bodySize} style={{ color: tokens.textMuted }}>{data.hostsLine}</p>}
       {divider}
-      {data.date && (
+      {!minimal && data.date && (
         <div className="flex flex-col items-center gap-0.5">
           <p className={`font-serif font-semibold ${compact ? "text-sm" : "text-xl sm:text-2xl"}`} style={{ color: tokens.textDark }}>
             {fmtDate(data.date)}
@@ -175,23 +191,23 @@ function HeroContent({
           {data.time && <p className={bodySize} style={{ color: tokens.textMuted }}>{data.time}</p>}
         </div>
       )}
-      {data.location && (
+      {!minimal && data.location && (
         <div className="flex flex-col items-center gap-0.5">
           <p className={`font-semibold ${compact ? "text-xs" : "text-base"}`} style={{ color: tokens.textDark }}>{data.location}</p>
           {data.address && <p className={bodySize} style={{ color: tokens.textMuted }}>{data.address}</p>}
         </div>
       )}
-      {data.message && (
+      {!minimal && data.message && (
         <p className={`italic leading-relaxed ${bodySize}`} style={{ color: tokens.textMuted }}>&ldquo;{data.message}&rdquo;</p>
       )}
-      {data.note && (
+      {!minimal && data.note && (
         <p className={`leading-relaxed ${compact ? "text-[9px]" : "text-xs"}`} style={{ color: tokens.textMuted }}>{data.note}</p>
       )}
     </div>
   );
 }
 
-export function WeddingHero({ data, tokens, layout, compact = false }: WeddingHeroProps) {
+export function WeddingHero({ data, tokens, layout, compact = false, minimal = false }: WeddingHeroProps) {
   const { photoMode, decorPreset } = layout;
   const pad = compact ? "px-4 py-4" : "px-6 py-10";
 
@@ -208,6 +224,7 @@ export function WeddingHero({ data, tokens, layout, compact = false }: WeddingHe
         />
         <div className={`relative z-10 mt-auto flex flex-col items-center ${pad} w-full`}>
           <HeroContent
+            minimal={minimal}
             data={data}
             tokens={tokens}
             compact={compact}
@@ -237,6 +254,7 @@ export function WeddingHero({ data, tokens, layout, compact = false }: WeddingHe
           <div className="absolute top-1.5 left-1.5 pointer-events-none"><ClassicCorner accent={tokens.accent} /></div>
           <div className="absolute top-1.5 right-1.5 pointer-events-none"><ClassicCorner accent={tokens.accent} flip /></div>
           <HeroContent
+            minimal={minimal}
             data={data}
             tokens={tokens}
             compact={compact}
@@ -273,6 +291,7 @@ export function WeddingHero({ data, tokens, layout, compact = false }: WeddingHe
         </div>
         <div className={`flex flex-col items-center ${pad} w-full`}>
           <HeroContent
+            minimal={minimal}
             data={data}
             tokens={tokens}
             compact={compact}
@@ -310,6 +329,7 @@ export function WeddingHero({ data, tokens, layout, compact = false }: WeddingHe
           <DarkGoldArc accent={tokens.accent} />
           <div className="h-1" />
           <HeroContent
+            minimal={minimal}
             data={data}
             tokens={{ ...tokens, textDark: tokens.accent, textMuted: "rgba(240,230,211,0.65)" }}
             compact={compact}
@@ -337,6 +357,7 @@ export function WeddingHero({ data, tokens, layout, compact = false }: WeddingHe
       </div>
       <div className={`flex flex-col items-center ${pad} w-full`}>
         <HeroContent
+            minimal={minimal}
           data={data}
           tokens={tokens}
           compact={compact}

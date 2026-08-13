@@ -9,6 +9,7 @@ import { submitWish } from "@/app/actions/wishes";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
+import { SwipeTrack } from "@/components/invitation/SwipeTrack";
 
 const schema = z.object({
   name: z.string().min(1, "Атыңызды енгізіңіз").max(100),
@@ -22,6 +23,33 @@ interface Props {
   accent: string;
   cardBg: string;
   cardBorder: string;
+  sectionDivider?: string;
+}
+
+const MONTHS_KK = [
+  "қаңтар", "ақпан", "наурыз", "сәуір", "мамыр", "маусым",
+  "шілде", "тамыз", "қыркүйек", "қазан", "қараша", "желтоқсан",
+];
+
+/**
+ * Deliberately NOT `toLocaleDateString("kk-KZ", ...)` — that produced a
+ * genuine SSR/hydration text mismatch here (confirmed by isolating it: the
+ * exact same locale call already used elsewhere in this file tree for the
+ * EVENT date, e.g. WeddingHero.tsx's fmtDate, builds the Date from plain
+ * Y/M/D integers with no time-of-day component, while a Wish's createdAt
+ * carries a full timestamp reconstructed from the RSC wire on the client —
+ * evidently enough for the two environments' ICU formatting to disagree).
+ * Plain numeric `.getDate()/.getMonth()` extraction plus a fixed Kazakh
+ * month-name table sidesteps Intl entirely, so server and client always
+ * render byte-identical text regardless of ICU/locale-data differences.
+ */
+function fmtWishDate(d: Date): string {
+  try {
+    const date = new Date(d);
+    return `${date.getDate()} ${MONTHS_KK[date.getMonth()]}`;
+  } catch {
+    return "";
+  }
 }
 
 /**
@@ -30,7 +58,7 @@ interface Props {
  * be confused with the pre-existing static `wishesText` block rendered
  * right above this in page.tsx (the couple's own message TO guests).
  */
-export function WishesWall({ inviteId, wishes, accent, cardBg, cardBorder }: Props) {
+export function WishesWall({ inviteId, wishes, accent, cardBg, cardBorder, sectionDivider }: Props) {
   const [list, setList] = useState(wishes);
   const [isPending, startTransition] = useTransition();
   const [success, setSuccess] = useState(false);
@@ -58,7 +86,7 @@ export function WishesWall({ inviteId, wishes, accent, cardBg, cardBorder }: Pro
   });
 
   return (
-    <section className="py-14 px-4" style={{ background: "var(--cream)" }}>
+    <section className="py-16 sm:py-20 px-4" style={{ background: "var(--cream)", borderTop: sectionDivider }}>
       <div className="max-w-md mx-auto">
         <p className="label-caps text-center mb-2" style={{ color: "var(--gold)" }}>Тілектер</p>
         <h2 className="heading-display text-2xl mb-6 text-center" style={{ color: "var(--charcoal)" }}>
@@ -79,15 +107,21 @@ export function WishesWall({ inviteId, wishes, accent, cardBg, cardBorder }: Pro
           </Button>
         </form>
 
+        {/* One wish at a time on a swipeable carousel once there's more than
+            one (§13) — the exact same real, persisted Wish[] either way,
+            never invented content. */}
         {list.length > 0 && (
-          <div className="flex flex-col gap-3">
+          <SwipeTrack accent={accent} labelPrev="Алдыңғы тілек" labelNext="Келесі тілек" itemClassName="w-full">
             {list.map((w) => (
-              <div key={w.id} className="rounded-2xl p-4" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
-                <p className="text-sm leading-relaxed" style={{ color: "var(--charcoal)" }}>{w.message}</p>
-                <p className="text-xs mt-2 font-semibold" style={{ color: accent }}>— {w.name}</p>
+              <div key={w.id} className="rounded-2xl p-5 min-h-[104px] flex flex-col justify-center" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
+                <p className="text-sm leading-relaxed break-words" style={{ color: "var(--charcoal)" }}>{w.message}</p>
+                <div className="flex items-center justify-between gap-2 mt-3">
+                  <p className="text-xs font-semibold" style={{ color: accent }}>— {w.name}</p>
+                  {w.createdAt && <p className="text-[11px]" style={{ color: "var(--muted)" }}>{fmtWishDate(w.createdAt)}</p>}
+                </div>
               </div>
             ))}
-          </div>
+          </SwipeTrack>
         )}
       </div>
     </section>
