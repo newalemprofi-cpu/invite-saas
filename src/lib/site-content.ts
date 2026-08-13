@@ -13,6 +13,13 @@
 import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 
+export interface CategoryContentOverride {
+  titleKk: string;
+  titleRu: string;
+  descriptionKk: string;
+  descriptionRu: string;
+}
+
 export interface SiteContent {
   heroTitle: string;
   heroTitleRu: string;
@@ -56,6 +63,15 @@ export interface SiteContent {
   hiddenCategories: string[];
   /** Event-category ids in the order they should display; any id not listed keeps the default order, appended after the listed ones. */
   categoryOrder: string[];
+  /**
+   * Event-category id -> admin-editable customer-facing copy override.
+   * Keys are always one of EVENT_CATEGORIES' canonical ids (see
+   * lib/event-categories.ts) — this table only ever overrides DISPLAY copy
+   * for an existing category, it never introduces or renames a category
+   * id. Any field left empty falls back to the canonical labelKk/labelRu
+   * (title) or renders nothing (description) — see src/app/page.tsx.
+   */
+  categoryContent: Record<string, CategoryContentOverride>;
   /** InviteTemplate slugs to show in the homepage's "featured templates" row, in order. */
   featuredTemplateSlugs: string[];
 
@@ -78,6 +94,23 @@ export interface SiteContent {
 
 const SITE_KEY = "site_content";
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+/** Defense in depth against a malformed/partial stored blob — always returns fully-shaped entries, never lets a missing field reach a render as `undefined`. */
+function sanitizeCategoryContent(raw: unknown): Record<string, CategoryContentOverride> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, CategoryContentOverride> = {};
+  for (const [id, entry] of Object.entries(raw as Record<string, unknown>)) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Partial<CategoryContentOverride>;
+    out[id] = {
+      titleKk: typeof e.titleKk === "string" ? e.titleKk : "",
+      titleRu: typeof e.titleRu === "string" ? e.titleRu : "",
+      descriptionKk: typeof e.descriptionKk === "string" ? e.descriptionKk : "",
+      descriptionRu: typeof e.descriptionRu === "string" ? e.descriptionRu : "",
+    };
+  }
+  return out;
+}
 
 export function defaultSiteContent(): SiteContent {
   return {
@@ -104,6 +137,7 @@ export function defaultSiteContent(): SiteContent {
     categoryCovers: {},
     hiddenCategories: [],
     categoryOrder: [],
+    categoryContent: {},
     featuredTemplateSlugs: [],
 
     pricingAmount: "4 990",
@@ -142,6 +176,7 @@ export async function getSiteContent(): Promise<SiteContent> {
       categoryCovers: v.categoryCovers && typeof v.categoryCovers === "object" ? v.categoryCovers : d.categoryCovers,
       hiddenCategories: Array.isArray(v.hiddenCategories) ? v.hiddenCategories : d.hiddenCategories,
       categoryOrder: Array.isArray(v.categoryOrder) ? v.categoryOrder : d.categoryOrder,
+      categoryContent: sanitizeCategoryContent(v.categoryContent),
       featuredTemplateSlugs: Array.isArray(v.featuredTemplateSlugs) ? v.featuredTemplateSlugs : d.featuredTemplateSlugs,
       pricingFeatures: Array.isArray(v.pricingFeatures) ? v.pricingFeatures : d.pricingFeatures,
     };

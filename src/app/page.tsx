@@ -6,7 +6,7 @@ import { resolveLang } from "@/lib/i18n";
 import { getSiteContent } from "@/lib/site-content";
 import { getDbTemplates } from "@/lib/db-templates";
 import { getPublicUrl } from "@/lib/storage";
-import { EVENT_CATEGORIES } from "@/lib/event-categories";
+import { EVENT_CATEGORIES, eventCategoryLabel } from "@/lib/event-categories";
 import { SiteHeader } from "@/components/home/SiteHeader";
 import { Hero } from "@/components/home/Hero";
 import { CategoryGallery, type CategoryCardData } from "@/components/home/CategoryGallery";
@@ -60,11 +60,22 @@ export default async function HomePage({ searchParams }: Props) {
     ...content.categoryOrder.map((id) => visibleCategories.find((c) => c.id === id)).filter((c): c is typeof visibleCategories[number] => !!c),
     ...visibleCategories.filter((c) => !content.categoryOrder.includes(c.id)),
   ];
-  const categoryCards: CategoryCardData[] = orderedCategories.map((category) => ({
-    category,
-    coverUrl: content.categoryCovers[category.id] ? getPublicUrl(content.categoryCovers[category.id]) : null,
-    count: allTemplates.filter((t) => t.category === category.cat).length,
-  }));
+  // Admin's per-category title/description override (Site CMS → "Мереке
+  // категориялары"), resolved for the active locale only — an empty custom
+  // title falls back to the canonical labelKk/labelRu, an empty
+  // description simply renders nothing (see CategoryGallery).
+  const categoryCards: CategoryCardData[] = orderedCategories.map((category) => {
+    const override = content.categoryContent[category.id];
+    const title = (lang === "ru" ? override?.titleRu : override?.titleKk)?.trim() || eventCategoryLabel(category, lang);
+    const description = ((lang === "ru" ? override?.descriptionRu : override?.descriptionKk) ?? "").trim();
+    return {
+      category,
+      coverUrl: content.categoryCovers[category.id] ? getPublicUrl(content.categoryCovers[category.id]) : null,
+      count: allTemplates.filter((t) => t.category === category.cat).length,
+      title,
+      description,
+    };
+  });
 
   // Featured templates: admin's explicit picks, in the order they picked
   // them; falls back to the first few active templates so the section is

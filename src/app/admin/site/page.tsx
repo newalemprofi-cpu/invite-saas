@@ -9,6 +9,13 @@ import {
   removeHeroPreviewImageAction,
 } from "./actions";
 
+interface CategoryContentOverride {
+  titleKk: string;
+  titleRu: string;
+  descriptionKk: string;
+  descriptionRu: string;
+}
+
 interface SiteContent {
   heroTitle?: string;
   heroTitleRu?: string;
@@ -27,6 +34,7 @@ interface SiteContent {
   categoryCovers?: Record<string, string>;
   hiddenCategories?: string[];
   categoryOrder?: string[];
+  categoryContent?: Record<string, CategoryContentOverride>;
   featuredTemplateSlugs?: string[];
   pricingAmount?: string;
   pricingPeriod?: string;
@@ -64,6 +72,7 @@ const DEFAULTS: SiteContent = {
   categoryCovers: {},
   hiddenCategories: [],
   categoryOrder: [],
+  categoryContent: {},
   featuredTemplateSlugs: [],
   pricingAmount: "4 990",
   pricingPeriod: "90 күн белсенді",
@@ -268,12 +277,14 @@ export default function AdminSitePage() {
             const cat = EVENT_CATEGORIES.find((c) => c.id === id)!;
             const hidden = (content.hiddenCategories ?? []).includes(id);
             const coverKey = content.categoryCovers?.[id];
+            const contentOverride = content.categoryContent?.[id];
             return (
               <CategoryCoverRow
                 key={id}
                 category={cat}
                 coverKey={coverKey}
                 hidden={hidden}
+                contentOverride={contentOverride}
                 canMoveUp={i > 0}
                 canMoveDown={i < orderedCategoryIds.length - 1}
                 onToggleHidden={() => toggleHidden(id)}
@@ -285,6 +296,10 @@ export default function AdminSitePage() {
                   delete next[id];
                   up({ categoryCovers: next });
                   removeCategoryCoverAction(id).catch(() => {});
+                }}
+                onContentChange={(patch) => {
+                  const prevEntry = content.categoryContent?.[id] ?? { titleKk: "", titleRu: "", descriptionKk: "", descriptionRu: "" };
+                  up({ categoryContent: { ...(content.categoryContent ?? {}), [id]: { ...prevEntry, ...patch } } });
                 }}
               />
             );
@@ -380,11 +395,12 @@ export default function AdminSitePage() {
 }
 
 function CategoryCoverRow({
-  category, coverKey, hidden, canMoveUp, canMoveDown, onToggleHidden, onMoveUp, onMoveDown, onUploaded, onRemoved,
+  category, coverKey, hidden, contentOverride, canMoveUp, canMoveDown, onToggleHidden, onMoveUp, onMoveDown, onUploaded, onRemoved, onContentChange,
 }: {
-  category: { id: string; emoji: string; labelKk: string };
+  category: { id: string; emoji: string; labelKk: string; labelRu: string };
   coverKey: string | undefined;
   hidden: boolean;
+  contentOverride: CategoryContentOverride | undefined;
   canMoveUp: boolean;
   canMoveDown: boolean;
   onToggleHidden: () => void;
@@ -392,10 +408,13 @@ function CategoryCoverRow({
   onMoveDown: () => void;
   onUploaded: (key: string) => void;
   onRemoved: () => void;
+  onContentChange: (patch: Partial<CategoryContentOverride>) => void;
 }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const o = contentOverride ?? { titleKk: "", titleRu: "", descriptionKk: "", descriptionRu: "" };
 
   const handleFile = (file: File) => {
     setError(null);
@@ -410,60 +429,143 @@ function CategoryCoverRow({
   };
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-xl" style={{ border: "1px solid var(--border)" }}>
-      <div
-        className="w-14 h-14 rounded-lg shrink-0 overflow-hidden flex items-center justify-center text-2xl"
-        style={{ background: "rgba(196,150,62,0.08)" }}
-      >
-        {coverKey ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={coverSrc(coverKey)} alt={category.labelKk} className="w-full h-full object-cover" />
-        ) : (
-          <span>{category.emoji}</span>
-        )}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate" style={{ color: "var(--charcoal)" }}>{category.labelKk}</p>
-        <div className="flex items-center gap-3 mt-1">
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isPending}
-            className="text-xs font-medium"
-            style={{ color: "var(--gold-dark)" }}
-          >
-            {isPending ? "Жүктелуде..." : "Сурет жүктеу"}
-          </button>
-          {coverKey && (
-            <button type="button" onClick={onRemoved} className="text-xs" style={{ color: "var(--muted)" }}>
-              Алып тастау
-            </button>
+    <div className="rounded-xl" style={{ border: "1px solid var(--border)" }}>
+      <div className="flex items-center gap-3 p-3">
+        <div
+          className="w-14 h-14 rounded-lg shrink-0 overflow-hidden flex items-center justify-center text-2xl"
+          style={{ background: "rgba(196,150,62,0.08)" }}
+        >
+          {coverKey ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={coverSrc(coverKey)} alt={category.labelKk} className="w-full h-full object-cover" />
+          ) : (
+            <span>{category.emoji}</span>
           )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (f) handleFile(f);
-            }}
-          />
         </div>
-        {error && <p className="text-[11px] text-red-500 mt-1">{error}</p>}
+
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate" style={{ color: "var(--charcoal)" }}>
+            {o.titleKk || category.labelKk}
+            <span className="text-xs font-normal ml-1.5" style={{ color: "var(--muted)" }}>({category.id})</span>
+          </p>
+          <div className="flex items-center gap-3 mt-1">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isPending}
+              className="text-xs font-medium"
+              style={{ color: "var(--gold-dark)" }}
+            >
+              {isPending ? "Жүктелуде..." : "Сурет жүктеу"}
+            </button>
+            {coverKey && (
+              <button type="button" onClick={onRemoved} className="text-xs" style={{ color: "var(--muted)" }}>
+                Алып тастау
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="text-xs font-medium"
+              style={{ color: "var(--gold-dark)" }}
+            >
+              {expanded ? "Мазмұнды жасыру ▲" : "Мазмұнды өңдеу ▾"}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (f) handleFile(f);
+              }}
+            />
+          </div>
+          {error && <p className="text-[11px] text-red-500 mt-1">{error}</p>}
+        </div>
+
+        <label className="flex items-center gap-1.5 text-xs shrink-0 cursor-pointer" style={{ color: "var(--muted)" }}>
+          <input type="checkbox" checked={!hidden} onChange={onToggleHidden} className="w-3.5 h-3.5" />
+          Көрсету
+        </label>
+
+        <div className="flex flex-col shrink-0">
+          <button type="button" onClick={onMoveUp} disabled={!canMoveUp} className="text-xs disabled:opacity-30" style={{ color: "var(--muted)" }}>▲</button>
+          <button type="button" onClick={onMoveDown} disabled={!canMoveDown} className="text-xs disabled:opacity-30" style={{ color: "var(--muted)" }}>▼</button>
+        </div>
       </div>
 
-      <label className="flex items-center gap-1.5 text-xs shrink-0 cursor-pointer" style={{ color: "var(--muted)" }}>
-        <input type="checkbox" checked={!hidden} onChange={onToggleHidden} className="w-3.5 h-3.5" />
-        Көрсету
-      </label>
+      {expanded && (
+        <div className="flex flex-col gap-3 p-3 pt-0">
+          <div className="h-px" style={{ background: "var(--border)" }} />
+          <div className="grid grid-cols-2 gap-3">
+            <CompactField
+              label="KK атауы"
+              value={o.titleKk}
+              onChange={(v) => onContentChange({ titleKk: v })}
+              placeholder={category.labelKk}
+            />
+            <CompactField
+              label="RU атауы"
+              value={o.titleRu}
+              onChange={(v) => onContentChange({ titleRu: v })}
+              placeholder={category.labelRu}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <CompactTextArea
+              label="KK сипаттамасы"
+              value={o.descriptionKk}
+              onChange={(v) => onContentChange({ descriptionKk: v })}
+              placeholder="Үйлену тойына арналған заманауи шақыру үлгілері"
+            />
+            <CompactTextArea
+              label="RU сипаттамасы"
+              value={o.descriptionRu}
+              onChange={(v) => onContentChange({ descriptionRu: v })}
+              placeholder="Современные приглашения на свадьбу"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
-      <div className="flex flex-col shrink-0">
-        <button type="button" onClick={onMoveUp} disabled={!canMoveUp} className="text-xs disabled:opacity-30" style={{ color: "var(--muted)" }}>▲</button>
-        <button type="button" onClick={onMoveDown} disabled={!canMoveDown} className="text-xs disabled:opacity-30" style={{ color: "var(--muted)" }}>▼</button>
-      </div>
+function CompactField({ label, value, onChange, placeholder }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string;
+}) {
+  return (
+    <div>
+      <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--muted)" }}>{label}</label>
+      <input
+        type="text"
+        className="input-premium text-sm"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        maxLength={60}
+      />
+    </div>
+  );
+}
+
+function CompactTextArea({ label, value, onChange, placeholder }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string;
+}) {
+  return (
+    <div>
+      <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--muted)" }}>{label}</label>
+      <textarea
+        className="input-premium text-sm resize-none"
+        rows={2}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        maxLength={200}
+      />
     </div>
   );
 }

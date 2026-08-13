@@ -2,8 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { getSiteContent, updateSiteContent } from "@/lib/site-content";
+import { EVENT_CATEGORIES } from "@/lib/event-categories";
 
 const HEX_COLOR = z.string().regex(/^#[0-9a-fA-F]{6}$/, "HEX түсі дұрыс форматта болуы керек (мысалы, #D6A84B)");
+
+// Keys are restricted to existing canonical category ids (§ INTERNAL
+// CATEGORY ID MUST NOT BE EDITABLE) — this endpoint can only override
+// DISPLAY copy for a category that already exists, never introduce or
+// rename one.
+const CATEGORY_CONTENT = z.object({
+  titleKk: z.string().max(60).default(""),
+  titleRu: z.string().max(60).default(""),
+  descriptionKk: z.string().max(200).default(""),
+  descriptionRu: z.string().max(200).default(""),
+});
+const categoryContentSchema = z.record(z.string(), CATEGORY_CONTENT).optional();
 
 const siteSchema = z.object({
   heroTitle: z.string().max(200).optional(),
@@ -21,6 +34,7 @@ const siteSchema = z.object({
   heroPreviewTemplateSlug: z.string().max(120).optional(),
   hiddenCategories: z.array(z.string()).optional(),
   categoryOrder: z.array(z.string()).optional(),
+  categoryContent: categoryContentSchema,
   featuredTemplateSlugs: z.array(z.string()).optional(),
   pricingAmount: z.string().max(20).optional(),
   pricingPeriod: z.string().max(50).optional(),
@@ -51,6 +65,14 @@ export async function PATCH(req: NextRequest) {
   const parsed = siteSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message }, { status: 400 });
 
-  const updated = await updateSiteContent(parsed.data);
+  const data = { ...parsed.data };
+  if (data.categoryContent) {
+    const validIds = new Set(EVENT_CATEGORIES.map((c) => c.id));
+    data.categoryContent = Object.fromEntries(
+      Object.entries(data.categoryContent).filter(([id]) => validIds.has(id))
+    );
+  }
+
+  const updated = await updateSiteContent(data);
   return NextResponse.json(updated);
 }
