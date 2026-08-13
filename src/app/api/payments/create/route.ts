@@ -8,6 +8,7 @@ import { kaspiProvider } from "@/lib/payment/providers/kaspi";
 import { getGenericGatewayInstructions } from "@/lib/payment/providers/generic-gateway";
 import { isProviderUsable, PROVIDER_TO_PAYMENT_ENUM, ALL_PROVIDER_IDS, type ProviderId } from "@/lib/payment-providers";
 import { validateAndCalculatePromo, reservePromoUsage, getPromoErrorMessage, PromoReservationFailedError } from "@/lib/promo-codes";
+import { getAdminConfig } from "@/lib/admin-config";
 import { markPaymentPaidAndPublish } from "@/lib/payment/lifecycle";
 import { getFeaturePricing } from "@/lib/feature-pricing";
 import { calculateInvitePrice } from "@/lib/pricing";
@@ -102,7 +103,7 @@ export async function POST(req: NextRequest) {
   // their CURRENT admin-configured price. calculateInvitePrice() silently
   // drops unknown/disabled keys, so a disabled feature can never be priced
   // here even if it's still sitting in an old selectedFeatures array.
-  const [product, featurePricing] = await Promise.all([getProductSettings(), getFeaturePricing()]);
+  const [product, featurePricing, adminConfig] = await Promise.all([getProductSettings(), getFeaturePricing(), getAdminConfig()]);
   const featureState = readFeatureState(invite.data);
   const priceBreakdown = calculateInvitePrice(featureState.selectedFeatures, featurePricing, product.price);
   const originalPrice = priceBreakdown.total;
@@ -117,6 +118,16 @@ export async function POST(req: NextRequest) {
   let resolvedPromoCode: string | null = null;
 
   if (promoCode) {
+    // Global admin toggle (§ promoCodesEnabled): while off, a manually
+    // submitted promoCode must not grant a discount even though the
+    // customer UI never shows the field — same NOT_FOUND response as an
+    // unrecognized code, so no separate "feature disabled" string exists.
+    if (!adminConfig.promoCodesEnabled) {
+      return NextResponse.json(
+        { error: getPromoErrorMessage("NOT_FOUND", lang), code: "NOT_FOUND" },
+        { status: 400 }
+      );
+    }
     const result = await validateAndCalculatePromo({
       code: promoCode,
       amount: originalPrice,

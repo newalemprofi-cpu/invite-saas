@@ -3,7 +3,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { getProductSettings } from "@/lib/product";
-import { validateAndCalculatePromo } from "@/lib/promo-codes";
+import { validateAndCalculatePromo, getPromoErrorMessage } from "@/lib/promo-codes";
+import { getAdminConfig } from "@/lib/admin-config";
 
 const schema = z.object({
   inviteId: z.string().uuid(),
@@ -49,6 +50,11 @@ export async function POST(req: NextRequest) {
   }
   if (!PAYABLE_STATUSES.has(invite.status)) {
     return NextResponse.json({ error: `Cannot pay for invite with status ${invite.status}` }, { status: 409 });
+  }
+
+  const adminConfig = await getAdminConfig();
+  if (!adminConfig.promoCodesEnabled) {
+    return NextResponse.json({ ok: false, error: getPromoErrorMessage("NOT_FOUND", lang), code: "NOT_FOUND" }, { status: 400 });
   }
 
   const product = await getProductSettings();

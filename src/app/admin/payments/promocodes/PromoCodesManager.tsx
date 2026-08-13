@@ -78,7 +78,7 @@ function formatDiscount(p: Pick<PromoRow, "type" | "value">) {
   return p.type === "PERCENT" ? `${p.value}%` : `${p.value.toLocaleString("kk-KZ")}₸`;
 }
 
-export function PromoCodesManager({ initial }: { initial: PromoRow[] }) {
+export function PromoCodesManager({ initial, customerFacingEnabled }: { initial: PromoRow[]; customerFacingEnabled: boolean }) {
   const [promos, setPromos] = useState<PromoRow[]>(initial);
   const [panel, setPanel] = useState<"none" | "create" | string>("none");
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -181,7 +181,17 @@ export function PromoCodesManager({ initial }: { initial: PromoRow[] }) {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">Промокодтар</h1>
-          <p className="text-sm text-zinc-500 mt-1">{promos.length} промокод</p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-sm text-zinc-500">{promos.length} промокод</p>
+            <span
+              className={cn(
+                "rounded-full px-2.5 py-0.5 text-[10px] font-bold",
+                customerFacingEnabled ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-500"
+              )}
+            >
+              Клиенттер үшін: {customerFacingEnabled ? "Қосулы" : "Өшірулі"}
+            </span>
+          </div>
         </div>
         <button
           onClick={openCreate}

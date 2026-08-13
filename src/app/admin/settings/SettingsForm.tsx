@@ -15,11 +15,12 @@ interface Props {
   companyEmail: string;
   instagramUrl: string;
   tiktokUrl: string;
+  promoCodesEnabled: boolean;
 }
 
 export function SettingsForm({
   price, activeDays, kaspiPaymentLink, orderWhatsapp, receiptWhatsapp,
-  companyPhone, companyEmail, instagramUrl, tiktokUrl,
+  companyPhone, companyEmail, instagramUrl, tiktokUrl, promoCodesEnabled,
 }: Props) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +76,19 @@ export function SettingsForm({
         <Input label="Email" type="email" name="companyEmail" defaultValue={companyEmail} placeholder="hello@shaqyru.kz" />
         <Input label="Instagram сілтемесі" type="url" name="instagramUrl" defaultValue={instagramUrl} placeholder="https://instagram.com/shaqyru" />
         <Input label="TikTok сілтемесі" type="url" name="tiktokUrl" defaultValue={tiktokUrl} placeholder="https://tiktok.com/@shaqyru" />
+      </FormSection>
+
+      <FormSection title="Промокодтар">
+        <label className="flex items-center gap-2.5">
+          <input
+            type="checkbox"
+            name="promoCodesEnabled"
+            defaultChecked={promoCodesEnabled}
+            className="h-4 w-4 rounded border-zinc-300"
+          />
+          <span className="text-sm font-medium text-zinc-700">Промокодтарды қосу</span>
+        </label>
+        <p className="text-xs text-zinc-500">Қосылған кезде клиент төлем кезінде промокод енгізе алады.</p>
       </FormSection>
 
       {error && (

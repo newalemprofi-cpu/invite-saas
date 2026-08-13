@@ -58,6 +58,8 @@ interface Props {
   pendingPaymentAmount: number | null;
   /** Most recent receipt attempt's status for the current PENDING payment, if any (never AUTO_VERIFIED — that implies the payment is already PAID, not PENDING). */
   latestReceiptStatus: ReceiptStatus | null;
+  /** Global admin toggle (getAdminConfig().promoCodesEnabled). When false the entire promo block is absent, not disabled — server also rejects promo codes while off. */
+  promoCodesEnabled: boolean;
 }
 
 interface PaymentFlowStrings {
@@ -268,6 +270,7 @@ export function PaymentFlow({
   pendingPaymentReference,
   pendingPaymentAmount,
   latestReceiptStatus,
+  promoCodesEnabled,
 }: Props) {
   const router = useRouter();
   const [loadingId, setLoadingId] = useState<ProviderId | null>(null);
@@ -502,32 +505,34 @@ export function PaymentFlow({
         </div>
       </div>
 
-      {appliedPromo ? (
-        <div className="flex items-center justify-between rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-2.5">
-          <span className="text-sm font-semibold text-emerald-700">{appliedPromo.code}</span>
-          <button onClick={removePromo} className="text-xs font-medium text-emerald-600 hover:text-emerald-800 transition-colors">
-            {t.remove}
-          </button>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-1.5">
-          <div className="flex gap-2">
-            <input
-              value={promoInput}
-              onChange={(e) => setPromoInput(e.target.value)}
-              placeholder={t.promoPlaceholder}
-              className="flex-1 rounded-xl border border-zinc-200 px-3.5 py-2.5 text-sm text-zinc-800 uppercase focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-400"
-            />
-            <button
-              onClick={applyPromo}
-              disabled={promoLoading || !promoInput.trim()}
-              className="shrink-0 rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50 transition-colors"
-            >
-              {promoLoading ? t.applying : t.apply}
+      {promoCodesEnabled && (
+        appliedPromo ? (
+          <div className="flex items-center justify-between rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-2.5">
+            <span className="text-sm font-semibold text-emerald-700">{appliedPromo.code}</span>
+            <button onClick={removePromo} className="text-xs font-medium text-emerald-600 hover:text-emerald-800 transition-colors">
+              {t.remove}
             </button>
           </div>
-          {promoError && <p className="text-xs text-red-500">{promoError}</p>}
-        </div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex gap-2">
+              <input
+                value={promoInput}
+                onChange={(e) => setPromoInput(e.target.value)}
+                placeholder={t.promoPlaceholder}
+                className="flex-1 rounded-xl border border-zinc-200 px-3.5 py-2.5 text-sm text-zinc-800 uppercase focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-400"
+              />
+              <button
+                onClick={applyPromo}
+                disabled={promoLoading || !promoInput.trim()}
+                className="shrink-0 rounded-xl bg-zinc-900 px-4 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50 transition-colors"
+              >
+                {promoLoading ? t.applying : t.apply}
+              </button>
+            </div>
+            {promoError && <p className="text-xs text-red-500">{promoError}</p>}
+          </div>
+        )
       )}
 
       {error && (

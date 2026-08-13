@@ -451,6 +451,7 @@ export default async function InviteDetailPage({ params, searchParams }: Props) 
             providers={checkoutProviders}
             receiptVerificationEnabled={receiptSettings.enabled}
             receiptWhatsapp={adminConfig.receiptWhatsapp}
+            promoCodesEnabled={adminConfig.promoCodesEnabled}
             pendingPaymentId={pendingPayment?.id ?? null}
             pendingPaymentReference={pendingPayment ? formatPaymentReference(pendingPayment.id) : null}
             pendingPaymentAmount={pendingPayment ? Number(pendingPayment.amount) : null}

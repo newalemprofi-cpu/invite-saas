@@ -11,6 +11,8 @@ export interface AdminConfig {
   companyEmail: string;
   instagramUrl: string;
   tiktokUrl: string;
+  /** Global customer-facing promo-code visibility/availability switch. Admin CRUD at /admin/payments/promocodes is unaffected either way. */
+  promoCodesEnabled: boolean;
 }
 
 const CONFIG_KEY = "admin_config";
@@ -29,6 +31,7 @@ function defaults(): AdminConfig {
     companyEmail: "",
     instagramUrl: "",
     tiktokUrl: "",
+    promoCodesEnabled: false,
   };
 }
 
@@ -53,6 +56,7 @@ export async function getAdminConfig(): Promise<AdminConfig> {
       companyEmail: v.companyEmail?.trim() ?? d.companyEmail,
       instagramUrl: v.instagramUrl?.trim() ?? d.instagramUrl,
       tiktokUrl: v.tiktokUrl?.trim() ?? d.tiktokUrl,
+      promoCodesEnabled: typeof v.promoCodesEnabled === "boolean" ? v.promoCodesEnabled : d.promoCodesEnabled,
     };
   } catch {
     return defaults();

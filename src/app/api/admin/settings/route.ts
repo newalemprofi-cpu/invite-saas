@@ -37,6 +37,7 @@ export async function PATCH(req: NextRequest) {
   if (body.companyEmail !== undefined) patch.companyEmail = String(body.companyEmail).trim();
   if (body.instagramUrl !== undefined) patch.instagramUrl = String(body.instagramUrl).trim();
   if (body.tiktokUrl !== undefined) patch.tiktokUrl = String(body.tiktokUrl).trim();
+  if (body.promoCodesEnabled !== undefined) patch.promoCodesEnabled = Boolean(body.promoCodesEnabled);
 
   const updated = await updateAdminConfig(patch);
   return NextResponse.json(updated);

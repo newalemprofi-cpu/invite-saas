@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
+import { getAdminConfig } from "@/lib/admin-config";
 import { PromoCodesManager } from "./PromoCodesManager";
 
 export const metadata: Metadata = { title: "Промокодтар — Admin" };
 export const dynamic = "force-dynamic";
 
 export default async function PromoCodesPage() {
-  const promos = await db.promoCode.findMany({ orderBy: { createdAt: "desc" } });
+  const [promos, adminConfig] = await Promise.all([
+    db.promoCode.findMany({ orderBy: { createdAt: "desc" } }),
+    getAdminConfig(),
+  ]);
 
   const confirmedStats = await db.promoCodeUsage.groupBy({
     by: ["promoCodeId"],
@@ -35,5 +39,5 @@ export default async function PromoCodesPage() {
     totalDiscount: statsByPromo.get(p.id)?.totalDiscount ?? 0,
   }));
 
-  return <PromoCodesManager initial={initial} />;
+  return <PromoCodesManager initial={initial} customerFacingEnabled={adminConfig.promoCodesEnabled} />;
 }

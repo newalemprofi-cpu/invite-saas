@@ -24,6 +24,7 @@ export async function updateSettingsAction(formData: FormData): Promise<{ error?
   const companyEmail = (formData.get("companyEmail") as string)?.trim() || "";
   const instagramUrl = (formData.get("instagramUrl") as string)?.trim() || "";
   const tiktokUrl = (formData.get("tiktokUrl") as string)?.trim() || "";
+  const promoCodesEnabled = formData.get("promoCodesEnabled") === "on";
 
   if (isNaN(price) || price < 0) return { error: "Жарамды баға енгізіңіз" };
   if (isNaN(activeDays) || activeDays < 1) return { error: "Жарамды күн санын енгізіңіз" };
@@ -50,9 +51,11 @@ export async function updateSettingsAction(formData: FormData): Promise<{ error?
     companyEmail,
     instagramUrl,
     tiktokUrl,
+    promoCodesEnabled,
   });
 
   revalidatePath("/admin/settings");
+  revalidatePath("/admin/payments/promocodes");
   revalidatePath("/templates");
   revalidatePath("/");
   return {};

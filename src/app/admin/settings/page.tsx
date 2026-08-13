@@ -39,6 +39,7 @@ export default async function AdminSettingsPage() {
           companyEmail={config.companyEmail}
           instagramUrl={config.instagramUrl}
           tiktokUrl={config.tiktokUrl}
+          promoCodesEnabled={config.promoCodesEnabled}
         />
       </div>
     </div>
