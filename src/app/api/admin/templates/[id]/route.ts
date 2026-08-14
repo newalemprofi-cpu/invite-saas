@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { parseTemplateDemoContent } from "@/lib/template-demo";
+import { TEMPLATE_FILTERS } from "@/lib/templates";
+import { safeParseVisualConfigInput } from "@/lib/visual-config";
+
+const VALID_CATEGORIES = new Set(TEMPLATE_FILTERS.filter((f) => f.id !== "all").map((f) => f.id));
 
 function adminOnly() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -29,7 +33,12 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (body.slug !== undefined) data.slug = String(body.slug).toLowerCase().trim();
   if (body.nameKk !== undefined) data.nameKk = body.nameKk ? String(body.nameKk) : null;
   if (body.nameRu !== undefined) data.nameRu = body.nameRu ? String(body.nameRu) : null;
-  if (body.category !== undefined) data.category = String(body.category);
+  if (body.category !== undefined) {
+    if (!VALID_CATEGORIES.has(String(body.category))) {
+      return NextResponse.json({ error: "category жарамсыз" }, { status: 400 });
+    }
+    data.category = String(body.category);
+  }
   if (body.language !== undefined) data.language = String(body.language);
   if (body.style !== undefined) data.style = String(body.style);
   if (body.description !== undefined) data.description = body.description ? String(body.description) : null;
@@ -53,6 +62,17 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (body.tagsRu !== undefined) data.tagsRu = Array.isArray(body.tagsRu) ? body.tagsRu : [];
   if (body.demoContent !== undefined) {
     data.demoContent = parseTemplateDemoContent(body.demoContent) as unknown as Prisma.InputJsonValue;
+  }
+  if (body.visualConfig !== undefined) {
+    if (body.visualConfig === null) {
+      data.visualConfig = Prisma.JsonNull;
+    } else {
+      const parsed = safeParseVisualConfigInput(body.visualConfig);
+      if (!parsed.success) {
+        return NextResponse.json({ error: "visualConfig жарамсыз: " + parsed.error.issues[0]?.message }, { status: 400 });
+      }
+      data.visualConfig = parsed.data as unknown as Prisma.InputJsonValue;
+    }
   }
 
   try {

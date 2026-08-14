@@ -9,15 +9,36 @@ import { WishesWall } from "./WishesWall";
 import { MusicPlayer } from "./MusicPlayer";
 import { Countdown } from "./Countdown";
 import { getYoutubeEmbedUrl } from "@/lib/youtube";
-import { getWeddingLayout } from "@/lib/wedding-template-layouts";
+import { getWeddingLayout, type WeddingTemplateLayout, type WeddingPhotoMode } from "@/lib/wedding-template-layouts";
 import { WeddingHero } from "@/components/wedding/WeddingHero";
 import { GalleryCarousel, type GalleryVariant } from "@/components/invitation/GalleryCarousel";
 import { ProgramTimeline } from "@/components/invitation/ProgramTimeline";
 import { LocationSection } from "@/components/invitation/LocationSection";
-import { KazakhSectionHeading, KazakhDivider, KAZAKH_ETHNO_SURFACE } from "@/components/wedding/KazakhOrnament";
+import { KazakhDivider, KAZAKH_ETHNO_SURFACE } from "@/components/wedding/KazakhOrnament";
+import { SectionDecoration } from "@/components/wedding/DecorationRegistry";
+import {
+  type VisualConfig,
+  type ReorderableSectionId,
+  type HeroVariant,
+  type GalleryVariantId,
+  type OrnamentVariant,
+  type DecorationId,
+  resolveSectionOrder,
+  resolveSectionVariant,
+  resolveSectionDecoration,
+  HERO_VARIANT_TO_PHOTO_MODE,
+  GALLERY_VARIANT_TO_FRAME,
+  FONT_OPTIONS,
+  RADIUS_VALUES,
+  SHADOW_VALUES,
+  BUTTON_RADIUS_VALUES,
+  SPACING_CLASS,
+} from "@/lib/visual-config";
 
 /** Consistent vertical rhythm for every major content section (§7) — one
- * token instead of arbitrary per-section py-10/py-12/py-14 values. */
+ * token instead of arbitrary per-section py-10/py-12/py-14 values. Also
+ * the default for the Admin Template Builder's "spacing" theme extra
+ * (SPACING_CLASS.generous is this exact string). */
 const SECTION_PY = "py-16 sm:py-20 px-4";
 
 export interface Section { id: string; enabled: boolean }
@@ -124,6 +145,20 @@ export interface InvitationViewProps {
    * Defaults "kk", matching that existing convention exactly, so
    * `/i/[slug]` (which never passes it) is unaffected. */
   lang?: Lang;
+  /**
+   * Admin Template Builder ONLY: the currently-being-edited, UNSAVED
+   * visualConfig, passed directly from client-side builder state so the
+   * exact same renderer used by /templates/[slug] and /i/[slug] can
+   * preview it live without a round-trip through the database (§17 —
+   * "Builder passes unsaved config + demo data into the shared
+   * renderer"). `undefined` (the default — every real caller) means "use
+   * `tmpl.visualConfig` as normal"; explicitly passing `null` forces the
+   * legacy/no-config rendering path even if `tmpl` happens to have a
+   * saved config (used by the Builder's "reset" affordance). Never read
+   * from untrusted request input — always local React state in the
+   * Builder component.
+   */
+  visualConfigOverride?: VisualConfig | null;
 }
 
 function fmt(s: string) {
@@ -176,33 +211,6 @@ function ZaureFloralCorner({ mirror = false, vflip = false }: { mirror?: boolean
   );
 }
 
-/**
- * Every section kicker in this file goes through here so Kazakh Ethno
- * picks up its ornament divider (KazakhSectionHeading) consistently, while
- * every other template renders the exact same plain `.invite-kicker`
- * paragraph it always has — same classes, same color, same DOM shape, just
- * reached through one shared component instead of copy-pasted 12 times.
- * `className` accounts for the divider's own extra height so vertical
- * rhythm doesn't grow when ornament is added. Declared at module scope
- * (not inside InvitationView) per the React Compiler purity rule —
- * components must never be created during another component's render.
- */
-function SectionKicker({
-  label, accent, isEthno, className = "mb-4", color = "var(--gold)",
-}: {
-  label: string;
-  accent: string;
-  isEthno: boolean;
-  className?: string;
-  color?: string;
-}) {
-  return isEthno ? (
-    <KazakhSectionHeading label={label} accent={accent} className={className} />
-  ) : (
-    <p className={`invite-kicker ${className}`} style={{ color }}>{label}</p>
-  );
-}
-
 function resolveEnabledBlocks(d: D): string[] {
   if (d.sections && d.sections.length > 0) {
     return d.sections.filter((s) => s.enabled).map((s) => s.id);
@@ -210,17 +218,37 @@ function resolveEnabledBlocks(d: D): string[] {
   return d.enabledBlocks ?? ["hero", "date", "countdown", "rsvp"];
 }
 
+/** Fixed/legacy sections that are NOT part of the Admin Template
+ * Builder's 9 reorderable body sections (§16 of the Builder task
+ * deliberately scopes reordering to exactly the task's own 10-section
+ * example, hero + 9 body sections). Each rides immediately after a
+ * specific reorderable anchor, in the SAME relative position they've
+ * always rendered in — so when sectionOrder is the untouched default,
+ * output is byte-identical to before this task, and when an admin
+ * reorders the 9 canonical sections, these fixed ones travel along with
+ * their anchor rather than disappearing or jumping to an arbitrary spot. */
+const RIDER_ANCHORS: Partial<Record<ReorderableSectionId, string[]>> = {
+  countdown: ["love_story", "video"],
+  program: ["dress_code"],
+  gallery: ["whatsapp", "wishes_static"],
+  wishes: ["gift_info"],
+};
+
 /**
  * THE single rendering source of truth for a complete invitation — used
  * identically by the real public page (/i/[slug], real Invite.data + real
- * entitlements + real RSVP/wishes DB writes) and the template full-preview
+ * entitlements + real RSVP/wishes DB writes), the template full-preview
  * demo (/templates/[slug], synthetic demo content + all-entitled + no DB
  * writes at all — see the `invite` prop's own doc comment for exactly how
  * that's achieved with zero demo-specific branching in the two write-
- * capable sections). Whatever renders here is what the customer actually
- * receives once published — never a second, simplified re-implementation.
+ * capable sections), and the Admin Template Builder's Live Preview (via
+ * `visualConfigOverride`, see that prop's doc comment). Whatever renders
+ * here is what the customer actually receives once published — never a
+ * second, simplified re-implementation.
  */
-export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, invite = null, demo = false, lang = "kk" }: InvitationViewProps) {
+export function InvitationView({
+  d, tmpl, entitled, wishes, isPreview = false, invite = null, demo = false, lang = "kk", visualConfigOverride,
+}: InvitationViewProps) {
   const isEntitledTo = (key: string) => (entitled as readonly string[]).includes(key);
 
   const legacy = THEMES.find((t) => t.id === d.theme) ?? THEMES[0];
@@ -228,18 +256,78 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
   // One of the 5 flagship Wedding templates — null for every other
   // template/legacy invite, which keeps rendering exactly as before.
   const weddingLayout = getWeddingLayout(newSlug);
-  // The ONLY template this task's Kazakh-identity redesign touches — every
-  // branch below that reads this stays byte-identical to before for the
-  // other 4 flagship templates and every legacy/non-wedding template
-  // (weddingLayout null or decorPreset !== "ethno").
+
+  // Admin Template Builder's saved (or, in the Builder itself, unsaved)
+  // visual config. `undefined` from the caller means "use tmpl's saved
+  // one"; an explicit `null` (Builder's reset affordance) forces the
+  // legacy path even if tmpl has one saved. Every template that predates
+  // this feature (including all 5 flagship Wedding templates — see the
+  // Builder task's explicit backward-compatibility requirement) has
+  // `tmpl.visualConfig === null`, so `visualConfig` below is `null` and
+  // every resolver call falls through to its legacy-derived fallback —
+  // byte-identical rendering to before this feature existed.
+  const visualConfig: VisualConfig | null = visualConfigOverride !== undefined ? visualConfigOverride : (tmpl?.visualConfig ?? null);
+
+  // Ad-hoc hero composition for a Builder-configured template that has NO
+  // hardcoded wedding-template-layouts.ts entry (i.e. every template
+  // except the 5 flagship ones) — this is the mechanism that lets a
+  // brand-new admin-built template get the SAME quality hero compositions
+  // (arch/full-bleed/top-band/framed/fade-dark) without any code change.
+  // sectionCardBg/sectionCardBorder are unused by any current consumer
+  // (confirmed: WeddingHero only reads photoMode/decorPreset, and
+  // InvitationView computes its own cardBg/cardBorder below independently
+  // of this layout object) so they're safe placeholders here.
+  const heroVariant = resolveSectionVariant<HeroVariant | "">(visualConfig, "hero", "");
+  const adHocPhotoMode = heroVariant ? (HERO_VARIANT_TO_PHOTO_MODE[heroVariant] as WeddingPhotoMode) : null;
+  const effectiveWeddingLayout: WeddingTemplateLayout | null =
+    weddingLayout ?? (adHocPhotoMode ? { photoMode: adHocPhotoMode, decorPreset: "default", sectionCardBg: "", sectionCardBorder: "" } : null);
+
+  // The legacy Kazakh Ethno flag — still drives every section's DEFAULT
+  // variant/decoration for the 5 flagship templates (all of which have
+  // visualConfig === null), exactly as before. A Builder-configured
+  // template instead sets each section's variant/decoration
+  // independently via visualConfig, decoupled from this single flag.
   const isEthno = weddingLayout?.decorPreset === "ethno";
+  const legacyOrnament: OrnamentVariant = isEthno ? "ethno" : "default";
+  const legacyDecoration: DecorationId = isEthno ? "kazakh-qoshqar" : "none";
+  const sectionOrnament = (id: ReorderableSectionId) => resolveSectionVariant<OrnamentVariant>(visualConfig, id, legacyOrnament) === "ethno";
+  const sectionDecorationId = (id: ReorderableSectionId) => resolveSectionDecoration(visualConfig, id, legacyDecoration);
 
   const accent = d.accentColor || tmpl?.accent || legacy.accent;
   const textDark = tmpl?.textDark || legacy.textColor;
   const textMuted = tmpl?.textMuted || (tmpl?.dark ?? legacy.dark ? "rgba(255,255,255,0.55)" : "#78716C");
   const isDark = tmpl?.dark ?? legacy.dark;
   const isZaurePremium = newSlug === "zaure-premium";
-  const fontFamily = d.fontFamily === "sans" ? "var(--font-sans)" : "var(--font-serif)";
+  // Theme extras (font/radius/spacing/shadow/buttonStyle) — genuinely new
+  // dimensions with no pre-existing column, so `d.fontFamily` (the
+  // customer's own per-invite choice, unrelated to the template) still
+  // takes priority when set; only when it's absent does the template's
+  // own configured heading font apply, falling back to the site's
+  // existing default serif exactly as before this feature existed.
+  const headingFontId = visualConfig?.theme?.headingFont;
+  const bodyFontId = visualConfig?.theme?.bodyFont;
+  const fontFamily = d.fontFamily === "sans"
+    ? "var(--font-sans)"
+    : (headingFontId && FONT_OPTIONS.find((f) => f.id === headingFontId)?.cssVar) || "var(--font-serif)";
+  const bodyFontFamily = bodyFontId ? FONT_OPTIONS.find((f) => f.id === bodyFontId)?.cssVar : undefined;
+  const radiusPreset = visualConfig?.theme?.radius;
+  const shadowPreset = visualConfig?.theme?.shadow;
+  const buttonStylePreset = visualConfig?.theme?.buttonStyle;
+  const spacingPreset = visualConfig?.theme?.spacing;
+  // A light-touch CSS custom-property injection (§26/theme extras) —
+  // consumed by a handful of high-impact surfaces below (RSVP/Wishes
+  // cards, Countdown cells, Location card, primary buttons) rather than
+  // an exhaustive sweep of every rounded corner in the codebase; see the
+  // Builder task's final report for the explicit V1 scoping rationale.
+  // `undefined` values simply aren't set, so a template without theme
+  // extras produces an empty style object — zero effect on any existing
+  // template.
+  const themeVars: React.CSSProperties = {
+    ...(bodyFontFamily && { ["--tpl-body-font" as string]: bodyFontFamily }),
+    ...(radiusPreset && { ["--tpl-radius" as string]: RADIUS_VALUES[radiusPreset] }),
+    ...(shadowPreset && { ["--tpl-shadow" as string]: SHADOW_VALUES[shadowPreset] }),
+    ...(buttonStylePreset && { ["--tpl-button-radius" as string]: BUTTON_RADIUS_VALUES[buttonStylePreset] }),
+  };
 
   // Names
   const name = d.groomName ?? d.person1 ?? "";
@@ -291,10 +379,11 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
 
   // Kazakh Ethno gets a visibly tighter vertical rhythm (a ~30% reduction —
   // the other 4 templates keep the original SECTION_PY untouched) and its
-  // own slightly warmer ivory/cream surface tones. Both are plain string/
-  // function values (never a global CSS override), so nothing outside this
-  // one template's render path can be affected.
-  const sectionPy = isEthno ? "py-11 sm:py-14 px-4" : SECTION_PY;
+  // own slightly warmer ivory/cream surface tones. A Builder-configured
+  // template's own `theme.spacing` preset takes priority over both when
+  // set. All plain string/function values (never a global CSS override),
+  // so nothing outside this one template's render path can be affected.
+  const sectionPy = spacingPreset ? SPACING_CLASS[spacingPreset] : (isEthno ? "py-11 sm:py-14 px-4" : SECTION_PY);
   const sectionBg = (base: "ivory" | "cream" | "darkOrCream"): string => {
     if (base === "darkOrCream") return isDark ? "#1C1917" : (isEthno ? KAZAKH_ETHNO_SURFACE.cream : "var(--cream)");
     if (!isEthno) return base === "ivory" ? "var(--ivory)" : "var(--cream)";
@@ -313,10 +402,287 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
   // color jump itself, so a barely-visible dark-on-dark hairline there
   // would add nothing.
   const sectionDivider = "1px solid rgba(28,25,23,0.06)";
-  const galleryVariant: GalleryVariant = weddingLayout?.decorPreset ?? "default";
+  const legacyGalleryVariant: GalleryVariant = effectiveWeddingLayout?.decorPreset ?? "default";
+  const galleryVariantId = visualConfig?.sections?.gallery?.variant as GalleryVariantId | undefined;
+  const galleryVariant: GalleryVariant = galleryVariantId ? (GALLERY_VARIANT_TO_FRAME[galleryVariantId] as GalleryVariant) : legacyGalleryVariant;
+
+  /* ── Reorderable body sections (§16 of the Builder task) — each
+     computed once as JSX-or-null, keyed, then assembled below in
+     Builder-configurable order via resolveSectionOrder(). Every
+     condition/prop here is copy-identical to the original hardcoded
+     sequence; only the SectionKicker→SectionDecoration call and the
+     wrapping into a keyed const changed. ── */
+
+  const hostsSection = hostsLine ? (
+    <section key="hosts" className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
+      <div className="max-w-md mx-auto text-center">
+        <SectionDecoration decorationId={sectionDecorationId("hosts")} label="Той иелері" accent={accent} className="mb-4" />
+        <p className="invite-body leading-relaxed" style={{ color: "var(--charcoal)" }}>{hostsLine}</p>
+      </div>
+    </section>
+  ) : null;
+
+  const dateSection = d.date ? (
+    <section key="datetime" className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
+      <div className="max-w-md mx-auto text-center flex flex-col items-center gap-2">
+        <SectionDecoration decorationId={sectionDecorationId("datetime")} label="Күні мен уақыты" accent={accent} className="mb-1" />
+        <p className="heading-display invite-headline font-semibold" style={{ color: "var(--charcoal)" }}>{fmt(d.date)}</p>
+        {d.time && <p className="invite-caption" style={{ color: "var(--muted)" }}>Сағат {d.time}</p>}
+      </div>
+    </section>
+  ) : null;
+
+  const invitationSection = ((has("invitation_text") && message) || d.note) ? (
+    <section key="invitation" className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
+      <div className="max-w-md mx-auto flex flex-col items-center gap-4 text-center">
+        {sectionDecorationId("invitation") === "kazakh-qoshqar" && <KazakhDivider accent={accent} />}
+        {has("invitation_text") && message && (
+          // Restrained, not fully-italic ceremonial styling for Kazakh
+          // Ethno (§10 — "do not make the entire paragraph overly
+          // italic"): non-italic body copy with quote marks doing the
+          // ceremonial signaling instead. Other templates keep the
+          // original italic treatment untouched.
+          <p className={`invite-body leading-relaxed ${sectionOrnament("invitation") ? "" : "italic"}`} style={{ color: "var(--charcoal)" }}>&ldquo;{message}&rdquo;</p>
+        )}
+        {d.note && <p className="invite-caption leading-relaxed" style={{ color: "var(--muted)" }}>{d.note}</p>}
+      </div>
+    </section>
+  ) : null;
+
+  const countdownSection = (has("countdown") && d.date) ? (
+    <section key="countdown" className={sectionPy} style={{ background: sectionBg("darkOrCream"), borderTop: sectionDivider }}>
+      <div className="max-w-md mx-auto text-center">
+        <SectionDecoration decorationId={sectionDecorationId("countdown")} label="Іс-шараға дейін" accent={accent} className="mb-8" color={isDark ? "rgba(255,255,255,0.4)" : "var(--gold)"} />
+        <Countdown targetDate={d.date} targetTime={d.time} accent={accent} textMuted={isDark ? "rgba(255,255,255,0.45)" : "var(--muted)"} serverNow={nowMs} ornament={sectionOrnament("countdown")} />
+      </div>
+    </section>
+  ) : null;
+
+  const loveStorySection = (has("love_story") && d.loveStory) ? (
+    <section key="love_story" className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
+      <div className="max-w-md mx-auto text-center">
+        <SectionDecoration decorationId={sectionDecorationId("countdown")} label="Біздің тарих" accent={accent} className="mb-5" />
+        <p className="invite-body leading-relaxed" style={{ color: "var(--charcoal)" }}>{d.loveStory}</p>
+      </div>
+    </section>
+  ) : null;
+
+  // Only ever iframes a URL that getYoutubeEmbedUrl() has validated as a
+  // recognized YouTube host/format — an unparseable or non-YouTube link
+  // hides the whole block instead of iframing raw customer input (see
+  // src/lib/youtube.ts).
+  const videoSection = (has("video_section") && videoEmbedUrl) ? (
+    <section key="video" className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
+      <div className="max-w-2xl mx-auto">
+        <SectionDecoration decorationId={sectionDecorationId("countdown")} label="Бейне" accent={accent} className="text-center mb-6" />
+        <div className="aspect-video rounded-2xl overflow-hidden">
+          <iframe
+            src={videoEmbedUrl}
+            className="w-full h-full"
+            title="Бейне"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        </div>
+      </div>
+    </section>
+  ) : null;
+
+  // Program (§ item 5) — a vertical timeline instead of a single text-dump
+  // paragraph (§9). ProgramTimeline itself preserves the exact existing
+  // precedence (structured programItems > parsed programText > nothing)
+  // and the exact same hardcoded generic fallback timeline when the
+  // invite genuinely has neither — only the free-text branch's
+  // presentation actually changes, from one unscannable paragraph to
+  // parsed timeline entries, falling back to the original plain paragraph
+  // if the text has no recognizable "HH:MM — ..." lines at all. The
+  // stored programText string itself is never touched.
+  const programSection = has("program") ? (
+    <section key="program" className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
+      <div className="max-w-md mx-auto">
+        <SectionDecoration decorationId={sectionDecorationId("program")} label="Бағдарлама" accent={accent} className="text-center mb-8" />
+        {(!d.programItems || d.programItems.length === 0) && d.programText ? (
+          <ProgramTimeline text={d.programText} accent={accent} textDark="var(--charcoal)" textMuted="var(--muted)" ornament={sectionOrnament("program")} />
+        ) : (
+          <ProgramTimeline items={programItems} accent={accent} textDark="var(--charcoal)" textMuted="var(--muted)" ornament={sectionOrnament("program")} />
+        )}
+      </div>
+    </section>
+  ) : null;
+
+  const dressCodeSection = (has("dress_code") && d.dressCode) ? (
+    <section key="dress_code" className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
+      <div className="max-w-md mx-auto text-center">
+        <SectionDecoration decorationId={sectionDecorationId("program")} label={sectionOrnament("program") ? "ДРЕСС-КОД" : "Dress Code"} accent={accent} className="mb-4" />
+        <div className="rounded-2xl p-6" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
+          <p className="invite-body" style={{ color: "var(--charcoal)" }}>{d.dressCode}</p>
+        </div>
+      </div>
+    </section>
+  ) : null;
+
+  // Location (§ item 6) — venue/address text is always shown (base event
+  // info); only the "Картада ашу" button requires both the "map" section
+  // to be enabled and the map entitlement, exactly the same authoritative
+  // rule the old inline-hero + separate Map block enforced between them
+  // before this restructuring.
+  const locationSection = (location || d.address) ? (
+    <section key="location" className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
+      <LocationSection
+        location={location ?? null}
+        address={d.address ?? null}
+        mapUrl={has("map") && mapUrl && isEntitledTo("map") ? mapUrl : null}
+        kickerLabel="Орналасқан жері"
+        buttonLabel="Картада ашу ↗"
+        textDark="var(--charcoal)"
+        textMuted="var(--muted)"
+        accent={accent}
+        ornament={sectionOrnament("location")}
+      />
+    </section>
+  ) : null;
+
+  // Gallery (§ item 7) — a swipeable carousel instead of a fixed grid
+  // (§11), one dominant photo at a time on mobile, with a
+  // template-specific frame (§12) but shared swipe/arrow/pagination
+  // behavior for all templates alike (see GalleryCarousel + SwipeTrack).
+  // Still the exact same ordered `galleryUrls`, still capped at 10 by the
+  // existing constructor/storage limit — this component never touches
+  // either.
+  const gallerySection = (has("gallery") && gallery.length > 0 && isEntitledTo("gallery")) ? (
+    <section key="gallery" className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
+      <SectionDecoration decorationId={sectionDecorationId("gallery")} label="Галерея" accent={accent} className="text-center mb-8" />
+      <GalleryCarousel urls={gallery} accent={accent} variant={galleryVariant} labelPrev="Алдыңғы сурет" labelNext="Келесі сурет" />
+    </section>
+  ) : null;
+
+  const whatsappSection = ((has("whatsapp") || has("contacts")) && (d.whatsapp || d.organizerPhone || d.contactsText)) ? (
+    <section key="whatsapp" className={sectionPy} style={{ background: sectionBg("darkOrCream"), borderTop: sectionDivider }}>
+      <div className="max-w-sm mx-auto text-center flex flex-col items-center gap-4">
+        <SectionDecoration decorationId={sectionDecorationId("gallery")} label="Байланыс" accent={accent} className="" color={isDark ? "rgba(255,255,255,0.4)" : "var(--gold)"} />
+        {d.contactsText && (
+          <p className="invite-body" style={{ color: "var(--charcoal)" }}>{d.contactsText}</p>
+        )}
+        {(d.whatsapp || d.organizerPhone) && (
+          <a
+            href={`https://wa.me/${(d.whatsapp || d.organizerPhone || "").replace(/\D/g, "")}?text=${encodeURIComponent("Сәлеметсіз бе! Шақыру туралы хабарласып жатырмын.")}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-3 px-6 py-3 rounded-full font-semibold text-white transition-opacity hover:opacity-90"
+            style={{ background: "#25D366" }}
+          >
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+            </svg>
+            WhatsApp арқылы жазу
+          </a>
+        )}
+      </div>
+    </section>
+  ) : null;
+
+  // Wishes (§ item 8 — owner's own static message to guests, always free,
+  // unrelated to the WISHES paid add-on below).
+  const wishesStaticSection = has("wishes") ? (
+    <section key="wishes_static" className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
+      <div className="max-w-md mx-auto text-center">
+        <SectionDecoration decorationId={sectionDecorationId("gallery")} label="Тілектер" accent={accent} className="mb-4" />
+        <div className="rounded-2xl p-6" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
+          <p className="invite-body leading-relaxed" style={{ color: "var(--charcoal)" }}>
+            {d.wishesText || "Тілектеріңізді жазыңыз..."}
+          </p>
+        </div>
+      </div>
+    </section>
+  ) : null;
+
+  // Guest wishes wall (paid WISHES add-on) — guests writing BACK to the
+  // couple, a real persisted Wish[] model, distinct from the static
+  // wishesText above. Real, published invites show the real wall; the
+  // template demo shows a realistic sample instead of nothing (§4/§7) —
+  // WishesWall's own `demo` prop guarantees no submission ever reaches
+  // the server in that mode. A real invite that ISN'T published yet
+  // (owner's own unpublished-preview) shows neither — unchanged from
+  // before this task.
+  const wishesWallSection = isEntitledTo("wishes") ? (
+    invite?.status === "PUBLISHED" ? (
+      <WishesWall key="wishes" inviteId={invite.id} wishes={wishes} accent={accent} cardBg={cardBg} cardBorder={cardBorder} sectionDivider={sectionDivider} ornament={sectionOrnament("wishes")} />
+    ) : demo ? (
+      <WishesWall key="wishes" demo lang={lang} accent={accent} cardBg={cardBg} cardBorder={cardBorder} sectionDivider={sectionDivider} ornament={sectionOrnament("wishes")} />
+    ) : null
+  ) : null;
+
+  const giftInfoSection = (has("gift_info") && d.giftInfo) ? (
+    <section key="gift_info" className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
+      <div className="max-w-md mx-auto text-center">
+        <SectionDecoration decorationId={sectionDecorationId("wishes")} label="Сыйлық ақпараты" accent={accent} className="mb-4" />
+        <div className="rounded-2xl p-6" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
+          <p className="invite-body font-mono" style={{ color: "var(--charcoal)" }}>{d.giftInfo}</p>
+        </div>
+      </div>
+    </section>
+  ) : null;
+
+  // RSVP (§ item 9, paid add-on).
+  const rsvpSection = (has("rsvp") && isEntitledTo("rsvp")) ? (
+    <section key="rsvp" className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
+      <div className="max-w-md mx-auto">
+        <div className="text-center mb-7">
+          <SectionDecoration decorationId={sectionDecorationId("rsvp")} label="RSVP" accent={accent} className="mb-2" />
+          <h2 className="heading-display invite-headline mb-2" style={{ color: "var(--charcoal)" }}>Қатысасыз ба?</h2>
+          <p className="invite-caption" style={{ color: "var(--muted)" }}>{d.rsvpText || "Жауабыңызды жіберіңіз"}</p>
+        </div>
+
+        {invite?.status === "PUBLISHED" ? (
+          <RSVPForm inviteId={invite.id} accent={accent} ornament={sectionOrnament("rsvp")} />
+        ) : demo ? (
+          // Full-looking, fully-interactive RSVP form so a prospective
+          // customer sees the actual finished experience (§4/§10) —
+          // RSVPForm's own `demo` prop guarantees submission never
+          // reaches submitRSVP/the DB, only a local success state.
+          <RSVPForm demo accent={accent} lang={lang} ornament={sectionOrnament("rsvp")} />
+        ) : (
+          // Compact, visually intentional placeholder — a real invite's
+          // own unpublished-preview state, unchanged from before this
+          // task. Same message, same meaning (RSVP becomes active once
+          // the invite is published), just sized to read as a calm
+          // status note rather than a broken empty section.
+          <div className="rounded-2xl px-5 py-4 flex items-center gap-3 bg-white" style={{ border: "1px solid rgba(0,0,0,0.06)" }}>
+            <span className="text-lg shrink-0" aria-hidden>🔒</span>
+            <p className="invite-caption leading-snug" style={{ color: "var(--muted)" }}>RSVP пішіні жарияланғаннан кейін белсенді болады</p>
+          </div>
+        )}
+      </div>
+    </section>
+  ) : null;
+
+  const SECTION_ELEMENTS: Record<ReorderableSectionId, React.ReactNode> = {
+    hosts: hostsSection,
+    datetime: dateSection,
+    invitation: invitationSection,
+    countdown: countdownSection,
+    program: programSection,
+    location: locationSection,
+    gallery: gallerySection,
+    wishes: wishesWallSection,
+    rsvp: rsvpSection,
+  };
+  const RIDER_ELEMENTS: Record<string, React.ReactNode> = {
+    love_story: loveStorySection,
+    video: videoSection,
+    dress_code: dressCodeSection,
+    whatsapp: whatsappSection,
+    wishes_static: wishesStaticSection,
+    gift_info: giftInfoSection,
+  };
+  const orderedSectionIds = resolveSectionOrder(visualConfig);
+  const bodyContent = orderedSectionIds.flatMap((id) => [
+    SECTION_ELEMENTS[id],
+    ...(RIDER_ANCHORS[id] ?? []).map((riderId) => RIDER_ELEMENTS[riderId]),
+  ]);
 
   return (
-    <div className="min-h-screen" style={{ fontFamily }}>
+    <div className="min-h-screen" style={{ fontFamily, ...themeVars }}>
       {isPreview && (
         <div className="sticky top-0 z-50 text-center text-sm font-semibold py-2 px-4 text-white" style={{ background: "var(--gold-dark)" }}>
           👁 Алдын ала қарау — шақыру жарияланбаған
@@ -336,14 +702,15 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
           loop={d.musicLoop ?? true}
           autoplay={d.musicAutoplay ?? false}
           avoidBottom={demo}
-          ornament={isEthno}
+          ornament={resolveSectionVariant<OrnamentVariant>(visualConfig, "hero", legacyOrnament) === "ethno"}
         />
       )}
 
       {/* ── Hero ── */}
-      <section className={`relative min-h-screen overflow-hidden ${weddingLayout ? "flex flex-col" : "flex flex-col items-center justify-center px-6 py-20"}`}>
-        {weddingLayout ? (
-          // The 5 flagship Wedding templates: the photo lives ENTIRELY
+      <section className={`relative min-h-screen overflow-hidden ${effectiveWeddingLayout ? "flex flex-col" : "flex flex-col items-center justify-center px-6 py-20"}`}>
+        {effectiveWeddingLayout ? (
+          // The 5 flagship Wedding templates, and any Builder-configured
+          // template with a hero variant set: the photo lives ENTIRELY
           // inside WeddingHero's own composition (full-bleed / top-band /
           // framed / fade / arched) — no separate whole-section background
           // image layer, no ambient glow circles, no Zaure ornaments (that
@@ -352,7 +719,7 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
           <div className="flex-1 flex flex-col">
             <WeddingHero
               minimal
-              layout={weddingLayout}
+              layout={effectiveWeddingLayout}
               tokens={{ accent, textDark, textMuted, isDark, bg: heroBg }}
               data={{
                 name,
@@ -465,265 +832,12 @@ export function InvitationView({ d, tmpl, entitled, wishes, isPreview = false, i
         </div>
       )}
 
-      {/* ── Hosts (§ target hierarchy item 2) — moved out of the hero, which
-          now only carries the kicker/names/photo (§4). ── */}
-      {hostsLine && (
-        <section className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
-          <div className="max-w-md mx-auto text-center">
-            <SectionKicker label="Той иелері" accent={accent} isEthno={isEthno} className="mb-4" />
-            <p className="invite-body leading-relaxed" style={{ color: "var(--charcoal)" }}>{hostsLine}</p>
-          </div>
-        </section>
-      )}
-
-      {/* ── Date + Time (§ item 3) — same "not gated on has('date')" reasoning
-          as before: "date" was never a real toggleable section id (see
-          DEFAULT_SECTIONS in invite-editor-data.ts), so this always reflects
-          whatever the customer actually saved. ── */}
-      {d.date && (
-        <section className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
-          <div className="max-w-md mx-auto text-center flex flex-col items-center gap-2">
-            <SectionKicker label="Күні мен уақыты" accent={accent} isEthno={isEthno} className="mb-1" />
-            <p className="heading-display invite-headline font-semibold" style={{ color: "var(--charcoal)" }}>{fmt(d.date)}</p>
-            {d.time && <p className="invite-caption" style={{ color: "var(--muted)" }}>Сағат {d.time}</p>}
-          </div>
-        </section>
-      )}
-
-      {/* ── Invitation message + note — the "long invitation copy" the hero
-          no longer carries (§4), given its own quiet moment instead of
-          competing with the photo. ── */}
-      {((has("invitation_text") && message) || d.note) && (
-        <section className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
-          <div className="max-w-md mx-auto flex flex-col items-center gap-4 text-center">
-            {isEthno && <KazakhDivider accent={accent} />}
-            {has("invitation_text") && message && (
-              // Restrained, not fully-italic ceremonial styling for Kazakh
-              // Ethno (§10 — "do not make the entire paragraph overly
-              // italic"): non-italic body copy with quote marks doing the
-              // ceremonial signaling instead. Other templates keep the
-              // original italic treatment untouched.
-              <p className={`invite-body leading-relaxed ${isEthno ? "" : "italic"}`} style={{ color: "var(--charcoal)" }}>&ldquo;{message}&rdquo;</p>
-            )}
-            {d.note && <p className="invite-caption leading-relaxed" style={{ color: "var(--muted)" }}>{d.note}</p>}
-          </div>
-        </section>
-      )}
-
-      {/* ── Countdown (§ item 4) ── */}
-      {has("countdown") && d.date && (
-        <section className={sectionPy} style={{ background: sectionBg("darkOrCream"), borderTop: sectionDivider }}>
-          <div className="max-w-md mx-auto text-center">
-            <SectionKicker label="Іс-шараға дейін" accent={accent} isEthno={isEthno} className="mb-8" color={isDark ? "rgba(255,255,255,0.4)" : "var(--gold)"} />
-            <Countdown targetDate={d.date} targetTime={d.time} accent={accent} textMuted={isDark ? "rgba(255,255,255,0.45)" : "var(--muted)"} serverNow={nowMs} ornament={isEthno} />
-          </div>
-        </section>
-      )}
-
-      {/* ── Love Story ── */}
-      {has("love_story") && d.loveStory && (
-        <section className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
-          <div className="max-w-md mx-auto text-center">
-            <SectionKicker label="Біздің тарих" accent={accent} isEthno={isEthno} className="mb-5" />
-            <p className="invite-body leading-relaxed" style={{ color: "var(--charcoal)" }}>{d.loveStory}</p>
-          </div>
-        </section>
-      )}
-
-      {/* ── Video ──
-          Only ever iframes a URL that getYoutubeEmbedUrl() has validated as
-          a recognized YouTube host/format — an unparseable or non-YouTube
-          link hides the whole block instead of iframing raw customer input
-          (see src/lib/youtube.ts). */}
-      {has("video_section") && videoEmbedUrl && (
-        <section className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
-          <div className="max-w-2xl mx-auto">
-            <SectionKicker label="Бейне" accent={accent} isEthno={isEthno} className="text-center mb-6" />
-            <div className="aspect-video rounded-2xl overflow-hidden">
-              <iframe
-                src={videoEmbedUrl}
-                className="w-full h-full"
-                title="Бейне"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-              />
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ── Program (§ item 5) — a vertical timeline instead of a single
-          text-dump paragraph (§9). ProgramTimeline itself preserves the
-          exact existing precedence (structured programItems > parsed
-          programText > nothing) and the exact same hardcoded generic
-          fallback timeline when the invite genuinely has neither — only the
-          free-text branch's presentation actually changes, from one
-          unscannable paragraph to parsed timeline entries, falling back to
-          the original plain paragraph if the text has no recognizable
-          "HH:MM — ..." lines at all. The stored programText string itself
-          is never touched. */}
-      {has("program") && (
-        <section className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
-          <div className="max-w-md mx-auto">
-            <SectionKicker label="Бағдарлама" accent={accent} isEthno={isEthno} className="text-center mb-8" />
-            {(!d.programItems || d.programItems.length === 0) && d.programText ? (
-              <ProgramTimeline text={d.programText} accent={accent} textDark="var(--charcoal)" textMuted="var(--muted)" ornament={isEthno} />
-            ) : (
-              <ProgramTimeline items={programItems} accent={accent} textDark="var(--charcoal)" textMuted="var(--muted)" ornament={isEthno} />
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* ── Dress Code ── */}
-      {has("dress_code") && d.dressCode && (
-        <section className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
-          <div className="max-w-md mx-auto text-center">
-            <SectionKicker label={isEthno ? "ДРЕСС-КОД" : "Dress Code"} accent={accent} isEthno={isEthno} className="mb-4" />
-            <div className="rounded-2xl p-6" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
-              <p className="invite-body" style={{ color: "var(--charcoal)" }}>{d.dressCode}</p>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ── Location (§ item 6) — venue/address text is always shown (base
-          event info); only the "Картада ашу" button requires both the
-          "map" section to be enabled and the map entitlement, exactly the
-          same authoritative rule the old inline-hero + separate Map block
-          enforced between them before this restructuring. ── */}
-      {(location || d.address) && (
-        <section className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
-          <LocationSection
-            location={location ?? null}
-            address={d.address ?? null}
-            mapUrl={has("map") && mapUrl && isEntitledTo("map") ? mapUrl : null}
-            kickerLabel="Орналасқан жері"
-            buttonLabel="Картада ашу ↗"
-            textDark="var(--charcoal)"
-            textMuted="var(--muted)"
-            accent={accent}
-            ornament={isEthno}
-          />
-        </section>
-      )}
-
-      {/* ── Gallery (§ item 7) — a swipeable carousel instead of a fixed
-          grid (§11), one dominant photo at a time on mobile, with a
-          template-specific frame (§12) but shared swipe/arrow/pagination
-          behavior for all 5 flagship templates and every other template
-          alike (see GalleryCarousel + SwipeTrack). Still the exact same
-          ordered `galleryUrls`, still capped at 10 by the existing
-          constructor/storage limit — this component never touches either. */}
-      {has("gallery") && gallery.length > 0 && isEntitledTo("gallery") && (
-        <section className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
-          <SectionKicker label="Галерея" accent={accent} isEthno={isEthno} className="text-center mb-8" />
-          <GalleryCarousel urls={gallery} accent={accent} variant={galleryVariant} labelPrev="Алдыңғы сурет" labelNext="Келесі сурет" />
-        </section>
-      )}
-
-      {/* ── WhatsApp / Contacts ── */}
-      {(has("whatsapp") || has("contacts")) && (d.whatsapp || d.organizerPhone || d.contactsText) && (
-        <section className={sectionPy} style={{ background: sectionBg("darkOrCream"), borderTop: sectionDivider }}>
-          <div className="max-w-sm mx-auto text-center flex flex-col items-center gap-4">
-            <SectionKicker label="Байланыс" accent={accent} isEthno={isEthno} className="" color={isDark ? "rgba(255,255,255,0.4)" : "var(--gold)"} />
-            {d.contactsText && (
-              <p className="invite-body" style={{ color: "var(--charcoal)" }}>{d.contactsText}</p>
-            )}
-            {(d.whatsapp || d.organizerPhone) && (
-              <a
-                href={`https://wa.me/${(d.whatsapp || d.organizerPhone || "").replace(/\D/g, "")}?text=${encodeURIComponent("Сәлеметсіз бе! Шақыру туралы хабарласып жатырмын.")}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-3 px-6 py-3 rounded-full font-semibold text-white transition-opacity hover:opacity-90"
-                style={{ background: "#25D366" }}
-              >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-                </svg>
-                WhatsApp арқылы жазу
-              </a>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* ── Wishes (§ item 8 — owner's own static message to guests, always
-          free, unrelated to the WISHES paid add-on below) ── */}
-      {has("wishes") && (
-        <section className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
-          <div className="max-w-md mx-auto text-center">
-            <SectionKicker label="Тілектер" accent={accent} isEthno={isEthno} className="mb-4" />
-            <div className="rounded-2xl p-6" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
-              <p className="invite-body leading-relaxed" style={{ color: "var(--charcoal)" }}>
-                {d.wishesText || "Тілектеріңізді жазыңыз..."}
-              </p>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ── Guest wishes wall (paid WISHES add-on) — guests writing BACK to
-          the couple, a real persisted Wish[] model, distinct from the
-          static wishesText above. Real, published invites show the real
-          wall; the template demo shows a realistic sample instead of
-          nothing (§4/§7) — WishesWall's own `demo` prop guarantees no
-          submission ever reaches the server in that mode. A real invite
-          that ISN'T published yet (owner's own unpublished-preview) shows
-          neither — unchanged from before this task. */}
-      {isEntitledTo("wishes") && (
-        invite?.status === "PUBLISHED" ? (
-          <WishesWall inviteId={invite.id} wishes={wishes} accent={accent} cardBg={cardBg} cardBorder={cardBorder} sectionDivider={sectionDivider} ornament={isEthno} />
-        ) : demo ? (
-          <WishesWall demo lang={lang} accent={accent} cardBg={cardBg} cardBorder={cardBorder} sectionDivider={sectionDivider} ornament={isEthno} />
-        ) : null
-      )}
-
-      {/* ── Gift Info ── */}
-      {has("gift_info") && d.giftInfo && (
-        <section className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
-          <div className="max-w-md mx-auto text-center">
-            <SectionKicker label="Сыйлық ақпараты" accent={accent} isEthno={isEthno} className="mb-4" />
-            <div className="rounded-2xl p-6" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
-              <p className="invite-body font-mono" style={{ color: "var(--charcoal)" }}>{d.giftInfo}</p>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ── RSVP (§ item 9, paid add-on) ── */}
-      {has("rsvp") && isEntitledTo("rsvp") && (
-        <section className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
-          <div className="max-w-md mx-auto">
-            <div className="text-center mb-7">
-              <SectionKicker label="RSVP" accent={accent} isEthno={isEthno} className="mb-2" />
-              <h2 className="heading-display invite-headline mb-2" style={{ color: "var(--charcoal)" }}>Қатысасыз ба?</h2>
-              <p className="invite-caption" style={{ color: "var(--muted)" }}>{d.rsvpText || "Жауабыңызды жіберіңіз"}</p>
-            </div>
-
-            {invite?.status === "PUBLISHED" ? (
-              <RSVPForm inviteId={invite.id} accent={accent} ornament={isEthno} />
-            ) : demo ? (
-              // Full-looking, fully-interactive RSVP form so a prospective
-              // customer sees the actual finished experience (§4/§10) —
-              // RSVPForm's own `demo` prop guarantees submission never
-              // reaches submitRSVP/the DB, only a local success state.
-              <RSVPForm demo accent={accent} lang={lang} ornament={isEthno} />
-            ) : (
-              // Compact, visually intentional placeholder — a real
-              // invite's own unpublished-preview state, unchanged from
-              // before this task. Same message, same meaning (RSVP
-              // becomes active once the invite is published), just
-              // sized to read as a calm status note rather than a broken
-              // empty section.
-              <div className="rounded-2xl px-5 py-4 flex items-center gap-3 bg-white" style={{ border: "1px solid rgba(0,0,0,0.06)" }}>
-                <span className="text-lg shrink-0" aria-hidden>🔒</span>
-                <p className="invite-caption leading-snug" style={{ color: "var(--muted)" }}>RSVP пішіні жарияланғаннан кейін белсенді болады</p>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
+      {/* ── Body sections, in the Builder-configurable order (§16) — the
+          default order (no visualConfig, or a template that predates this
+          feature) reconstructs the exact original hardcoded sequence via
+          RIDER_ANCHORS above, so every existing template renders
+          byte-identically. ── */}
+      {bodyContent}
 
       {/* ── Footer ── */}
       <footer className="py-8 px-4 text-center text-xs" style={{ background: "var(--charcoal)", color: "#4A4440" }}>

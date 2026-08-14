@@ -173,12 +173,18 @@ export function RSVPForm({ inviteId, accent, demo = false, lang = "kk", ornament
   return (
     <form
       onSubmit={onSubmit}
-      className="rounded-2xl shadow-sm p-5 flex flex-col gap-5"
-      style={
-        ornament && accent
+      className="p-5 flex flex-col gap-5"
+      style={{
+        // Template Builder theme extras (radius/shadow) — var() falls back
+        // to this component's original literal values when a template
+        // has no theme.radius/shadow configured, so every existing
+        // template renders identically to before these tokens existed.
+        borderRadius: "var(--tpl-radius, 1rem)",
+        boxShadow: "var(--tpl-shadow, 0 1px 2px rgba(0,0,0,0.05))",
+        ...(ornament && accent
           ? { background: KAZAKH_ETHNO_SURFACE.ivory, border: `1px solid ${accent}40` }
-          : { background: "white", border: "1px solid #F4F4F5" }
-      }
+          : { background: "white", border: "1px solid #F4F4F5" }),
+      }}
       noValidate
     >
       {/* Status selector */}
@@ -280,7 +286,10 @@ export function RSVPForm({ inviteId, accent, demo = false, lang = "kk", ornament
         loading={isPending}
         size="lg"
         className="w-full"
-        style={ornament && accent ? { background: accent, color: KAZAKH_ETHNO_SURFACE.ivory } : undefined}
+        style={{
+          borderRadius: "var(--tpl-button-radius, 0.75rem)",
+          ...(ornament && accent && { background: accent, color: KAZAKH_ETHNO_SURFACE.ivory }),
+        }}
       >
         Жауап жіберу
       </Button>

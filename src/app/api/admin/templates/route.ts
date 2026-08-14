@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getAllDbTemplates } from "@/lib/db-templates";
+import { TEMPLATE_FILTERS } from "@/lib/templates";
+import { safeParseVisualConfigInput } from "@/lib/visual-config";
+
+// Canonical style-bucket ids (§13 — "Canonical category IDs must remain
+// protected. Do not let admin invent arbitrary category IDs."). Mirrors
+// the exact set /templates?cat= and getDbTemplates({cat}) filter against.
+const VALID_CATEGORIES = new Set(TEMPLATE_FILTERS.filter((f) => f.id !== "all").map((f) => f.id));
 
 function adminOnly() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -27,6 +35,18 @@ export async function POST(req: NextRequest) {
 
   if (!body.title || !body.slug || !body.category) {
     return NextResponse.json({ error: "title, slug, category — міндетті" }, { status: 400 });
+  }
+  if (!VALID_CATEGORIES.has(String(body.category))) {
+    return NextResponse.json({ error: "category жарамсыз" }, { status: 400 });
+  }
+
+  let visualConfigInput: Prisma.InputJsonValue | undefined = undefined;
+  if (body.visualConfig !== undefined && body.visualConfig !== null) {
+    const parsed = safeParseVisualConfigInput(body.visualConfig);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "visualConfig жарамсыз: " + parsed.error.issues[0]?.message }, { status: 400 });
+    }
+    visualConfigInput = parsed.data as unknown as Prisma.InputJsonValue;
   }
 
   try {
@@ -58,6 +78,7 @@ export async function POST(req: NextRequest) {
         tags: Array.isArray(body.tags) ? (body.tags as string[]) : [],
         tagsKk: Array.isArray(body.tagsKk) ? (body.tagsKk as string[]) : [],
         tagsRu: Array.isArray(body.tagsRu) ? (body.tagsRu as string[]) : [],
+        ...(visualConfigInput !== undefined && { visualConfig: visualConfigInput }),
       },
     });
     return NextResponse.json(tmpl, { status: 201 });

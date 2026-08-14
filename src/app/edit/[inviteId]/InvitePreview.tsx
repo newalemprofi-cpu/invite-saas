@@ -3,8 +3,9 @@
 import type { Template } from "@/lib/templates";
 import type { EditorData } from "./EditorClient";
 import { useSingleAudioPreview } from "./useSingleAudioPreview";
-import { getWeddingLayout } from "@/lib/wedding-template-layouts";
+import { getWeddingLayout, type WeddingTemplateLayout, type WeddingPhotoMode } from "@/lib/wedding-template-layouts";
 import { WeddingHero } from "@/components/wedding/WeddingHero";
+import { resolveSectionVariant, HERO_VARIANT_TO_PHOTO_MODE, type HeroVariant } from "@/lib/visual-config";
 
 interface Props {
   data: EditorData;
@@ -32,7 +33,24 @@ export function InvitePreview({ data, template }: Props) {
   // rendered ENTIRELY inside the hero composition below (WeddingHero), not
   // as a whole-page background — see the contentBg/bgType override just
   // below for why the generic image-background layers are skipped here.
-  const weddingLayout = getWeddingLayout(template?.slug);
+  const hardcodedLayout = getWeddingLayout(template?.slug);
+  // Admin Template Builder: a template with no hardcoded layout entry can
+  // still configure a hero variant via visualConfig — this small, additive
+  // lookup mirrors the exact mechanism InvitationView.tsx uses for
+  // /templates/[slug] and /i/[slug], so the constructor's OWN compact
+  // preview shows the same hero composition instead of silently falling
+  // back to the generic hero below. Every OTHER section in this file
+  // (countdown/program/location/gallery/wishes/rsvp) intentionally stays
+  // the existing simplified hand-rolled preview — this component is a
+  // separate, deliberately lightweight renderer from InvitationView (see
+  // the Template Builder task's final report for why full parity here is
+  // out of scope), not a second copy of the full section-variant system.
+  const heroVariant = resolveSectionVariant<HeroVariant | "">(
+    template?.visualConfig ?? null, "hero", ""
+  );
+  const adHocPhotoMode = heroVariant ? (HERO_VARIANT_TO_PHOTO_MODE[heroVariant] as WeddingPhotoMode) : null;
+  const weddingLayout: WeddingTemplateLayout | null =
+    hardcodedLayout ?? (adHocPhotoMode ? { photoMode: adHocPhotoMode, decorPreset: "default", sectionCardBg: "", sectionCardBorder: "" } : null);
 
   // Ordered sections (enabled only)
   const orderedEnabled = data.sections.filter((s) => s.enabled).map((s) => s.id);

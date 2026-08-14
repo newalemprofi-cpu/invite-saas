@@ -1,12 +1,14 @@
 /**
- * Small, reusable decorative system for the "Kazakh Ethno" wedding template
- * ONLY (`wedding-kazakh-ethno`, decorPreset "ethno"). Every other template
- * (Romantic, Classic Gold, Floral Watercolor, Dark Luxury, legacy/non-
- * wedding) never imports this module — nothing here can leak into their
- * rendering. Motifs are restrained, low-opacity SVG — never raster assets,
- * never a literal museum-piece illustration — inspired by the symmetric
- * curved geometry of қошқармүйіз (ram's-horn) ornament, used sparingly as a
- * visual signature (section dividers, card/frame corners, a soft watermark)
+ * Small, reusable decorative system originally built for the "Kazakh
+ * Ethno" wedding template (`wedding-kazakh-ethno`, decorPreset "ethno")
+ * and, since the Admin Template Builder, also exposed to ANY template via
+ * `src/components/wedding/DecorationRegistry.tsx`'s `decorationId:
+ * "kazakh-qoshqar"` option — still opt-in per section, never applied
+ * automatically to a template that didn't choose it. Motifs are
+ * restrained, low-opacity SVG — never raster assets, never a literal
+ * museum-piece illustration — inspired by the symmetric curved geometry
+ * of қошқармүйіз (ram's-horn) ornament, used sparingly as a visual
+ * signature (section dividers, card/frame corners, a soft watermark)
  * rather than covering the page.
  */
 

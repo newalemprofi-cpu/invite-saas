@@ -38,12 +38,13 @@ export function LocationSection({ location, address, mapUrl, kickerLabel, button
         </p>
       )}
       <div
-        className="w-full max-w-sm rounded-3xl px-6 py-8 flex flex-col items-center gap-5"
-        style={
-          ornament
-            ? { background: KAZAKH_ETHNO_SURFACE.ivory, border: `1px solid ${accent}40`, boxShadow: `0 8px 24px ${accent}14` }
-            : { background: "white", border: "1px solid rgba(28,25,23,0.07)", boxShadow: "0 8px 28px rgba(28,25,23,0.07)" }
-        }
+        className="w-full max-w-sm px-6 py-8 flex flex-col items-center gap-5"
+        style={{
+          borderRadius: "var(--tpl-radius, 1.5rem)",
+          ...(ornament
+            ? { background: KAZAKH_ETHNO_SURFACE.ivory, border: `1px solid ${accent}40`, boxShadow: `var(--tpl-shadow, 0 8px 24px ${accent}14)` }
+            : { background: "white", border: "1px solid rgba(28,25,23,0.07)", boxShadow: "var(--tpl-shadow, 0 8px 28px rgba(28,25,23,0.07))" }),
+        }}
       >
         <div className="flex flex-col items-center gap-2">
           {location && (
@@ -63,7 +64,10 @@ export function LocationSection({ location, address, mapUrl, kickerLabel, button
             target="_blank"
             rel="noopener noreferrer"
             className="btn-outline inline-flex"
-            style={ornament ? { borderColor: `${accent}80`, color: accent } : undefined}
+            style={{
+              borderRadius: "var(--tpl-button-radius, 999px)",
+              ...(ornament && { borderColor: `${accent}80`, color: accent }),
+            }}
           >
             {buttonLabel}
           </a>

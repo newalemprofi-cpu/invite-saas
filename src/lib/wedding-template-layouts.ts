@@ -22,7 +22,16 @@ export type WeddingPhotoMode =
   | "fade-dark" // Dark Luxury: photo fades into the dark background via gradient
   | "arched-frame"; // Kazakh Ethno: photo inside an arched ornamental frame
 
-export type WeddingDecorPreset = "romantic" | "classic-gold" | "floral" | "dark-luxury" | "ethno";
+/**
+ * "default" is additive (Admin Template Builder task) — used ONLY for
+ * ad-hoc layouts InvitationView constructs at render time for a
+ * Builder-configured template that has no entry in
+ * WEDDING_TEMPLATE_LAYOUTS below (i.e. every template except the 5
+ * flagship ones). It carries no ornament identity of its own; a
+ * template's per-section ethno/default styling comes from its own
+ * visualConfig section variants instead, decoupled from this preset.
+ */
+export type WeddingDecorPreset = "romantic" | "classic-gold" | "floral" | "dark-luxury" | "ethno" | "default";
 
 export interface WeddingTemplateLayout {
   photoMode: WeddingPhotoMode;

@@ -72,22 +72,24 @@ export function Countdown({ targetDate, targetTime, accent, textMuted, serverNow
       {units.map((u) => (
         <div key={u.l} className="flex flex-col items-center gap-2">
           <div
-            className="relative w-full aspect-square rounded-2xl flex items-center justify-center font-serif font-bold transition-all overflow-hidden"
+            className="relative w-full aspect-square flex items-center justify-center font-serif font-bold transition-all overflow-hidden"
             style={
               ornament
                 ? {
+                    borderRadius: "var(--tpl-radius, 1rem)",
                     backgroundImage: `linear-gradient(160deg, ${accent}1c, ${accent}0a)`,
                     border: `1px solid ${accent}4a`,
                     color: accent,
                     fontSize: "clamp(1.5rem, 1.1rem + 3.5vw, 2.25rem)",
-                    boxShadow: `0 4px 14px ${accent}14`,
+                    boxShadow: `var(--tpl-shadow, 0 4px 14px ${accent}14)`,
                   }
                 : {
+                    borderRadius: "var(--tpl-radius, 1rem)",
                     background: `${accent}14`,
                     border: `1px solid ${accent}30`,
                     color: accent,
                     fontSize: "clamp(1.5rem, 1.1rem + 3.5vw, 2.25rem)",
-                    boxShadow: `0 4px 14px ${accent}12`,
+                    boxShadow: `var(--tpl-shadow, 0 4px 14px ${accent}12)`,
                   }
             }
           >

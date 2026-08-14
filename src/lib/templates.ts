@@ -1,4 +1,5 @@
 import type { TemplateDemoContent } from "@/lib/template-demo";
+import type { VisualConfig } from "@/lib/visual-config";
 
 export interface Template {
   id: string;
@@ -36,6 +37,20 @@ export interface Template {
   demoImage?: string | null;
   /** Admin-managed content for the full "Толық көру" demo — see lib/template-demo.ts. Absent/undefined for the hardcoded seed TEMPLATES below; only ever populated by rowToTemplate() from a real DB row. */
   demoContent?: TemplateDemoContent | null;
+  /**
+   * Admin Template Builder's versioned visual composition config — see
+   * lib/visual-config.ts. `null`/`undefined` means "no builder config
+   * saved for this template" — InvitationView/WeddingHero fall back to
+   * their existing legacy rendering (hardcoded wedding-template-layouts.ts
+   * entry, or the plain generic layout) exactly as before this field
+   * existed. Absent from the hardcoded seed TEMPLATES below (those 13
+   * seed templates, including the 5 flagship Wedding ones, deliberately
+   * keep rendering through the legacy path — see §6/§28 of the Template
+   * Builder task for why they are not force-converted); only ever
+   * populated by rowToTemplate() from a real DB row that an admin has
+   * actually configured through the Builder.
+   */
+  visualConfig?: VisualConfig | null;
 }
 
 export type TemplateCategory =

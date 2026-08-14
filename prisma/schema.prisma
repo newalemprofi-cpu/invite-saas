@@ -521,6 +521,17 @@ model InviteTemplate {
   // CRUD path (/api/admin/templates/[id]) as every other field here —
   // never a second storage mechanism for one entity.
   demoContent   Json?
+  // Admin Template Builder's versioned visual composition config — see
+  // src/lib/visual-config.ts's VisualConfig for the Zod-validated shape.
+  // Nullable and purely additive: absent (every pre-existing template,
+  // including the 5 flagship Wedding templates) means "render via the
+  // existing hardcoded layout/legacy path, unchanged" — this column is
+  // never read by anything until a template explicitly opts in by having
+  // one saved. Same one-column-JSONB pattern as demoContent above, and
+  // deliberately not a second SiteSettings-style singleton blob: this is
+  // 1:1 owned by this template row (must survive slug rename, must be
+  // deleted with the row) and edited through the same admin CRUD path.
+  visualConfig  Json?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

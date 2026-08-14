@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useTransition, useRef } from "react";
 import type { InviteTemplate } from "@prisma/client";
-import { uploadTemplateImageAction, removeTemplateImageAction } from "./actions";
+import { uploadTemplateImageAction, removeTemplateImageAction, duplicateTemplateAction } from "./actions";
 import { TEMPLATE_FILTERS } from "@/lib/templates";
 import { parseTemplateDemoContent, type TemplateDemoContent } from "@/lib/template-demo";
 import { TemplateDemoEditor, type DemoTrackOption } from "./TemplateDemoEditor";
+import { TemplateBuilder } from "./TemplateBuilder";
 
 interface FormState {
   title: string;
@@ -88,6 +89,8 @@ export function TemplatesManager({ tracks = [] }: { tracks?: DemoTrackOption[] }
   const [tab, setTab] = useState<"card" | "demo">("card");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [builderTemplate, setBuilderTemplate] = useState<InviteTemplate | null>(null);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -163,6 +166,23 @@ export function TemplatesManager({ tracks = [] }: { tracks?: DemoTrackOption[] }
     if (res.ok) setTemplates((p) => p.filter((x) => x.id !== t.id));
   };
 
+  // §22 — always creates an inactive draft copy (new id + slug), so
+  // duplicating never accidentally exposes an unfinished/untouched clone
+  // to customers before the admin has reviewed and activated it.
+  const duplicate = async (t: InviteTemplate) => {
+    setDuplicatingId(t.id);
+    try {
+      const result = await duplicateTemplateAction(t.id);
+      if (result.error) {
+        alert(result.error);
+        return;
+      }
+      load();
+    } finally {
+      setDuplicatingId(null);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
@@ -232,10 +252,17 @@ export function TemplatesManager({ tracks = [] }: { tracks?: DemoTrackOption[] }
                   )}
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => setBuilderTemplate(t)}
+                    className="flex-1 text-xs py-1.5 rounded-lg font-semibold transition-colors"
+                    style={{ background: "var(--gold)", color: "white" }}
+                  >
+                    Дизайн
+                  </button>
                   <button
                     onClick={() => openEdit(t)}
-                    className="flex-1 text-xs py-1.5 rounded-lg font-medium transition-colors"
+                    className="text-xs py-1.5 px-2.5 rounded-lg font-medium transition-colors"
                     style={{
                       background: "var(--cream)",
                       color: "var(--charcoal)",
@@ -243,6 +270,15 @@ export function TemplatesManager({ tracks = [] }: { tracks?: DemoTrackOption[] }
                     }}
                   >
                     Өзгерту
+                  </button>
+                  <button
+                    onClick={() => duplicate(t)}
+                    disabled={duplicatingId === t.id}
+                    className="text-xs py-1.5 px-2.5 rounded-lg font-medium transition-colors"
+                    style={{ background: "var(--cream)", color: "var(--charcoal)", border: "1px solid var(--border)", opacity: duplicatingId === t.id ? 0.5 : 1 }}
+                    title="Көшірмесін жасау"
+                  >
+                    ⧉
                   </button>
                   <button
                     onClick={() => del(t)}
@@ -409,6 +445,22 @@ export function TemplatesManager({ tracks = [] }: { tracks?: DemoTrackOption[] }
             </div>
           </div>
         </div>
+      )}
+
+      {/* Admin Template Builder (§11 of the Template Engine task) — a
+          separate full-screen overlay from the slide-over panel above,
+          since a real 3-pane section-navigator/live-preview/inspector
+          layout needs far more width than that 512px drawer. */}
+      {builderTemplate && (
+        <TemplateBuilder
+          template={builderTemplate}
+          tracks={tracks}
+          onClose={() => setBuilderTemplate(null)}
+          onSaved={(updated) => {
+            setBuilderTemplate(updated);
+            setTemplates((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+          }}
+        />
       )}
     </div>
   );

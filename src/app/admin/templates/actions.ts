@@ -218,6 +218,84 @@ export async function removeTemplateDemoGalleryImageAction(templateId: string, k
   return { gallery };
 }
 
+/**
+ * §22 — "Duplicate template", the highest-value single feature for fast
+ * template production. Copies visualConfig, every scalar theme token,
+ * catalog metadata, and demoContent's TEXT fields; deliberately does NOT
+ * copy previewImage/demoImage/demoContent.mainPhoto/demoContent.gallery
+ * (image storage KEYS). Those keys are shared-mutable: a later replace
+ * upload on either the source or the copy calls deleteFile() on the OLD
+ * key (see uploadTemplateImageAction/uploadTemplateDemoPhotoAction
+ * above) — if both rows pointed at the same key, replacing the image on
+ * ONE template would silently break the OTHER's still-referenced photo.
+ * The duplicate is always created inactive (a draft) regardless of the
+ * source's isActive state, per §21/§22's explicit requirement, with a
+ * new slug the admin is expected to customize before activating.
+ */
+export async function duplicateTemplateAction(templateId: string): Promise<{ error?: string; id?: string }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { error: "Рұқсат жоқ" };
+  }
+
+  const source = await db.inviteTemplate.findUnique({ where: { id: templateId } });
+  if (!source) return { error: "Шаблон табылмады" };
+
+  const demoContent = parseTemplateDemoContent(source.demoContent);
+  const { mainPhoto: _mainPhoto, gallery: _gallery, ...demoContentWithoutImages } = demoContent;
+  void _mainPhoto;
+  void _gallery;
+
+  const baseSlug = `${source.slug}-copy`;
+  let slug = `${baseSlug}-${randomUUID().slice(0, 6)}`;
+  // Vanishingly unlikely to collide (random suffix), but guard anyway
+  // rather than let a unique-constraint error surface as a raw 500.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const clash = await db.inviteTemplate.findUnique({ where: { slug }, select: { id: true } });
+    if (!clash) break;
+    slug = `${baseSlug}-${randomUUID().slice(0, 6)}`;
+  }
+
+  try {
+    const copy = await db.inviteTemplate.create({
+      data: {
+        title: `${source.title} (көшірме)`,
+        slug,
+        nameKk: source.nameKk ? `${source.nameKk} (көшірме)` : null,
+        nameRu: source.nameRu ? `${source.nameRu} (копия)` : null,
+        category: source.category,
+        language: source.language,
+        style: source.style,
+        description: source.description,
+        descriptionRu: source.descriptionRu,
+        isActive: false,
+        sortOrder: source.sortOrder,
+        isPremium: source.isPremium,
+        bg: source.bg,
+        gradient: source.gradient,
+        accent: source.accent,
+        textDark: source.textDark,
+        textMuted: source.textMuted,
+        dark: source.dark,
+        emoji: source.emoji,
+        demoName1: source.demoName1,
+        demoName2: source.demoName2,
+        tags: source.tags,
+        tagsKk: source.tagsKk,
+        tagsRu: source.tagsRu,
+        demoContent: demoContentWithoutImages as unknown as Prisma.InputJsonValue,
+        visualConfig: source.visualConfig === null ? undefined : (source.visualConfig as Prisma.InputJsonValue),
+      },
+    });
+    revalidatePath("/admin/templates");
+    return { id: copy.id };
+  } catch (err) {
+    console.error("[admin-templates] duplicate failed", err);
+    return { error: "Көшіру сәтсіз аяқталды" };
+  }
+}
+
 export async function reorderTemplateDemoGalleryAction(templateId: string, orderedKeys: string[]): Promise<{ error?: string }> {
   try {
     await requireAdmin();

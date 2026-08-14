@@ -192,8 +192,14 @@ export function WishesWall({ inviteId, wishes, accent, cardBg, cardBorder, secti
 
         <form
           onSubmit={onSubmit}
-          className="rounded-2xl shadow-sm p-5 flex flex-col gap-4"
-          style={ornament ? { background: KAZAKH_ETHNO_SURFACE.ivory, border: `1px solid ${accent}40` } : { background: "white", border: "1px solid #F4F4F5" }}
+          className="p-5 flex flex-col gap-4"
+          style={{
+            borderRadius: "var(--tpl-radius, 1rem)",
+            boxShadow: "var(--tpl-shadow, 0 1px 2px rgba(0,0,0,0.05))",
+            ...(ornament
+              ? { background: KAZAKH_ETHNO_SURFACE.ivory, border: `1px solid ${accent}40` }
+              : { background: "white", border: "1px solid #F4F4F5" }),
+          }}
           noValidate
         >
           <Input label="Аты-жөніңіз" placeholder="Айдар Сейітов" autoComplete="name" error={errors.name?.message} {...register("name")} />
@@ -204,7 +210,12 @@ export function WishesWall({ inviteId, wishes, accent, cardBg, cardBorder, secti
           {success && !serverError && (
             <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">✓ Тілегіңіз жіберілді, рахмет!</p>
           )}
-          <Button type="submit" loading={isPending} className="w-full" style={ornament ? { background: accent, color: KAZAKH_ETHNO_SURFACE.ivory } : undefined}>
+          <Button
+            type="submit"
+            loading={isPending}
+            className="w-full"
+            style={{ borderRadius: "var(--tpl-button-radius, 0.75rem)", ...(ornament && { background: accent, color: KAZAKH_ETHNO_SURFACE.ivory }) }}
+          >
             Жіберу
           </Button>
         </form>

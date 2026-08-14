@@ -78,6 +78,9 @@ const PLACEHOLDER_TINT: Record<WeddingTemplateLayout["decorPreset"], string> = {
   floral: "linear-gradient(160deg,#E7EEDE,#D8E5CB,#CBDCC0)",
   "dark-luxury": "linear-gradient(160deg,#2A2622,#1C1917,#100E0C)",
   ethno: "linear-gradient(160deg,#E9DCC3,#DCC79E,#CBAE83)",
+  // Ad-hoc Builder-configured templates with no dedicated decorPreset — a
+  // neutral warm-ivory tint, template-agnostic on purpose.
+  default: "linear-gradient(160deg,#F2EDE3,#E9E1D2,#DFD4BE)",
 };
 
 /** Renders the customer's photo, or — when absent — a tasteful,
