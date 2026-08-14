@@ -1,6 +1,19 @@
 import { z } from "zod";
 
 /**
+ * ── v2 EXTENSION (Full Production Template Designer task) ───────────────
+ * Everything above this point is the original v1 schema/registry, kept
+ * completely intact — v1-shaped stored configs (`version: 1`) still parse
+ * and render exactly as before. v2 (`version: 2`) is a pure ADDITION: one
+ * combined Zod object schema whose new fields are all `.optional()`, so a
+ * v1 payload (missing every new field) validates against the SAME schema
+ * used for v2 payloads — there is no separate v1-vs-v2 branch to
+ * maintain. New saves write `version: 2`; `VISUAL_CONFIG_VERSION` below
+ * reflects that as the current default, while `parseVisualConfig`/
+ * `safeParseVisualConfigInput` accept either version number.
+ */
+
+/**
  * Admin Template Builder's versioned visual composition config
  * (`InviteTemplate.visualConfig`, see prisma/schema.prisma). This is the
  * single source of truth for:
@@ -29,7 +42,9 @@ import { z } from "zod";
  * when a template has explicitly opted in by having a saved config.
  */
 
-export const VISUAL_CONFIG_VERSION = 1 as const;
+export const VISUAL_CONFIG_VERSION = 2 as const;
+/** Every version this app has ever written is still readable. */
+const SUPPORTED_VERSIONS = [1, 2] as const;
 
 /* ── Section identity ──────────────────────────────────────────────────
    The 9 reorderable "body" sections (hero is always first and is
@@ -53,7 +68,12 @@ export const REORDERABLE_SECTION_IDS = [
 ] as const;
 export type ReorderableSectionId = (typeof REORDERABLE_SECTION_IDS)[number];
 
-export const SECTION_IDS = ["hero", ...REORDERABLE_SECTION_IDS] as const;
+/** "footer" is v2-only, additive: content-only (branding/CTA/supporting
+ * text), never reordered (always renders last, matching its existing
+ * fixed position — see InvitationView.tsx's own <footer>), never given a
+ * variant/media/decoration (a plain text bar, by product-policy design —
+ * §4's explicit "do not break required SaaS branding" instruction). */
+export const SECTION_IDS = ["hero", ...REORDERABLE_SECTION_IDS, "footer"] as const;
 export type SectionId = (typeof SECTION_IDS)[number];
 
 const reorderableSectionIdSchema = z.enum(REORDERABLE_SECTION_IDS);
@@ -206,11 +226,314 @@ const themeExtrasSchema = z.object({
 
 export type ThemeExtras = z.infer<typeof themeExtrasSchema>;
 
+/* ══════════════════════════ v2: CONTENT OVERRIDES ═══════════════════════
+   Template-level STATIC text (§3/§4 — "СІЗДІ ШАҚЫРАМЫЗ", "ТОЙ ИЕЛЕРІ",
+   button labels, helper text, empty-state copy) is admin-editable per
+   section, always as an explicit {kk, ru} pair — NEVER a single shared
+   field, so KK and RU can never leak into each other. This is a strictly
+   separate axis from CUSTOMER data (names/date/venue/photos/wishes/RSVP
+   responses in `D`/`Invite.data`), which this schema has no way to touch
+   at all — there is no field here that could ever hold a customer value,
+   by construction (see SECTION_CONTENT_FIELDS below, the closed registry
+   of which keys the renderer actually reads per section; anything else is
+   validated-but-inert data the renderer never looks at). */
+
+const localizedTextSchema = z.object({
+  kk: z.string().max(160).optional(),
+  ru: z.string().max(160).optional(),
+}).strict();
+export type LocalizedText = z.infer<typeof localizedTextSchema>;
+
+/** Generic-but-bounded maps rather than a discriminated per-section
+ * schema (11 sections × their own exact shape would be a lot of near-
+ * duplicate Zod boilerplate) — safety comes from the VALUE shape
+ * (`{kk?, ru?}`, length-capped strings) and the key-count cap below, not
+ * from an exhaustive per-section key enum. The renderer (InvitationView)
+ * only ever reads the specific keys listed in SECTION_CONTENT_FIELDS for
+ * a given section id; any other key an API caller might smuggle in is
+ * simply never read — inert, not unsafe. */
+const sectionContentSchema = z.object({
+  text: z.record(z.string().max(40), localizedTextSchema).refine((v) => Object.keys(v).length <= 30, { message: "too many content keys" }).optional(),
+  visibility: z.record(z.string().max(40), z.boolean()).refine((v) => Object.keys(v).length <= 30, { message: "too many visibility keys" }).optional(),
+}).strict();
+export type SectionContent = z.infer<typeof sectionContentSchema>;
+
+/** The closed registry of which content/visibility keys each section's
+ * renderer actually looks up (and what the Admin Builder's Content
+ * accordion offers as fields) — §4's per-section field lists, adapted to
+ * this project's actual rendered elements. Every "show*" key defaults to
+ * `true` (visible) when absent, matching current behavior exactly. */
+export const SECTION_CONTENT_FIELDS: Partial<Record<SectionId, { key: string; label: string; multiline?: boolean }[]>> = {
+  hero: [
+    { key: "kicker", label: "Kicker" },
+    { key: "subtitle", label: "Subtitle" },
+  ],
+  invitation: [{ key: "heading", label: "Тақырып" }, { key: "introLabel", label: "Кіріспе белгі" }],
+  hosts: [{ key: "heading", label: "Тақырып" }, { key: "prefix", label: "Префикс" }, { key: "suffix", label: "Суффикс" }],
+  datetime: [{ key: "heading", label: "Тақырып" }],
+  countdown: [
+    { key: "heading", label: "Тақырып" },
+    { key: "dayLabel", label: "Күн белгісі" },
+    { key: "hourLabel", label: "Сағат белгісі" },
+    { key: "minuteLabel", label: "Минут белгісі" },
+    { key: "secondLabel", label: "Секунд белгісі" },
+  ],
+  program: [{ key: "heading", label: "Тақырып" }, { key: "subtitle", label: "Субтитр" }],
+  location: [
+    { key: "heading", label: "Тақырып" },
+    { key: "mapButtonLabel", label: "Карта батырмасы" },
+    { key: "venueLabel", label: "Орын белгісі" },
+    { key: "addressLabel", label: "Мекенжай белгісі" },
+  ],
+  gallery: [
+    { key: "heading", label: "Тақырып" },
+    { key: "subtitle", label: "Субтитр" },
+    { key: "emptyStateText", label: "Бос күй мәтіні" },
+  ],
+  wishes: [
+    { key: "heading", label: "Тақырып" },
+    { key: "formHeading", label: "Форма тақырыбы" },
+    { key: "namePlaceholder", label: "Аты өрісінің үлгісі" },
+    { key: "messagePlaceholder", label: "Тілек өрісінің үлгісі" },
+    { key: "submitButton", label: "Жіберу батырмасы" },
+    { key: "emptyStateText", label: "Бос күй мәтіні" },
+  ],
+  rsvp: [
+    { key: "heading", label: "Тақырып" },
+    { key: "question", label: "Сұрақ" },
+    { key: "helperText", label: "Көмекші мәтін" },
+    { key: "submitButton", label: "Жіберу батырмасы" },
+    { key: "demoExplanation", label: "Демо түсіндірмесі", multiline: true },
+  ],
+  footer: [
+    { key: "brandingText", label: "Брендинг мәтіні" },
+    { key: "ctaLabel", label: "CTA сілтемесі" },
+  ],
+};
+
+export const SECTION_VISIBILITY_FIELDS: Partial<Record<SectionId, { key: string; label: string }[]>> = {
+  hero: [
+    { key: "showKicker", label: "Kicker көрсету" },
+    { key: "showSubtitle", label: "Subtitle көрсету" },
+    { key: "showDivider", label: "Бөлгіш көрсету" },
+  ],
+  datetime: [{ key: "showWeekday", label: "Апта күнін көрсету" }, { key: "showHeading", label: "Тақырыпты көрсету" }],
+  countdown: [{ key: "showHeading", label: "Тақырыпты көрсету" }],
+  program: [{ key: "showHeading", label: "Тақырыпты көрсету" }, { key: "showSubtitle", label: "Субтитрді көрсету" }],
+  location: [{ key: "showAddress", label: "Мекенжайды көрсету" }, { key: "showHeading", label: "Тақырыпты көрсету" }],
+  gallery: [{ key: "showHeading", label: "Тақырыпты көрсету" }, { key: "showSubtitle", label: "Субтитрді көрсету" }],
+  hosts: [{ key: "showHeading", label: "Тақырыпты көрсету" }],
+  invitation: [{ key: "showHeading", label: "Тақырыпты көрсету" }],
+};
+
+/** Closed placeholder registry (§5) — `{token}` substitution only for
+ * these exact names, resolved from the CUSTOMER's own data at render
+ * time. No expressions, no JS, no HTML — a plain literal find/replace.
+ * An unrecognized `{token}` is left as literal text (never evaluated,
+ * never silently dropped) so a typo in the admin's content never hides
+ * copy or executes anything. */
+export const CONTENT_PLACEHOLDERS = ["groomName", "brideName", "hosts", "eventDate", "eventTime", "venue"] as const;
+export type ContentPlaceholder = (typeof CONTENT_PLACEHOLDERS)[number];
+
+export function resolvePlaceholders(text: string, ctx: Partial<Record<ContentPlaceholder, string>>): string {
+  return text.replace(/\{(\w+)\}/g, (match, token: string) => {
+    if ((CONTENT_PLACEHOLDERS as readonly string[]).includes(token)) {
+      return ctx[token as ContentPlaceholder] ?? "";
+    }
+    return match; // unknown token: render literally, never evaluated/dropped
+  });
+}
+
+/* ══════════════════════════ v2: TYPOGRAPHY ═══════════════════════════════
+   Reuses the project's EXISTING clamp()-based fluid typography scale
+   (`.invite-hero-kicker` / `.invite-kicker` / `.invite-hero-name` /
+   `.invite-headline` / `.invite-body` / `.invite-caption`, all defined in
+   globals.css) as the "size" preset registry — this already guarantees
+   safe, responsive, mobile-tested sizing (§7's "use clamp-based scales")
+   instead of admin-entered raw pixel values, and reuses a genuinely good
+   existing abstraction rather than inventing a parallel one (§0's
+   explicit instruction). Scoped to exactly the two text roles every
+   section actually renders distinctly today — kicker and heading — not
+   an exhaustive body/subtitle/caption/button role system, which would
+   require touching far more components than this task's time budget
+   supports; documented as a deliberate V2 scope boundary. */
+
+export const TEXT_SIZE_PRESETS = ["caption", "body", "kicker", "headline", "heroName"] as const;
+export type TextSizePreset = (typeof TEXT_SIZE_PRESETS)[number];
+export const TEXT_SIZE_CLASS: Record<TextSizePreset, string> = {
+  caption: "invite-caption",
+  body: "invite-body",
+  kicker: "invite-kicker",
+  headline: "invite-headline",
+  heroName: "invite-hero-name",
+};
+
+export const TEXT_WEIGHTS = ["normal", "medium", "semibold", "bold"] as const;
+export type TextWeight = (typeof TEXT_WEIGHTS)[number];
+export const TEXT_WEIGHT_VALUES: Record<TextWeight, number> = { normal: 400, medium: 500, semibold: 600, bold: 700 };
+
+export const TEXT_ALIGNS = ["left", "center", "right"] as const;
+export type TextAlign = (typeof TEXT_ALIGNS)[number];
+
+export const LETTER_SPACINGS = ["normal", "wide", "wider"] as const;
+export type LetterSpacing = (typeof LETTER_SPACINGS)[number];
+export const LETTER_SPACING_VALUES: Record<LetterSpacing, string> = { normal: "normal", wide: "0.05em", wider: "0.12em" };
+
+const typographyRoleSchema = z.object({
+  font: fontIdSchema.optional(),
+  size: z.enum(TEXT_SIZE_PRESETS).optional(),
+  weight: z.enum(TEXT_WEIGHTS).optional(),
+  color: hexColorSchema,
+  align: z.enum(TEXT_ALIGNS).optional(),
+  letterSpacing: z.enum(LETTER_SPACINGS).optional(),
+  uppercase: z.boolean().optional(),
+  italic: z.boolean().optional(),
+}).strict();
+export type TypographyRole = z.infer<typeof typographyRoleSchema>;
+
+const typographySchema = z.object({
+  heading: typographyRoleSchema.optional(),
+  kicker: typographyRoleSchema.optional(),
+}).strict();
+export type SectionTypography = z.infer<typeof typographySchema>;
+
+/* ══════════════════════════ v2: MEDIA ═══════════════════════════════════
+   Presentation of a photo SLOT — hero main photo, gallery frame — never
+   the photo itself (§10: template config describes HOW, customer.data
+   supplies WHAT). */
+
+export const OBJECT_FITS = ["cover", "contain"] as const;
+export type ObjectFit = (typeof OBJECT_FITS)[number];
+
+export const OBJECT_POSITIONS = ["center", "top", "bottom", "left", "right"] as const;
+export type ObjectPositionPreset = (typeof OBJECT_POSITIONS)[number];
+
+export const ASPECT_RATIOS = ["1/1", "4/5", "3/4", "16/9", "9/16"] as const;
+export type AspectRatioPreset = (typeof ASPECT_RATIOS)[number];
+
+const mediaSchema = z.object({
+  fit: z.enum(OBJECT_FITS).optional(),
+  position: z.enum(OBJECT_POSITIONS).optional(),
+  aspectRatio: z.enum(ASPECT_RATIOS).optional(),
+  radius: z.enum(RADIUS_PRESETS).optional(),
+}).strict();
+export type SectionMedia = z.infer<typeof mediaSchema>;
+
+/* ══════════════════════════ v2: BACKGROUND ═══════════════════════════════
+   Per-section background — solid/gradient/image, never a raw CSS string.
+   `assetId` references a TemplateAsset row (see lib/template-assets.ts);
+   an assetId that no longer resolves to a real asset is handled by the
+   renderer exactly like a missing customer photo — silently falls back,
+   never crashes (see resolveSectionBackground below). */
+
+export const BACKGROUND_TYPES = ["inherit", "solid", "gradient", "image"] as const;
+export type BackgroundType = (typeof BACKGROUND_TYPES)[number];
+
+/** Structured gradient presets, not a raw CSS gradient string (§11's
+ * explicit "no raw CSS string if avoidable") — each resolves to a
+ * concrete two-stop linear-gradient built from the section's OWN
+ * color/accent at render time, so it always harmonizes with the
+ * template's palette instead of clashing with an admin-picked arbitrary
+ * gradient. */
+export const GRADIENT_PRESETS = ["none", "toCream", "toDark", "accentFade"] as const;
+export type GradientPreset = (typeof GRADIENT_PRESETS)[number];
+
+const backgroundSchema = z.object({
+  type: z.enum(BACKGROUND_TYPES).optional(),
+  color: hexColorSchema,
+  gradient: z.enum(GRADIENT_PRESETS).optional(),
+  assetId: z.string().max(80).optional(),
+  fit: z.enum(OBJECT_FITS).optional(),
+  position: z.enum(OBJECT_POSITIONS).optional(),
+  overlayColor: hexColorSchema,
+  overlayOpacity: z.number().min(0).max(1).optional(),
+}).strict();
+export type SectionBackground = z.infer<typeof backgroundSchema>;
+
+/* ══════════════════════════ v2: DECORATIONS (asset-based) ═══════════════
+   Distinct from the pre-existing v1 `decorationId` (a code-drawn SVG
+   divider under a section's kicker — kept as-is, still validated below)
+   — this is the NEW §12 system: admin-uploaded transparent PNG/WEBP
+   assets placed at a preset position, never arbitrary x/y (§25). */
+
+export const DECORATION_PLACEMENTS = [
+  "top-left", "top-center", "top-right",
+  "center-left", "center", "center-right",
+  "bottom-left", "bottom-center", "bottom-right",
+  "watermark",
+] as const;
+export type DecorationPlacement = (typeof DECORATION_PLACEMENTS)[number];
+
+export const DECORATION_SIZES = ["sm", "md", "lg"] as const;
+export type DecorationSize = (typeof DECORATION_SIZES)[number];
+export const DECORATION_SIZE_PX: Record<DecorationSize, number> = { sm: 56, md: 96, lg: 160 };
+
+export const DECORATION_LAYERS = ["background", "foreground"] as const;
+export type DecorationLayer = (typeof DECORATION_LAYERS)[number];
+
+const decorationInstanceSchema = z.object({
+  assetId: z.string().max(80),
+  placement: z.enum(DECORATION_PLACEMENTS),
+  size: z.enum(DECORATION_SIZES).optional(),
+  opacity: z.number().min(0).max(1).optional(),
+  /** Safe range only (§12: "rotation within safe range") — never a full
+   * 360°, which could flip decorations into visually broken orientations
+   * on a small mobile viewport. */
+  rotation: z.number().min(-30).max(30).optional(),
+  layer: z.enum(DECORATION_LAYERS).optional(),
+  flip: z.boolean().optional(),
+}).strict();
+export type DecorationInstance = z.infer<typeof decorationInstanceSchema>;
+
+const decorationsArraySchema = z.array(decorationInstanceSchema).max(6);
+
+/* ══════════════════════════ v2: BORDER / SHADOW (per-section) ══════════
+   Extends the existing theme-level radius/shadow (still the fallback)
+   with a genuine per-section override — a template can e.g. keep the
+   theme's soft radius everywhere but give Gallery cards a sharper one. */
+
+export const BORDER_STYLES = ["none", "thin", "medium"] as const;
+export type BorderStyle = (typeof BORDER_STYLES)[number];
+export const BORDER_WIDTH_PX: Record<BorderStyle, number> = { none: 0, thin: 1, medium: 2 };
+
+const borderSchema = z.object({
+  style: z.enum(BORDER_STYLES).optional(),
+  color: hexColorSchema,
+  radius: z.enum(RADIUS_PRESETS).optional(),
+  shadow: z.enum(SHADOW_PRESETS).optional(),
+}).strict();
+export type SectionBorder = z.infer<typeof borderSchema>;
+
+/* ══════════════════════════ v2: SPACING (per-section) ═══════════════════
+   Extends the existing theme-level spacing preset (still the fallback)
+   with per-section top/bottom/gap overrides. */
+
+export const SPACING_SIZES = ["none", "xs", "sm", "md", "lg", "xl", "2xl"] as const;
+export type SpacingSize = (typeof SPACING_SIZES)[number];
+/** rem values — deliberately capped at a sane maximum (2xl = 6rem) so no
+ * combination can push a section's padding into absurd, layout-breaking
+ * territory (§16's explicit "no uncontrolled...spacing"). */
+export const SPACING_SIZE_REM: Record<SpacingSize, number> = { none: 0, xs: 0.5, sm: 1, md: 1.75, lg: 2.75, xl: 4, "2xl": 6 };
+
+const sectionSpacingSchema = z.object({
+  top: z.enum(SPACING_SIZES).optional(),
+  bottom: z.enum(SPACING_SIZES).optional(),
+  gap: z.enum(SPACING_SIZES).optional(),
+}).strict();
+export type SectionSpacing = z.infer<typeof sectionSpacingSchema>;
+
 /* ── Per-section config ────────────────────────────────────────────── */
 
 const sectionConfigSchema = z.object({
   variant: z.union([heroVariantSchema, ornamentVariantSchema, galleryVariantSchema]).optional(),
   decorationId: decorationIdSchema.optional(),
+  content: sectionContentSchema.optional(),
+  typography: typographySchema.optional(),
+  media: mediaSchema.optional(),
+  background: backgroundSchema.optional(),
+  decorations: decorationsArraySchema.optional(),
+  border: borderSchema.optional(),
+  spacing: sectionSpacingSchema.optional(),
   /** 0–1; only meaningful for the hero when its background is an image —
    * a dark scrim strength, never raw CSS. */
   overlay: z.number().min(0).max(1).optional(),
@@ -233,8 +556,12 @@ const sectionOrderSchema = z
   )
   .catch(DEFAULT_SECTION_ORDER);
 
-const visualConfigSchemaV1 = z.object({
-  version: z.literal(1),
+const visualConfigSchema = z.object({
+  // Accepts either version this app has ever written (see SUPPORTED_
+  // VERSIONS above) — a v1 payload validates fine here too, since every
+  // field v2 adds is optional; the number itself is preserved as
+  // metadata, not branching logic.
+  version: z.union([z.literal(1), z.literal(2)]),
   theme: themeExtrasSchema.optional().catch(undefined),
   // partialRecord (not record): a template is never required to configure
   // every section, and the inferred TS type must allow missing keys —
@@ -246,9 +573,9 @@ const visualConfigSchemaV1 = z.object({
   sectionOrder: sectionOrderSchema.optional(),
 }).strict();
 
-export type VisualConfig = z.infer<typeof visualConfigSchemaV1>;
+export type VisualConfig = z.infer<typeof visualConfigSchema>;
 
-export const EMPTY_VISUAL_CONFIG: VisualConfig = { version: 1 };
+export const EMPTY_VISUAL_CONFIG: VisualConfig = { version: VISUAL_CONFIG_VERSION };
 
 /**
  * The strict write-path counterpart to `parseVisualConfig()` below. Admin
@@ -262,7 +589,7 @@ export const EMPTY_VISUAL_CONFIG: VisualConfig = { version: 1 };
  * silently "didn't take."
  */
 export function safeParseVisualConfigInput(raw: unknown) {
-  return visualConfigSchemaV1.safeParse(raw);
+  return visualConfigSchema.safeParse(raw);
 }
 
 /**
@@ -276,8 +603,8 @@ export function parseVisualConfig(raw: unknown): VisualConfig | null {
   if (raw === null || raw === undefined) return null;
   if (typeof raw !== "object") return null;
   const versioned = raw as { version?: unknown };
-  if (versioned.version !== VISUAL_CONFIG_VERSION) return null;
-  const result = visualConfigSchemaV1.safeParse(raw);
+  if (!(SUPPORTED_VERSIONS as readonly unknown[]).includes(versioned.version)) return null;
+  const result = visualConfigSchema.safeParse(raw);
   return result.success ? result.data : null;
 }
 
@@ -305,3 +632,138 @@ export function resolveSectionDecoration(
 ): DecorationId {
   return config?.sections?.[id]?.decorationId ?? fallback;
 }
+
+/* ── v2 resolvers ──────────────────────────────────────────────────────
+   All follow the identical pattern established above: read from
+   `config?.sections?.[id]?.X`, fall back to the caller-supplied default
+   when absent — never throw, never require the config or the specific
+   section entry to exist. */
+
+/**
+ * Resolves ONE piece of template-static content for a section, in the
+ * given language, with placeholder substitution already applied (§5).
+ * `fallback` is the CURRENT hardcoded Kazakh string InvitationView.tsx
+ * already renders for that slot — so a template with no override (every
+ * existing template, including all 5 flagship ones) produces the exact
+ * same text as before this feature existed, in both languages (the
+ * built-in fallback is Kazakh-only, matching the project's established
+ * "pre-existing strings stay hardcoded Kazakh regardless of lang"
+ * convention — an override is the ONLY way a section's static text
+ * becomes genuinely bilingual).
+ */
+export function resolveSectionText(
+  config: VisualConfig | null,
+  id: SectionId,
+  key: string,
+  lang: "kk" | "ru",
+  fallback: string,
+  placeholderCtx?: Partial<Record<ContentPlaceholder, string>>
+): string {
+  const entry = config?.sections?.[id]?.content?.text?.[key];
+  const raw = entry?.[lang] ?? fallback;
+  return placeholderCtx ? resolvePlaceholders(raw, placeholderCtx) : raw;
+}
+
+/** Show/hide toggle — absent means visible (`true`), matching every
+ * current section's existing always-shown behavior. */
+export function resolveSectionVisibility(
+  config: VisualConfig | null,
+  id: SectionId,
+  key: string,
+  fallback = true
+): boolean {
+  const v = config?.sections?.[id]?.content?.visibility?.[key];
+  return v ?? fallback;
+}
+
+export function resolveSectionTypography(
+  config: VisualConfig | null,
+  id: SectionId,
+  role: "heading" | "kicker"
+): TypographyRole | undefined {
+  return config?.sections?.[id]?.typography?.[role];
+}
+
+/** Builds a style object for a typography role — `undefined` fields
+ * simply aren't set, so a section with no typography override produces
+ * an empty style object (zero effect, existing `.invite-*` class and
+ * inline color continue to fully control appearance, exactly as today). */
+export function typographyRoleToStyle(role: TypographyRole | undefined): React.CSSProperties {
+  if (!role) return {};
+  return {
+    ...(role.font && { fontFamily: FONT_OPTIONS.find((f) => f.id === role.font)?.cssVar }),
+    ...(role.weight && { fontWeight: TEXT_WEIGHT_VALUES[role.weight] }),
+    ...(role.color && { color: role.color }),
+    ...(role.align && { textAlign: role.align }),
+    ...(role.letterSpacing && { letterSpacing: LETTER_SPACING_VALUES[role.letterSpacing] }),
+    ...(role.uppercase && { textTransform: "uppercase" as const }),
+    ...(role.italic && { fontStyle: "italic" as const }),
+  };
+}
+
+export function resolveSectionMedia(config: VisualConfig | null, id: SectionId): SectionMedia | undefined {
+  return config?.sections?.[id]?.media;
+}
+
+export function resolveSectionBackground(config: VisualConfig | null, id: SectionId): SectionBackground | undefined {
+  return config?.sections?.[id]?.background;
+}
+
+/** Structured gradient presets (§11) resolved against the section's own
+ * accent — never a raw admin-entered CSS gradient string. */
+export function gradientPresetToCss(preset: GradientPreset | undefined, accent: string, baseColor: string): string | undefined {
+  switch (preset) {
+    case "toCream": return `linear-gradient(180deg, ${baseColor}, var(--cream))`;
+    case "toDark": return `linear-gradient(180deg, ${baseColor}, #1C1917)`;
+    case "accentFade": return `linear-gradient(160deg, ${accent}22, ${baseColor})`;
+    case "none":
+    case undefined:
+    default:
+      return undefined;
+  }
+}
+
+export function resolveSectionDecorations(config: VisualConfig | null, id: SectionId): DecorationInstance[] {
+  return config?.sections?.[id]?.decorations ?? [];
+}
+
+export function resolveSectionBorder(config: VisualConfig | null, id: SectionId): SectionBorder | undefined {
+  return config?.sections?.[id]?.border;
+}
+
+export function resolveSectionSpacing(config: VisualConfig | null, id: SectionId): SectionSpacing | undefined {
+  return config?.sections?.[id]?.spacing;
+}
+
+/** Every Template Asset Library `assetId` referenced anywhere in a
+ * visualConfig (section backgrounds + decoration instances) — used by the
+ * server page callers (/i/[slug], /templates/[slug]) to batch-resolve
+ * assetId → URL via `lib/template-assets.ts`'s `resolveAssetUrls()` in a
+ * single DB round trip before rendering, never from inside InvitationView
+ * itself (see its `assetUrls` prop doc). */
+export function collectAssetIds(config: VisualConfig | null): string[] {
+  if (!config?.sections) return [];
+  const ids: string[] = [];
+  for (const section of Object.values(config.sections)) {
+    if (section?.background?.assetId) ids.push(section.background.assetId);
+    for (const d of section?.decorations ?? []) ids.push(d.assetId);
+  }
+  return ids;
+}
+
+/** Tailwind placement classes for a decoration instance's wrapper —
+ * closed preset set (§12/§25: never arbitrary x/y). "watermark" centers
+ * a large, low-opacity instance behind the section's content (z-index
+ * handled by the `layer` prop, not a raw number). */
+export const DECORATION_PLACEMENT_CLASS: Record<DecorationPlacement, string> = {
+  "top-left": "absolute top-2 left-2",
+  "top-center": "absolute top-2 left-1/2 -translate-x-1/2",
+  "top-right": "absolute top-2 right-2",
+  "center-left": "absolute top-1/2 left-2 -translate-y-1/2",
+  center: "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2",
+  "center-right": "absolute top-1/2 right-2 -translate-y-1/2",
+  "bottom-left": "absolute bottom-2 left-2",
+  "bottom-center": "absolute bottom-2 left-1/2 -translate-x-1/2",
+  "bottom-right": "absolute bottom-2 right-2",
+  watermark: "absolute inset-0 flex items-center justify-center",
+};

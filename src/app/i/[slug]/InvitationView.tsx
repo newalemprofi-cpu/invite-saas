@@ -16,16 +16,29 @@ import { ProgramTimeline } from "@/components/invitation/ProgramTimeline";
 import { LocationSection } from "@/components/invitation/LocationSection";
 import { KazakhDivider, KAZAKH_ETHNO_SURFACE } from "@/components/wedding/KazakhOrnament";
 import { SectionDecoration } from "@/components/wedding/DecorationRegistry";
+import { AssetDecorationLayer } from "@/components/wedding/AssetDecorations";
 import {
   type VisualConfig,
+  type SectionId,
   type ReorderableSectionId,
   type HeroVariant,
   type GalleryVariantId,
   type OrnamentVariant,
   type DecorationId,
+  type ContentPlaceholder,
   resolveSectionOrder,
   resolveSectionVariant,
   resolveSectionDecoration,
+  resolveSectionText,
+  resolveSectionVisibility,
+  resolveSectionTypography,
+  typographyRoleToStyle,
+  resolveSectionMedia,
+  resolveSectionBackground,
+  resolveSectionDecorations,
+  resolveSectionBorder,
+  resolveSectionSpacing,
+  gradientPresetToCss,
   HERO_VARIANT_TO_PHOTO_MODE,
   GALLERY_VARIANT_TO_FRAME,
   FONT_OPTIONS,
@@ -33,6 +46,9 @@ import {
   SHADOW_VALUES,
   BUTTON_RADIUS_VALUES,
   SPACING_CLASS,
+  SPACING_SIZE_REM,
+  BORDER_WIDTH_PX,
+  TEXT_SIZE_CLASS,
 } from "@/lib/visual-config";
 
 /** Consistent vertical rhythm for every major content section (§7) — one
@@ -137,13 +153,18 @@ export interface InvitationViewProps {
    * byte-for-byte unchanged.
    */
   demo?: boolean;
-  /** Locale for the handful of genuinely NEW demo-only strings this task
-   * introduces (sample wishes, etc). Every OTHER string in this component
-   * was already hardcoded Kazakh before this — that pre-existing
-   * convention is intentionally left alone (§16: preserve current
-   * localization rules), this prop only governs new demo content.
-   * Defaults "kk", matching that existing convention exactly, so
-   * `/i/[slug]` (which never passes it) is unaffected. */
+  /** Locale for the handful of genuinely NEW demo-only strings, AND (as of
+   * the Full Production Template Designer task) the language a template's
+   * own admin-configured content overrides render in. Every OTHER
+   * pre-existing string in this component stays hardcoded Kazakh
+   * regardless of `lang` (§16/established convention) — only text an
+   * admin has explicitly configured via the Builder's Content panel
+   * becomes genuinely bilingual. Real `/i/[slug]` has no lang concept at
+   * all and never passes this (defaults "kk"), so a real published
+   * invitation always renders its content overrides in Kazakh, exactly
+   * like every other pre-existing string in this file — not a limitation
+   * introduced by this task, the same rule every string here already
+   * followed. */
   lang?: Lang;
   /**
    * Admin Template Builder ONLY: the currently-being-edited, UNSAVED
@@ -159,6 +180,22 @@ export interface InvitationViewProps {
    * Builder component.
    */
   visualConfigOverride?: VisualConfig | null;
+  /**
+   * Full Production Template Designer task (§14/§10): a plain, already-
+   * resolved `assetId -> loadable image URL` map for any Template Asset
+   * Library images referenced by this template's section
+   * backgrounds/decorations. Deliberately a plain object, never a
+   * database call made from inside this component — InvitationView must
+   * stay renderable inside the Admin Builder's Client Component preview,
+   * which has no server-only Prisma access. Server callers
+   * (/i/[slug]/page.tsx, /templates/[slug]/page.tsx) resolve this via
+   * `lib/template-assets.ts`'s `resolveAssetUrls()` before rendering; the
+   * Builder maintains its own client-side copy from the same asset list
+   * it already loads for its Asset Library picker. An assetId missing
+   * from this map (asset deleted, or not yet loaded) simply isn't
+   * rendered — never a broken-image icon, never a crash. Defaults to `{}`.
+   */
+  assetUrls?: Record<string, string>;
 }
 
 function fmt(s: string) {
@@ -235,6 +272,101 @@ const RIDER_ANCHORS: Partial<Record<ReorderableSectionId, string[]>> = {
 };
 
 /**
+ * Full Production Template Designer task — resolves a section's
+ * background/border/spacing/decorations config into a wrapping
+ * `<section>` element. A MODULE-LEVEL component (not defined inside
+ * InvitationView) per the React Compiler purity rule — components must
+ * never be created during another component's render — so every value
+ * it needs comes in as an explicit prop rather than a closure. A section
+ * with NO background/border/spacing override renders EXACTLY the plain
+ * `<section className={sectionPy} style={{background: defaultBg,
+ * borderTop: sectionDivider}}>` every section already used before this
+ * task, byte-for-byte (confirmed by the Designer task's own regression
+ * pixel-diff) — every new field here is additive and only takes effect
+ * once an admin explicitly sets it through the Builder.
+ */
+function SectionShell({
+  id, visualConfig, assetUrls, defaultBg, sectionPy, sectionDivider, accent, children, as = "section", extraClassName = "",
+}: {
+  id: SectionId;
+  visualConfig: VisualConfig | null;
+  assetUrls: Record<string, string>;
+  defaultBg: string;
+  sectionPy: string;
+  sectionDivider: string;
+  accent: string;
+  children: React.ReactNode;
+  /** "footer" for the Footer section (semantic landmark) — every other
+   * caller keeps the original "section" tag. Purely cosmetic/semantic,
+   * never affects styling logic below. */
+  as?: "section" | "footer";
+  /** Extra classes appended after the shell's own base classes — used by
+   * Footer to keep its original `text-center text-xs` typography base
+   * independent of every other section's styling. */
+  extraClassName?: string;
+}) {
+  const bg = resolveSectionBackground(visualConfig, id);
+  const border = resolveSectionBorder(visualConfig, id);
+  const spacing = resolveSectionSpacing(visualConfig, id);
+  const decorations = resolveSectionDecorations(visualConfig, id);
+
+  let backgroundStyle: React.CSSProperties = { background: defaultBg };
+  if (bg?.type === "solid" && bg.color) {
+    backgroundStyle = { background: bg.color };
+  } else if (bg?.type === "gradient") {
+    const css = gradientPresetToCss(bg.gradient, accent, defaultBg);
+    backgroundStyle = { background: css ?? defaultBg };
+  } else if (bg?.type === "image" && bg.assetId && assetUrls[bg.assetId]) {
+    backgroundStyle = {
+      backgroundImage: `url(${assetUrls[bg.assetId]})`,
+      backgroundSize: bg.fit === "contain" ? "contain" : "cover",
+      backgroundPosition: bg.position ?? "center",
+    };
+  }
+  // bg?.type === "inherit" or undefined -> keeps the caller's own default
+  // background exactly as before this feature.
+
+  const hasSpacingOverride = !!(spacing?.top || spacing?.bottom);
+  const paddingStyle: React.CSSProperties = hasSpacingOverride
+    ? {
+        paddingTop: spacing?.top ? `${SPACING_SIZE_REM[spacing.top]}rem` : undefined,
+        paddingBottom: spacing?.bottom ? `${SPACING_SIZE_REM[spacing.bottom]}rem` : undefined,
+      }
+    : {};
+
+  const hasBorder = !!(border?.style && border.style !== "none");
+  const borderStyle: React.CSSProperties = {
+    ...(hasBorder && { border: `${BORDER_WIDTH_PX[border!.style!]}px solid ${border?.color ?? accent}` }),
+    ...(border?.radius && { borderRadius: RADIUS_VALUES[border.radius] }),
+    ...(border?.shadow && { boxShadow: SHADOW_VALUES[border.shadow] }),
+  };
+
+  const showOverlay = bg?.type === "image" && bg.overlayColor && bg.overlayOpacity;
+  const Tag = as;
+
+  return (
+    <Tag
+      className={`relative overflow-hidden ${hasSpacingOverride ? "px-4" : sectionPy} ${extraClassName}`}
+      style={{
+        ...backgroundStyle,
+        ...paddingStyle,
+        ...borderStyle,
+        borderTop: hasBorder ? undefined : sectionDivider,
+      }}
+    >
+      <AssetDecorationLayer decorations={decorations} assetUrls={assetUrls} layer="background" />
+      {showOverlay && (
+        <div className="absolute inset-0 pointer-events-none" style={{ background: bg!.overlayColor, opacity: bg!.overlayOpacity }} />
+      )}
+      <div className="relative" style={spacing?.gap ? { display: "flex", flexDirection: "column", gap: `${SPACING_SIZE_REM[spacing.gap]}rem` } : undefined}>
+        {children}
+      </div>
+      <AssetDecorationLayer decorations={decorations} assetUrls={assetUrls} layer="foreground" />
+    </Tag>
+  );
+}
+
+/**
  * THE single rendering source of truth for a complete invitation — used
  * identically by the real public page (/i/[slug], real Invite.data + real
  * entitlements + real RSVP/wishes DB writes), the template full-preview
@@ -247,7 +379,7 @@ const RIDER_ANCHORS: Partial<Record<ReorderableSectionId, string[]>> = {
  * second, simplified re-implementation.
  */
 export function InvitationView({
-  d, tmpl, entitled, wishes, isPreview = false, invite = null, demo = false, lang = "kk", visualConfigOverride,
+  d, tmpl, entitled, wishes, isPreview = false, invite = null, demo = false, lang = "kk", visualConfigOverride, assetUrls = {},
 }: InvitationViewProps) {
   const isEntitledTo = (key: string) => (entitled as readonly string[]).includes(key);
 
@@ -339,6 +471,33 @@ export function InvitationView({
   const gallery = d.galleryUrls ?? [];
   const hostsLine = d.hosts || d.parents || null;
 
+  // Full Production Template Designer task (§3/§5): the CLOSED placeholder
+  // context every content override's `{token}` substitution resolves
+  // against — built entirely from CUSTOMER data, never template config.
+  // Template content can reference these; it can never supply or override
+  // them.
+  const placeholderCtx: Partial<Record<ContentPlaceholder, string>> = {
+    groomName: name || undefined,
+    brideName: partner || undefined,
+    hosts: hostsLine || undefined,
+    eventDate: d.date ? fmt(d.date) : undefined,
+    eventTime: d.time || undefined,
+    venue: location || undefined,
+  };
+  /** Resolves ONE piece of template-static content, in the current
+   * `lang`, with placeholder substitution — the single call every
+   * section below uses for its admin-editable labels. */
+  const text = (id: SectionId, key: string, fallback: string) =>
+    resolveSectionText(visualConfig, id, key, lang, fallback, placeholderCtx);
+  const visible = (id: SectionId, key: string, fallback = true) =>
+    resolveSectionVisibility(visualConfig, id, key, fallback);
+  const typographyStyle = (id: SectionId, role: "heading" | "kicker") =>
+    typographyRoleToStyle(resolveSectionTypography(visualConfig, id, role));
+  const kickerSizeClass = (id: SectionId) => {
+    const size = resolveSectionTypography(visualConfig, id, "kicker")?.size;
+    return size ? TEXT_SIZE_CLASS[size] : undefined;
+  };
+
   // This Server Component renders exactly once per request (no client-side
   // re-renders to go stale between), so a single Date.now() snapshot here
   // is safe and deterministic for the whole render — unlike calling
@@ -359,10 +518,61 @@ export function InvitationView({
   const fallbackBg = tmpl?.bg || (isDark ? "#0F1729" : "#FAF8F3");
   const gradient = tmpl?.gradient || legacy.gradient;
 
+  // Full Production Template Designer task (§3 Hero controls) — an admin-
+  // configured hero background (solid/gradient) only ever fills in the
+  // DEFAULT the customer would otherwise see (§10: "template supplies
+  // HOW"), never overriding a color/image/video the customer explicitly
+  // picked in the constructor (§3: "customer data supplies WHAT"). It's
+  // therefore only consulted here, inside the exact branch that already
+  // meant "customer hasn't set their own bgColor" — every other branch
+  // (customer bgType is "gradient"/"image"/"video", or bgColor is set)
+  // is completely unaffected, so an existing invite's own customization
+  // can never be silently replaced by a template change.
+  const heroBackground = resolveSectionBackground(visualConfig, "hero");
+  const heroBackgroundOverrideCss =
+    heroBackground?.type === "solid" && heroBackground.color ? heroBackground.color
+    : heroBackground?.type === "gradient" ? gradientPresetToCss(heroBackground.gradient, accent, fallbackBg)
+    : undefined;
+
   let heroBg: string;
   if (bgType === "gradient") heroBg = d.bgGradient || fallbackBg;
-  else if (bgType === "color") heroBg = d.bgColor || fallbackBg;
+  else if (bgType === "color") heroBg = d.bgColor || heroBackgroundOverrideCss || fallbackBg;
   else heroBg = fallbackBg;
+
+  // Same precedence rule, for an admin-configured hero background IMAGE —
+  // only shown when the customer hasn't uploaded their own hero photo/
+  // video, and only resolved when the referenced Template Asset Library
+  // image still exists (a deleted asset silently omits this layer, never
+  // crashes — see AssetDecorationLayer's identical contract).
+  const heroBackgroundImageUrl =
+    !d.bgImageUrl && !d.bgVideoUrl && heroBackground?.type === "image" && heroBackground.assetId
+      ? assetUrls[heroBackground.assetId]
+      : undefined;
+  // A single CSS `background` shorthand covering all 3 configurable types,
+  // for the `<WeddingHero>`-composed branch specifically (see
+  // WeddingHeroProps.backgroundOverride's doc for why each of the 5
+  // compositions needs a plain string override rather than a layered div
+  // — every composition paints its own opaque background, so a behind-
+  // the-scenes layer would never be visible). Overlay tinting is
+  // deliberately not supported for the image case here (documented
+  // limitation) — it IS supported for the ad-hoc/no-variant branch below,
+  // which already renders overlay as its own dedicated layer.
+  const heroComposedBackgroundOverride =
+    heroBackgroundImageUrl
+      ? `url(${heroBackgroundImageUrl}) ${heroBackground?.position ?? "center"} / ${heroBackground?.fit === "contain" ? "contain" : "cover"} no-repeat`
+      : heroBackgroundOverrideCss;
+  const heroMedia = resolveSectionMedia(visualConfig, "hero");
+  const heroDecorations = resolveSectionDecorations(visualConfig, "hero");
+  const heroBorder = resolveSectionBorder(visualConfig, "hero");
+  const heroSpacing = resolveSectionSpacing(visualConfig, "hero");
+  const heroHasBorder = !!(heroBorder?.style && heroBorder.style !== "none");
+  const heroFrameStyle: React.CSSProperties = {
+    ...(heroHasBorder && { border: `${BORDER_WIDTH_PX[heroBorder!.style!]}px solid ${heroBorder?.color ?? accent}` }),
+    ...(heroBorder?.radius && { borderRadius: RADIUS_VALUES[heroBorder.radius] }),
+    ...(heroBorder?.shadow && { boxShadow: SHADOW_VALUES[heroBorder.shadow] }),
+    ...(heroSpacing?.top && { paddingTop: `${SPACING_SIZE_REM[heroSpacing.top]}rem` }),
+    ...(heroSpacing?.bottom && { paddingBottom: `${SPACING_SIZE_REM[heroSpacing.bottom]}rem` }),
+  };
 
   // Program items
   const programItems = (d.programItems && d.programItems.length > 0)
@@ -413,29 +623,42 @@ export function InvitationView({
      sequence; only the SectionKicker→SectionDecoration call and the
      wrapping into a keyed const changed. ── */
 
-  const hostsSection = hostsLine ? (
-    <section key="hosts" className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
-      <div className="max-w-md mx-auto text-center">
-        <SectionDecoration decorationId={sectionDecorationId("hosts")} label="Той иелері" accent={accent} className="mb-4" />
-        <p className="invite-body leading-relaxed" style={{ color: "var(--charcoal)" }}>{hostsLine}</p>
-      </div>
-    </section>
+  const hostsSection = (hostsLine && visible("hosts", "showHeading")) || hostsLine ? (
+    hostsLine ? (
+      <SectionShell key="hosts" id="hosts" visualConfig={visualConfig} assetUrls={assetUrls} defaultBg={sectionBg("cream")} sectionPy={sectionPy} sectionDivider={sectionDivider} accent={accent}>
+        <div className="max-w-md mx-auto text-center">
+          {visible("hosts", "showHeading") && (
+            <SectionDecoration decorationId={sectionDecorationId("hosts")} label={text("hosts", "heading", "Той иелері")} accent={accent} className="mb-4" typographyStyle={typographyStyle("hosts", "kicker")} sizeClass={kickerSizeClass("hosts")} />
+          )}
+          <p className="invite-body leading-relaxed" style={{ color: "var(--charcoal)", ...typographyStyle("hosts", "heading") }}>
+            {text("hosts", "prefix", "")}{hostsLine}{text("hosts", "suffix", "")}
+          </p>
+        </div>
+      </SectionShell>
+    ) : null
   ) : null;
 
   const dateSection = d.date ? (
-    <section key="datetime" className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
+    <SectionShell key="datetime" id="datetime" visualConfig={visualConfig} assetUrls={assetUrls} defaultBg={sectionBg("ivory")} sectionPy={sectionPy} sectionDivider={sectionDivider} accent={accent}>
       <div className="max-w-md mx-auto text-center flex flex-col items-center gap-2">
-        <SectionDecoration decorationId={sectionDecorationId("datetime")} label="Күні мен уақыты" accent={accent} className="mb-1" />
-        <p className="heading-display invite-headline font-semibold" style={{ color: "var(--charcoal)" }}>{fmt(d.date)}</p>
-        {d.time && <p className="invite-caption" style={{ color: "var(--muted)" }}>Сағат {d.time}</p>}
+        {visible("datetime", "showHeading") && (
+          <SectionDecoration decorationId={sectionDecorationId("datetime")} label={text("datetime", "heading", "Күні мен уақыты")} accent={accent} className="mb-1" typographyStyle={typographyStyle("datetime", "kicker")} sizeClass={kickerSizeClass("datetime")} />
+        )}
+        <p className="heading-display invite-headline font-semibold" style={{ color: "var(--charcoal)", ...typographyStyle("datetime", "heading") }}>
+          {fmt(d.date)}
+        </p>
+        {d.time && visible("datetime", "showWeekday") && <p className="invite-caption" style={{ color: "var(--muted)" }}>Сағат {d.time}</p>}
       </div>
-    </section>
+    </SectionShell>
   ) : null;
 
   const invitationSection = ((has("invitation_text") && message) || d.note) ? (
-    <section key="invitation" className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
+    <SectionShell key="invitation" id="invitation" visualConfig={visualConfig} assetUrls={assetUrls} defaultBg={sectionBg("cream")} sectionPy={sectionPy} sectionDivider={sectionDivider} accent={accent}>
       <div className="max-w-md mx-auto flex flex-col items-center gap-4 text-center">
         {sectionDecorationId("invitation") === "kazakh-qoshqar" && <KazakhDivider accent={accent} />}
+        {visible("invitation", "showHeading", false) && (
+          <p className="invite-kicker" style={{ color: "var(--gold)", ...typographyStyle("invitation", "kicker") }}>{text("invitation", "heading", "")}</p>
+        )}
         {has("invitation_text") && message && (
           // Restrained, not fully-italic ceremonial styling for Kazakh
           // Ethno (§10 — "do not make the entire paragraph overly
@@ -446,25 +669,38 @@ export function InvitationView({
         )}
         {d.note && <p className="invite-caption leading-relaxed" style={{ color: "var(--muted)" }}>{d.note}</p>}
       </div>
-    </section>
+    </SectionShell>
   ) : null;
 
   const countdownSection = (has("countdown") && d.date) ? (
-    <section key="countdown" className={sectionPy} style={{ background: sectionBg("darkOrCream"), borderTop: sectionDivider }}>
+    <SectionShell key="countdown" id="countdown" visualConfig={visualConfig} assetUrls={assetUrls} defaultBg={sectionBg("darkOrCream")} sectionPy={sectionPy} sectionDivider={sectionDivider} accent={accent}>
       <div className="max-w-md mx-auto text-center">
-        <SectionDecoration decorationId={sectionDecorationId("countdown")} label="Іс-шараға дейін" accent={accent} className="mb-8" color={isDark ? "rgba(255,255,255,0.4)" : "var(--gold)"} />
-        <Countdown targetDate={d.date} targetTime={d.time} accent={accent} textMuted={isDark ? "rgba(255,255,255,0.45)" : "var(--muted)"} serverNow={nowMs} ornament={sectionOrnament("countdown")} />
+        {visible("countdown", "showHeading") && (
+          <SectionDecoration decorationId={sectionDecorationId("countdown")} label={text("countdown", "heading", "Іс-шараға дейін")} accent={accent} className="mb-8" color={isDark ? "rgba(255,255,255,0.4)" : "var(--gold)"} typographyStyle={typographyStyle("countdown", "kicker")} sizeClass={kickerSizeClass("countdown")} />
+        )}
+        <Countdown
+          targetDate={d.date}
+          targetTime={d.time}
+          accent={accent}
+          textMuted={isDark ? "rgba(255,255,255,0.45)" : "var(--muted)"}
+          serverNow={nowMs}
+          ornament={sectionOrnament("countdown")}
+          dayLabel={text("countdown", "dayLabel", "күн")}
+          hourLabel={text("countdown", "hourLabel", "сағат")}
+          minuteLabel={text("countdown", "minuteLabel", "минут")}
+          secondLabel={text("countdown", "secondLabel", "секунд")}
+        />
       </div>
-    </section>
+    </SectionShell>
   ) : null;
 
   const loveStorySection = (has("love_story") && d.loveStory) ? (
-    <section key="love_story" className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
+    <SectionShell key="love_story" id="countdown" visualConfig={visualConfig} assetUrls={{}} defaultBg={sectionBg("ivory")} sectionPy={sectionPy} sectionDivider={sectionDivider} accent={accent}>
       <div className="max-w-md mx-auto text-center">
         <SectionDecoration decorationId={sectionDecorationId("countdown")} label="Біздің тарих" accent={accent} className="mb-5" />
         <p className="invite-body leading-relaxed" style={{ color: "var(--charcoal)" }}>{d.loveStory}</p>
       </div>
-    </section>
+    </SectionShell>
   ) : null;
 
   // Only ever iframes a URL that getYoutubeEmbedUrl() has validated as a
@@ -498,16 +734,21 @@ export function InvitationView({
   // if the text has no recognizable "HH:MM — ..." lines at all. The
   // stored programText string itself is never touched.
   const programSection = has("program") ? (
-    <section key="program" className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
+    <SectionShell key="program" id="program" visualConfig={visualConfig} assetUrls={assetUrls} defaultBg={sectionBg("cream")} sectionPy={sectionPy} sectionDivider={sectionDivider} accent={accent}>
       <div className="max-w-md mx-auto">
-        <SectionDecoration decorationId={sectionDecorationId("program")} label="Бағдарлама" accent={accent} className="text-center mb-8" />
+        {visible("program", "showHeading") && (
+          <SectionDecoration decorationId={sectionDecorationId("program")} label={text("program", "heading", "Бағдарлама")} accent={accent} className="text-center mb-8" typographyStyle={typographyStyle("program", "kicker")} sizeClass={kickerSizeClass("program")} />
+        )}
+        {visible("program", "showSubtitle", false) && (
+          <p className="invite-caption text-center -mt-5 mb-6" style={{ color: "var(--muted)" }}>{text("program", "subtitle", "")}</p>
+        )}
         {(!d.programItems || d.programItems.length === 0) && d.programText ? (
           <ProgramTimeline text={d.programText} accent={accent} textDark="var(--charcoal)" textMuted="var(--muted)" ornament={sectionOrnament("program")} />
         ) : (
           <ProgramTimeline items={programItems} accent={accent} textDark="var(--charcoal)" textMuted="var(--muted)" ornament={sectionOrnament("program")} />
         )}
       </div>
-    </section>
+    </SectionShell>
   ) : null;
 
   const dressCodeSection = (has("dress_code") && d.dressCode) ? (
@@ -527,19 +768,22 @@ export function InvitationView({
   // rule the old inline-hero + separate Map block enforced between them
   // before this restructuring.
   const locationSection = (location || d.address) ? (
-    <section key="location" className={sectionPy} style={{ background: sectionBg("cream"), borderTop: sectionDivider }}>
+    <SectionShell key="location" id="location" visualConfig={visualConfig} assetUrls={assetUrls} defaultBg={sectionBg("cream")} sectionPy={sectionPy} sectionDivider={sectionDivider} accent={accent}>
       <LocationSection
         location={location ?? null}
-        address={d.address ?? null}
+        address={visible("location", "showAddress") ? (d.address ?? null) : null}
         mapUrl={has("map") && mapUrl && isEntitledTo("map") ? mapUrl : null}
-        kickerLabel="Орналасқан жері"
-        buttonLabel="Картада ашу ↗"
+        kickerLabel={text("location", "heading", "Орналасқан жері")}
+        buttonLabel={text("location", "mapButtonLabel", "Картада ашу ↗")}
         textDark="var(--charcoal)"
         textMuted="var(--muted)"
         accent={accent}
         ornament={sectionOrnament("location")}
+        showHeading={visible("location", "showHeading")}
+        kickerStyle={typographyStyle("location", "kicker")}
+        headingStyle={typographyStyle("location", "heading")}
       />
-    </section>
+    </SectionShell>
   ) : null;
 
   // Gallery (§ item 7) — a swipeable carousel instead of a fixed grid
@@ -549,11 +793,29 @@ export function InvitationView({
   // Still the exact same ordered `galleryUrls`, still capped at 10 by the
   // existing constructor/storage limit — this component never touches
   // either.
-  const gallerySection = (has("gallery") && gallery.length > 0 && isEntitledTo("gallery")) ? (
-    <section key="gallery" className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
-      <SectionDecoration decorationId={sectionDecorationId("gallery")} label="Галерея" accent={accent} className="text-center mb-8" />
-      <GalleryCarousel urls={gallery} accent={accent} variant={galleryVariant} labelPrev="Алдыңғы сурет" labelNext="Келесі сурет" />
-    </section>
+  const gallerySection = (has("gallery") && isEntitledTo("gallery")) ? (
+    gallery.length > 0 ? (
+      <SectionShell key="gallery" id="gallery" visualConfig={visualConfig} assetUrls={assetUrls} defaultBg={sectionBg("ivory")} sectionPy={sectionPy} sectionDivider={sectionDivider} accent={accent}>
+        {visible("gallery", "showHeading") && (
+          <SectionDecoration decorationId={sectionDecorationId("gallery")} label={text("gallery", "heading", "Галерея")} accent={accent} className="text-center mb-8" typographyStyle={typographyStyle("gallery", "kicker")} sizeClass={kickerSizeClass("gallery")} />
+        )}
+        {visible("gallery", "showSubtitle", false) && (
+          <p className="invite-caption text-center -mt-5 mb-6" style={{ color: "var(--muted)" }}>{text("gallery", "subtitle", "")}</p>
+        )}
+        <GalleryCarousel
+          urls={gallery} accent={accent} variant={galleryVariant} labelPrev="Алдыңғы сурет" labelNext="Келесі сурет"
+          aspectRatio={resolveSectionMedia(visualConfig, "gallery")?.aspectRatio}
+          fit={resolveSectionMedia(visualConfig, "gallery")?.fit}
+        />
+      </SectionShell>
+    ) : demo ? (
+      <SectionShell key="gallery" id="gallery" visualConfig={visualConfig} assetUrls={assetUrls} defaultBg={sectionBg("ivory")} sectionPy={sectionPy} sectionDivider={sectionDivider} accent={accent}>
+        {visible("gallery", "showHeading") && (
+          <SectionDecoration decorationId={sectionDecorationId("gallery")} label={text("gallery", "heading", "Галерея")} accent={accent} className="text-center mb-4" typographyStyle={typographyStyle("gallery", "kicker")} sizeClass={kickerSizeClass("gallery")} />
+        )}
+        <p className="invite-caption text-center" style={{ color: "var(--muted)" }}>{text("gallery", "emptyStateText", "Суреттер жақында қосылады")}</p>
+      </SectionShell>
+    ) : null
   ) : null;
 
   const whatsappSection = ((has("whatsapp") || has("contacts")) && (d.whatsapp || d.organizerPhone || d.contactsText)) ? (
@@ -606,9 +868,25 @@ export function InvitationView({
   // before this task.
   const wishesWallSection = isEntitledTo("wishes") ? (
     invite?.status === "PUBLISHED" ? (
-      <WishesWall key="wishes" inviteId={invite.id} wishes={wishes} accent={accent} cardBg={cardBg} cardBorder={cardBorder} sectionDivider={sectionDivider} ornament={sectionOrnament("wishes")} />
+      <SectionShell key="wishes" id="wishes" visualConfig={visualConfig} assetUrls={assetUrls} defaultBg={sectionBg("cream")} sectionPy={sectionPy} sectionDivider={sectionDivider} accent={accent}>
+        <WishesWall
+          inviteId={invite.id} wishes={wishes} accent={accent} cardBg={cardBg} cardBorder={cardBorder} ornament={sectionOrnament("wishes")}
+          headingOverride={text("wishes", "heading", "")} formHeadingOverride={text("wishes", "formHeading", "")}
+          namePlaceholderOverride={text("wishes", "namePlaceholder", "")} messagePlaceholderOverride={text("wishes", "messagePlaceholder", "")}
+          submitButtonOverride={text("wishes", "submitButton", "")} kickerStyle={typographyStyle("wishes", "kicker")}
+          headingStyle={typographyStyle("wishes", "heading")}
+        />
+      </SectionShell>
     ) : demo ? (
-      <WishesWall key="wishes" demo lang={lang} accent={accent} cardBg={cardBg} cardBorder={cardBorder} sectionDivider={sectionDivider} ornament={sectionOrnament("wishes")} />
+      <SectionShell key="wishes" id="wishes" visualConfig={visualConfig} assetUrls={assetUrls} defaultBg={sectionBg("cream")} sectionPy={sectionPy} sectionDivider={sectionDivider} accent={accent}>
+        <WishesWall
+          demo lang={lang} accent={accent} cardBg={cardBg} cardBorder={cardBorder} ornament={sectionOrnament("wishes")}
+          headingOverride={text("wishes", "heading", "")} formHeadingOverride={text("wishes", "formHeading", "")}
+          namePlaceholderOverride={text("wishes", "namePlaceholder", "")} messagePlaceholderOverride={text("wishes", "messagePlaceholder", "")}
+          submitButtonOverride={text("wishes", "submitButton", "")} kickerStyle={typographyStyle("wishes", "kicker")}
+          headingStyle={typographyStyle("wishes", "heading")}
+        />
+      </SectionShell>
     ) : null
   ) : null;
 
@@ -625,22 +903,22 @@ export function InvitationView({
 
   // RSVP (§ item 9, paid add-on).
   const rsvpSection = (has("rsvp") && isEntitledTo("rsvp")) ? (
-    <section key="rsvp" className={sectionPy} style={{ background: sectionBg("ivory"), borderTop: sectionDivider }}>
+    <SectionShell key="rsvp" id="rsvp" visualConfig={visualConfig} assetUrls={assetUrls} defaultBg={sectionBg("ivory")} sectionPy={sectionPy} sectionDivider={sectionDivider} accent={accent}>
       <div className="max-w-md mx-auto">
         <div className="text-center mb-7">
-          <SectionDecoration decorationId={sectionDecorationId("rsvp")} label="RSVP" accent={accent} className="mb-2" />
-          <h2 className="heading-display invite-headline mb-2" style={{ color: "var(--charcoal)" }}>Қатысасыз ба?</h2>
-          <p className="invite-caption" style={{ color: "var(--muted)" }}>{d.rsvpText || "Жауабыңызды жіберіңіз"}</p>
+          <SectionDecoration decorationId={sectionDecorationId("rsvp")} label={text("rsvp", "heading", "RSVP")} accent={accent} className="mb-2" typographyStyle={typographyStyle("rsvp", "kicker")} sizeClass={kickerSizeClass("rsvp")} />
+          <h2 className="heading-display invite-headline mb-2" style={{ color: "var(--charcoal)", ...typographyStyle("rsvp", "heading") }}>{text("rsvp", "question", "Қатысасыз ба?")}</h2>
+          <p className="invite-caption" style={{ color: "var(--muted)" }}>{text("rsvp", "helperText", d.rsvpText || "Жауабыңызды жіберіңіз")}</p>
         </div>
 
         {invite?.status === "PUBLISHED" ? (
-          <RSVPForm inviteId={invite.id} accent={accent} ornament={sectionOrnament("rsvp")} />
+          <RSVPForm inviteId={invite.id} accent={accent} ornament={sectionOrnament("rsvp")} submitButtonOverride={text("rsvp", "submitButton", "")} />
         ) : demo ? (
           // Full-looking, fully-interactive RSVP form so a prospective
           // customer sees the actual finished experience (§4/§10) —
           // RSVPForm's own `demo` prop guarantees submission never
           // reaches submitRSVP/the DB, only a local success state.
-          <RSVPForm demo accent={accent} lang={lang} ornament={sectionOrnament("rsvp")} />
+          <RSVPForm demo accent={accent} lang={lang} ornament={sectionOrnament("rsvp")} submitButtonOverride={text("rsvp", "submitButton", "")} demoExplanationOverride={text("rsvp", "demoExplanation", "")} />
         ) : (
           // Compact, visually intentional placeholder — a real invite's
           // own unpublished-preview state, unchanged from before this
@@ -653,7 +931,7 @@ export function InvitationView({
           </div>
         )}
       </div>
-    </section>
+    </SectionShell>
   ) : null;
 
   const SECTION_ELEMENTS: Record<ReorderableSectionId, React.ReactNode> = {
@@ -681,6 +959,14 @@ export function InvitationView({
     ...(RIDER_ANCHORS[id] ?? []).map((riderId) => RIDER_ELEMENTS[riderId]),
   ]);
 
+  // Footer content overrides (§4 — "where product policy permits"): only
+  // the branding prefix text and the CTA link's own LABEL are
+  // overridable; the CTA's actual href ("/") and the fact that a
+  // branding line exists at all are never configurable — product-policy
+  // boundaries this task explicitly must not touch.
+  const footerBranding = text("footer", "brandingText", "Шақыру · Қазақстандық премиум цифрлы шақыру сервисі");
+  const footerCta = text("footer", "ctaLabel", "Өз шақыруыңызды жасаңыз →");
+
   return (
     <div className="min-h-screen" style={{ fontFamily, ...themeVars }}>
       {isPreview && (
@@ -707,7 +993,16 @@ export function InvitationView({
       )}
 
       {/* ── Hero ── */}
-      <section className={`relative min-h-screen overflow-hidden ${effectiveWeddingLayout ? "flex flex-col" : "flex flex-col items-center justify-center px-6 py-20"}`}>
+      <section className={`relative min-h-screen overflow-hidden ${effectiveWeddingLayout ? "flex flex-col" : "flex flex-col items-center justify-center px-6 py-20"}`} style={heroFrameStyle}>
+        {/* Full Production Template Designer task — asset-based hero
+            decorations, shared by both branches below so they sit above
+            either the WeddingHero composition or the ad-hoc fallback
+            identically. Hero background itself is applied separately per
+            branch below (each of the 5 flagship compositions paints its
+            OWN opaque background, so an override has to replace that
+            specific layer to be visible — see backgroundOverride's doc on
+            WeddingHeroProps for why). */}
+        <AssetDecorationLayer decorations={heroDecorations} assetUrls={assetUrls} layer="background" />
         {effectiveWeddingLayout ? (
           // The 5 flagship Wedding templates, and any Builder-configured
           // template with a hero variant set: the photo lives ENTIRELY
@@ -734,6 +1029,12 @@ export function InvitationView({
                 age: d.age ?? null,
                 photoUrl: d.bgImageUrl ?? null,
               }}
+              kickerOverride={visible("hero", "showKicker") ? text("hero", "kicker", "") || undefined : ""}
+              subtitleOverride={visible("hero", "showSubtitle", true) ? text("hero", "subtitle", "") : undefined}
+              showDivider={visible("hero", "showDivider")}
+              photoFit={heroMedia?.fit}
+              photoPosition={heroMedia?.position}
+              backgroundOverride={heroComposedBackgroundOverride}
             />
           </div>
         ) : (
@@ -745,8 +1046,8 @@ export function InvitationView({
                   className="absolute inset-0"
                   style={{
                     backgroundImage: `url(${d.bgImageUrl})`,
-                    backgroundSize: "cover",
-                    backgroundPosition: "center",
+                    backgroundSize: heroMedia?.fit === "contain" ? "contain" : "cover",
+                    backgroundPosition: heroMedia?.position ?? "center",
                     filter: d.bgBlur ? `blur(${d.bgBlur}px)` : undefined,
                     opacity: d.bgOpacity ?? 1,
                     transform: "scale(1.05)",
@@ -767,6 +1068,23 @@ export function InvitationView({
                 {d.bgOverlay && d.bgOverlay !== "rgba(0,0,0,0)" && (
                   <div className="absolute inset-0" style={{ background: d.bgOverlay }} />
                 )}
+              </>
+            ) : bgType === "color" && !d.bgColor && heroBackgroundImageUrl ? (
+              // Admin-configured hero background IMAGE — only reached when
+              // the customer hasn't set their own bgColor/bgImage/bgVideo
+              // (see heroBackgroundImageUrl's own precedence doc above).
+              <>
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    backgroundImage: `url(${heroBackgroundImageUrl})`,
+                    backgroundSize: heroBackground?.fit === "contain" ? "contain" : "cover",
+                    backgroundPosition: heroBackground?.position ?? "center",
+                  }}
+                />
+                {heroBackground?.overlayColor && heroBackground.overlayOpacity ? (
+                  <div className="absolute inset-0" style={{ background: heroBackground.overlayColor, opacity: heroBackground.overlayOpacity }} />
+                ) : null}
               </>
             ) : (
               <div className={`absolute inset-0 bg-gradient-to-br ${gradient}`} style={{ background: heroBg }} />
@@ -789,10 +1107,12 @@ export function InvitationView({
             <div className="relative z-10 w-full max-w-md mx-auto text-center flex flex-col items-center gap-6">
               {has("hero") && (
                 <>
-                  <p className="invite-hero-kicker" style={{ color: isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.4)" }}>
-                    Сізді шақырамыз
-                  </p>
-                  <h1 className="heading-display invite-hero-name break-words" style={{ color: textDark }}>
+                  {visible("hero", "showKicker") && (
+                    <p className="invite-hero-kicker" style={{ color: isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.4)", ...typographyStyle("hero", "kicker") }}>
+                      {text("hero", "kicker", "Сізді шақырамыз")}
+                    </p>
+                  )}
+                  <h1 className="heading-display invite-hero-name break-words" style={{ color: textDark, ...typographyStyle("hero", "heading") }}>
                     {displayName}
                   </h1>
                   {d.age && (
@@ -801,16 +1121,20 @@ export function InvitationView({
                 </>
               )}
 
-              <div className="flex items-center gap-4 w-full px-4">
-                <div className="flex-1 h-px opacity-25" style={{ background: accent }} />
-                <span className="opacity-40" style={{ color: accent, fontSize: isZaurePremium ? "0.7rem" : "0.875rem", letterSpacing: isZaurePremium ? "0.35em" : undefined }}>
-                  {isZaurePremium ? "◆ ◆ ◆" : "◆"}
-                </span>
-                <div className="flex-1 h-px opacity-25" style={{ background: accent }} />
-              </div>
+              {visible("hero", "showDivider") && (
+                <div className="flex items-center gap-4 w-full px-4">
+                  <div className="flex-1 h-px opacity-25" style={{ background: accent }} />
+                  <span className="opacity-40" style={{ color: accent, fontSize: isZaurePremium ? "0.7rem" : "0.875rem", letterSpacing: isZaurePremium ? "0.35em" : undefined }}>
+                    {isZaurePremium ? "◆ ◆ ◆" : "◆"}
+                  </span>
+                  <div className="flex-1 h-px opacity-25" style={{ background: accent }} />
+                </div>
+              )}
             </div>
           </>
         )}
+
+        <AssetDecorationLayer decorations={heroDecorations} assetUrls={assetUrls} layer="foreground" />
 
         {has("rsvp") && isEntitledTo("rsvp") && (
           <div className="absolute bottom-7 inset-x-0 flex flex-col items-center gap-2 pointer-events-none">
@@ -840,10 +1164,15 @@ export function InvitationView({
       {bodyContent}
 
       {/* ── Footer ── */}
-      <footer className="py-8 px-4 text-center text-xs" style={{ background: "var(--charcoal)", color: "#4A4440" }}>
-        Шақыру · Қазақстандық премиум цифрлы шақыру сервисі ·{" "}
-        <Link href="/" style={{ color: "var(--gold)" }}>Өз шақыруыңызды жасаңыз →</Link>
-      </footer>
+      <SectionShell
+        id="footer" as="footer" visualConfig={visualConfig} assetUrls={assetUrls}
+        defaultBg="var(--charcoal)" sectionPy="py-8 px-4" sectionDivider="none" accent={accent}
+        extraClassName="text-center text-xs"
+      >
+        <span style={{ color: "#4A4440", ...typographyStyle("footer", "heading") }}>{footerBranding}</span>
+        {" · "}
+        <Link href="/" style={{ color: "var(--gold)", ...typographyStyle("footer", "kicker") }}>{footerCta}</Link>
+      </SectionShell>
     </div>
   );
 }

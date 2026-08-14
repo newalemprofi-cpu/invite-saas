@@ -6,6 +6,8 @@ import { getSession } from "@/lib/auth";
 import { readFeatureState } from "@/lib/entitlements";
 import { getTemplate } from "@/lib/templates";
 import { getDbTemplate } from "@/lib/db-templates";
+import { collectAssetIds } from "@/lib/visual-config";
+import { resolveAssetUrls } from "@/lib/template-assets";
 import { InvitationView, type D } from "./InvitationView";
 
 interface Props {
@@ -93,6 +95,14 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
     ? (getTemplate(newSlug) ?? (await getDbTemplate(newSlug)) ?? null)
     : null;
 
+  // Full Production Template Designer task (§14) — resolve every Template
+  // Asset Library reference this template's visualConfig makes (section
+  // backgrounds + decorations) in ONE batched DB query, server-side, before
+  // handing InvitationView a plain assetId→URL object (see that prop's own
+  // doc for why the resolution can't happen inside InvitationView itself).
+  const assetIds = collectAssetIds(tmpl?.visualConfig ?? null);
+  const assetUrls = assetIds.length > 0 ? Object.fromEntries(await resolveAssetUrls(assetIds)) : undefined;
+
   return (
     <InvitationView
       d={d}
@@ -101,6 +111,7 @@ export default async function PublicInvitePage({ params, searchParams }: Props) 
       wishes={wishes}
       isPreview={isPreview}
       invite={{ id: invite.id, status: invite.status }}
+      assetUrls={assetUrls}
     />
   );
 }

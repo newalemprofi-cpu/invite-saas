@@ -27,7 +27,6 @@ interface Props {
   accent: string;
   cardBg: string;
   cardBorder: string;
-  sectionDivider?: string;
   /**
    * true only for the template full-preview demo (/templates/[slug]) — the
    * section shows original, clearly-generic sample wishes (never invented
@@ -50,6 +49,24 @@ interface Props {
    * submission card instead of the plain cream/white every other template
    * keeps unchanged. Defaults false. */
   ornament?: boolean;
+  /** Full Production Template Designer task (§4) — admin-configured
+   * template-static content overrides, each already resolved (placeholder
+   * substitution + KK/RU selection done by the caller). An empty/absent
+   * value keeps the original hardcoded string for that field, so a
+   * template with no overrides configured renders byte-identically. */
+  headingOverride?: string;
+  formHeadingOverride?: string;
+  namePlaceholderOverride?: string;
+  messagePlaceholderOverride?: string;
+  submitButtonOverride?: string;
+  /** Full Production Template Designer task (§7) — admin-configured
+   * kicker typography override, already resolved by the caller. Applied
+   * only to the non-ornament branch (see LocationSection's identical
+   * `kickerStyle` doc for why). */
+  kickerStyle?: React.CSSProperties;
+  /** Same mechanism, applied to the section's actual heading (`t.heading`/
+   * `headingOverride`) — the "heading" typography role. */
+  headingStyle?: React.CSSProperties;
 }
 
 const SECTION_TEXT: Record<Lang, { kicker: string; heading: string; navPrev: string; navNext: string; wishCaption: string }> = {
@@ -109,8 +126,15 @@ const SAMPLE_WISH_DATES = [new Date(2026, 6, 16), new Date(2026, 6, 10)];
  * be confused with the pre-existing static `wishesText` block rendered
  * right above this in page.tsx (the couple's own message TO guests).
  */
-export function WishesWall({ inviteId, wishes, accent, cardBg, cardBorder, sectionDivider, demo = false, lang = "kk", ornament = false }: Props) {
+export function WishesWall({
+  inviteId, wishes, accent, cardBg, cardBorder, demo = false, lang = "kk", ornament = false,
+  headingOverride, formHeadingOverride, namePlaceholderOverride, messagePlaceholderOverride, submitButtonOverride, kickerStyle, headingStyle,
+}: Props) {
   const t = SECTION_TEXT[lang];
+  const heading = headingOverride || t.heading;
+  const namePlaceholder = namePlaceholderOverride || "Айдар Сейітов";
+  const messagePlaceholder = messagePlaceholderOverride || "Бақытты болыңыздар!";
+  const submitLabel = submitButtonOverride || "Жіберу";
   const [list, setList] = useState<Wish[]>(() =>
     demo
       ? SAMPLE_WISHES[lang].map((w, i) => ({
@@ -155,18 +179,14 @@ export function WishesWall({ inviteId, wishes, accent, cardBg, cardBorder, secti
   });
 
   return (
-    <section
-      className={ornament ? "py-11 sm:py-14 px-4" : "py-16 sm:py-20 px-4"}
-      style={{ background: ornament ? KAZAKH_ETHNO_SURFACE.cream : "var(--cream)", borderTop: sectionDivider }}
-    >
       <div className="max-w-md mx-auto">
         {ornament ? (
           <KazakhSectionHeading label={t.kicker} accent={accent} className="mb-3" />
         ) : (
-          <p className="invite-kicker text-center mb-3" style={{ color: "var(--gold)" }}>{t.kicker}</p>
+          <p className="invite-kicker text-center mb-3" style={{ color: "var(--gold)", ...kickerStyle }}>{t.kicker}</p>
         )}
-        <h2 className="heading-display invite-headline mb-6 text-center" style={{ color: "var(--charcoal)" }}>
-          {t.heading}
+        <h2 className="heading-display invite-headline mb-6 text-center" style={{ color: "var(--charcoal)", ...headingStyle }}>
+          {heading}
         </h2>
 
         {/* One wish at a time on a swipeable carousel once there's more than
@@ -202,8 +222,11 @@ export function WishesWall({ inviteId, wishes, accent, cardBg, cardBorder, secti
           }}
           noValidate
         >
-          <Input label="Аты-жөніңіз" placeholder="Айдар Сейітов" autoComplete="name" error={errors.name?.message} {...register("name")} />
-          <Textarea label="Тілегіңіз" placeholder="Бақытты болыңыздар!" rows={3} error={errors.message?.message} {...register("message")} />
+          {formHeadingOverride && (
+            <p className="invite-caption -mb-1" style={{ color: "var(--muted)" }}>{formHeadingOverride}</p>
+          )}
+          <Input label="Аты-жөніңіз" placeholder={namePlaceholder} autoComplete="name" error={errors.name?.message} {...register("name")} />
+          <Textarea label="Тілегіңіз" placeholder={messagePlaceholder} rows={3} error={errors.message?.message} {...register("message")} />
           {serverError && (
             <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{serverError}</p>
           )}
@@ -216,10 +239,9 @@ export function WishesWall({ inviteId, wishes, accent, cardBg, cardBorder, secti
             className="w-full"
             style={{ borderRadius: "var(--tpl-button-radius, 0.75rem)", ...(ornament && { background: accent, color: KAZAKH_ETHNO_SURFACE.ivory }) }}
           >
-            Жіберу
+            {submitLabel}
           </Button>
         </form>
       </div>
-    </section>
   );
 }

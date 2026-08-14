@@ -5,9 +5,10 @@ import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { uploadFile, deleteFile } from "@/lib/storage";
+import { uploadFile, deleteFile, getPublicUrl } from "@/lib/storage";
 import { validateUpload } from "@/lib/media-validation";
 import { parseTemplateDemoContent, DEMO_GALLERY_MAX, type TemplateDemoContent } from "@/lib/template-demo";
+import { isAssetCategory, listTemplateAssets, type TemplateAssetDTO } from "@/lib/template-assets";
 
 type ImageField = "previewImage" | "demoImage";
 
@@ -312,6 +313,116 @@ export async function reorderTemplateDemoGalleryAction(templateId: string, order
   if (next.length !== existingSet.size) return { error: "Қате сұрау" };
 
   await saveDemoContent(templateId, { ...current, gallery: next });
+  revalidatePath("/admin/templates");
+  return {};
+}
+
+/* ── Template Asset Library (§14) ──────────────────────────────────────
+ * Genuinely reusable across templates — deliberately NOT owned by any
+ * one template row (unlike the previewImage/demoContent actions above),
+ * so uploading/removing an asset here never touches InviteTemplate at
+ * all. A template only ever stores a loosely-coupled `assetId` string
+ * inside its own visualConfig (see lib/visual-config.ts's `background`/
+ * `decorations` fields) — this is the CRUD surface for the library
+ * itself. */
+
+export async function listTemplateAssetsAction(): Promise<{ error?: string; assets?: TemplateAssetDTO[] }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { error: "Рұқсат жоқ" };
+  }
+  const assets = await listTemplateAssets();
+  return { assets };
+}
+
+export async function uploadTemplateAssetAction(formData: FormData): Promise<{ error?: string; asset?: TemplateAssetDTO }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { error: "Рұқсат жоқ" };
+  }
+
+  const name = String(formData.get("name") ?? "").trim();
+  const category = formData.get("category");
+  const file = formData.get("file");
+
+  if (!name) return { error: "Атауын енгізіңіз" };
+  if (!isAssetCategory(category)) return { error: "Белгісіз санат" };
+  if (!(file instanceof File) || file.size === 0) return { error: "Файл таңдаңыз" };
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  // Same magic-byte-sniffed PNG/WEBP/JPEG/GIF-only validation every other
+  // image upload in the app uses (src/lib/media-validation.ts) — no SVG
+  // path exists anywhere in this app, so asset uploads can't introduce
+  // one either (§13's explicit "do not allow unsafe arbitrary SVG").
+  const validated = validateUpload("image", file.type, buffer.byteLength, buffer);
+  if (!validated) return { error: "Қолдамайтын сурет форматы немесе өлшемі (JPG/PNG/WEBP/GIF, 8МБ дейін)" };
+
+  const key = `templates/assets/${category}/${randomUUID()}.${validated.ext}`;
+  try {
+    await uploadFile({ key, contentType: validated.mime, body: buffer });
+  } catch (err) {
+    console.error("[template-assets] upload failed", err);
+    return { error: "Жүктеу сәтсіз аяқталды" };
+  }
+
+  const row = await db.templateAsset.create({
+    data: { name, category, storageKey: key, mimeType: validated.mime },
+  });
+
+  revalidatePath("/admin/templates");
+  return {
+    asset: {
+      id: row.id,
+      name: row.name,
+      category,
+      url: getPublicUrl(key),
+      mimeType: row.mimeType,
+      width: row.width,
+      height: row.height,
+      createdAt: row.createdAt.toISOString(),
+    },
+  };
+}
+
+export async function renameTemplateAssetAction(assetId: string, name: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { error: "Рұқсат жоқ" };
+  }
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "Атауын енгізіңіз" };
+  try {
+    await db.templateAsset.update({ where: { id: assetId }, data: { name: trimmed } });
+  } catch {
+    return { error: "Табылмады" };
+  }
+  revalidatePath("/admin/templates");
+  return {};
+}
+
+/**
+ * Deletion is intentionally NOT blocked by "is this asset currently
+ * referenced by a template" — checking every template's JSON config on
+ * every delete would be an expensive full-table scan for a rare admin
+ * action, and the renderer already treats a dangling `assetId` exactly
+ * like a missing customer photo (silently skips it, see
+ * resolveAssetUrl in lib/template-assets.ts) — never a crash, only a
+ * template that quietly stops showing that one decoration until the
+ * admin picks a replacement. A deliberate, documented V1 tradeoff.
+ */
+export async function deleteTemplateAssetAction(assetId: string): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { error: "Рұқсат жоқ" };
+  }
+  const existing = await db.templateAsset.findUnique({ where: { id: assetId } });
+  if (!existing) return { error: "Табылмады" };
+  await db.templateAsset.delete({ where: { id: assetId } });
+  await deleteFile(existing.storageKey).catch(() => {});
   revalidatePath("/admin/templates");
   return {};
 }

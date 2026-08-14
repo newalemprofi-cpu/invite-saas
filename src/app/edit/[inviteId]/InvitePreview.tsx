@@ -5,7 +5,7 @@ import type { EditorData } from "./EditorClient";
 import { useSingleAudioPreview } from "./useSingleAudioPreview";
 import { getWeddingLayout, type WeddingTemplateLayout, type WeddingPhotoMode } from "@/lib/wedding-template-layouts";
 import { WeddingHero } from "@/components/wedding/WeddingHero";
-import { resolveSectionVariant, HERO_VARIANT_TO_PHOTO_MODE, type HeroVariant } from "@/lib/visual-config";
+import { resolveSectionVariant, resolveSectionText, HERO_VARIANT_TO_PHOTO_MODE, type HeroVariant, type ContentPlaceholder } from "@/lib/visual-config";
 
 interface Props {
   data: EditorData;
@@ -51,6 +51,32 @@ export function InvitePreview({ data, template }: Props) {
   const adHocPhotoMode = heroVariant ? (HERO_VARIANT_TO_PHOTO_MODE[heroVariant] as WeddingPhotoMode) : null;
   const weddingLayout: WeddingTemplateLayout | null =
     hardcodedLayout ?? (adHocPhotoMode ? { photoMode: adHocPhotoMode, decorPreset: "default", sectionCardBg: "", sectionCardBorder: "" } : null);
+
+  // Full Production Template Designer task (§23) — reuses the same
+  // content-override resolver InvitationView uses, scoped to just the two
+  // highest-visibility static labels this lightweight preview actually
+  // renders (the hero kicker and the Program card's "Бағдарлама" label),
+  // so a Builder-configured content override is at least visible here
+  // rather than silently contradicted — without pulling in the full
+  // typography/background/decoration system this deliberately simplified
+  // renderer stays out of scope of (see the class doc above).
+  const visualConfig = template?.visualConfig ?? null;
+  const placeholderCtx: Partial<Record<ContentPlaceholder, string>> = {
+    groomName: data.groomName || undefined,
+    brideName: data.brideName || undefined,
+    hosts: (data.hosts || data.parents) || undefined,
+    eventDate: data.date ? fmt(data.date) : undefined,
+    eventTime: data.time || undefined,
+    venue: data.location || undefined,
+  };
+  const heroKicker = resolveSectionText(visualConfig, "hero", "kicker", "kk", "Іс-шараға шақырамыз", placeholderCtx);
+  // WeddingHero's own internal default kicker text ("Сізді шақырамыз")
+  // differs from this file's plain-hero fallback above — each resolved
+  // separately against its OWN existing literal, so a template with no
+  // content override renders byte-identical text to before this feature
+  // in either branch.
+  const heroKickerForWeddingLayout = resolveSectionText(visualConfig, "hero", "kicker", "kk", "Сізді шақырамыз", placeholderCtx);
+  const programHeading = resolveSectionText(visualConfig, "program", "heading", "kk", "Бағдарлама", placeholderCtx);
 
   // Ordered sections (enabled only)
   const orderedEnabled = data.sections.filter((s) => s.enabled).map((s) => s.id);
@@ -144,6 +170,7 @@ export function InvitePreview({ data, template }: Props) {
                   age: data.age || null,
                   photoUrl: data.bgImageUrl || null,
                 }}
+                kickerOverride={heroKickerForWeddingLayout}
               />
             </div>
           );
@@ -158,7 +185,7 @@ export function InvitePreview({ data, template }: Props) {
                   <span className="absolute bottom-2 right-2 w-1.5 h-1.5 rounded-full pointer-events-none" style={{ background: accent, opacity: 0.2 }} />
                 </>
               )}
-              <p className="label-caps text-[9px]" style={{ color: textMuted }}>Іс-шараға шақырамыз</p>
+              <p className="label-caps text-[9px]" style={{ color: textMuted }}>{heroKicker}</p>
               <p className="font-serif text-xl font-semibold leading-tight" style={{ color: textColor }}>{name}</p>
               {(data.hosts || data.parents) && (
                 <p className="text-[10px]" style={{ color: textMuted }}>{data.hosts || data.parents}</p>
@@ -221,7 +248,7 @@ export function InvitePreview({ data, template }: Props) {
           if (id === "program") return (
             <div key="program" className="mx-4 my-2 p-3 rounded-xl shrink-0"
               style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }}>
-              <p className="text-[10px] font-semibold mb-2" style={{ color: textMuted }}>Бағдарлама</p>
+              <p className="text-[10px] font-semibold mb-2" style={{ color: textMuted }}>{programHeading}</p>
               {data.programItems.length === 0 && data.programText ? (
                 <p className="text-[9px] leading-relaxed" style={{ color: textMuted }}>{data.programText}</p>
               ) : (

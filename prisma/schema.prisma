@@ -538,3 +538,34 @@ model InviteTemplate {
   @@index([isActive])
   @@index([category])
 }
+
+// Reusable Template Asset Library (Full Production Template Designer
+// task, §14) — admin-uploaded PNG/WEBP decoration/background/frame/
+// texture images, referenced by ID from any InviteTemplate's
+// visualConfig (`background.assetId`, `decorations[].assetId`; see
+// lib/visual-config.ts). A genuine new Prisma model rather than another
+// JSON blob, because — unlike visualConfig/demoContent, which are each
+// 1:1 owned by a single template row — assets are explicitly meant to be
+// uploaded ONCE and referenced by MANY templates (§14: "Do NOT duplicate
+// the actual media/storage file if the same reusable asset can be
+// referenced"), so they need their own independently listable/
+// deletable identity instead of living inside any one template's
+// config. Deliberately NOT a foreign key from InviteTemplate: templates
+// only ever store a loosely-coupled `assetId` string inside their JSON
+// config, so deleting an asset can never cascade-delete or corrupt a
+// template row — a template whose referenced asset no longer exists
+// simply skips that decoration/background at render time (see
+// resolveAssetUrl in lib/template-assets.ts), the same "never crash,
+// degrade gracefully" contract every other part of visualConfig follows.
+model TemplateAsset {
+  id         String   @id @default(cuid())
+  name       String
+  category   String // "background" | "decoration" | "frame" | "texture" — see lib/template-assets.ts's ASSET_CATEGORIES
+  storageKey String
+  mimeType   String
+  width      Int?
+  height     Int?
+  createdAt  DateTime @default(now())
+
+  @@index([category])
+}

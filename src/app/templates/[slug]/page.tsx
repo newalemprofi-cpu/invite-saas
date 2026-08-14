@@ -6,6 +6,8 @@ import { getTemplate, localizeTemplate } from "@/lib/templates";
 import { getAdminConfig } from "@/lib/admin-config";
 import { resolveLang } from "@/lib/i18n";
 import { FEATURE_KEYS } from "@/lib/features";
+import { collectAssetIds } from "@/lib/visual-config";
+import { resolveAssetUrls } from "@/lib/template-assets";
 import { InvitationView, type D } from "@/app/i/[slug]/InvitationView";
 import { TemplateCreateButton } from "./TemplateCreateButton";
 import { resolveStoredImage } from "@/lib/storage";
@@ -150,6 +152,9 @@ export default async function TemplateDemoPage({ params, searchParams }: Props) 
 
   const track = dc.musicTrackId ? tracks.find((tr) => tr.id === dc.musicTrackId) : undefined;
 
+  const assetIds = collectAssetIds(tmpl.visualConfig ?? null);
+  const assetUrls = assetIds.length > 0 ? Object.fromEntries(await resolveAssetUrls(assetIds)) : undefined;
+
   const mapLink = dc.mapLink || undefined;
 
   const d: D = {
@@ -211,7 +216,7 @@ export default async function TemplateDemoPage({ params, searchParams }: Props) 
           presentations (§4/§14) and moves the floating music control clear
           of the CTA bar below; lang governs only those genuinely new
           demo-only strings. */}
-      <InvitationView d={d} tmpl={tmpl} entitled={FEATURE_KEYS} wishes={[]} isPreview={false} invite={null} demo lang={lang} />
+      <InvitationView d={d} tmpl={tmpl} entitled={FEATURE_KEYS} wishes={[]} isPreview={false} invite={null} demo lang={lang} assetUrls={assetUrls} />
 
       {/* SaaS controls around the demo — deliberately styled with the
           platform's own ivory/gold/charcoal language (not the template's

@@ -15,6 +15,25 @@ interface Props {
    * map button instead of the neutral outline every other template keeps
    * unchanged. Defaults false. */
   ornament?: boolean;
+  /** Full Production Template Designer task (§6) — hides the kicker label
+   * only; the venue/address card itself is always shown when there's data
+   * (structurally required, per §6's "never allow hiding structurally
+   * required functionality"). Defaults true. */
+  showHeading?: boolean;
+  /** Full Production Template Designer task (§7) — admin-configured
+   * kicker typography override (font/size/weight/color/align/letter-
+   * spacing/uppercase/italic), already resolved by the caller via
+   * `typographyRoleToStyle`. `undefined`/`{}` changes nothing (kicker
+   * keeps its original `accent`-colored `.invite-kicker` styling). Not
+   * applied to the `ornament` (Kazakh Ethno) branch — same documented
+   * limitation as SectionDecoration's `kazakh-qoshqar` case, which
+   * delegates entirely to KazakhSectionHeading. */
+  kickerStyle?: React.CSSProperties;
+  /** Same mechanism as kickerStyle, applied to the venue name — the one
+   * genuine "heading" text this section renders (§7's Typography "heading"
+   * role). Styles WHATEVER text occupies that role, customer-sourced or
+   * not, matching Hero's identical treatment of the couple's own names. */
+  headingStyle?: React.CSSProperties;
 }
 
 /**
@@ -25,17 +44,19 @@ interface Props {
  * information card (soft rounded corners, subtle border/shadow) matching
  * the approved reference's card language, instead of bare centered text.
  */
-export function LocationSection({ location, address, mapUrl, kickerLabel, buttonLabel, textDark, textMuted, accent, ornament = false }: Props) {
+export function LocationSection({ location, address, mapUrl, kickerLabel, buttonLabel, textDark, textMuted, accent, ornament = false, showHeading = true, kickerStyle, headingStyle }: Props) {
   if (!location && !address) return null;
 
   return (
     <div className="flex flex-col items-center text-center gap-6">
-      {ornament ? (
-        <KazakhSectionHeading label={kickerLabel} accent={accent} />
-      ) : (
-        <p className="invite-kicker" style={{ color: accent }}>
-          {kickerLabel}
-        </p>
+      {showHeading && (
+        ornament ? (
+          <KazakhSectionHeading label={kickerLabel} accent={accent} />
+        ) : (
+          <p className="invite-kicker" style={{ color: accent, ...kickerStyle }}>
+            {kickerLabel}
+          </p>
+        )
       )}
       <div
         className="w-full max-w-sm px-6 py-8 flex flex-col items-center gap-5"
@@ -48,7 +69,7 @@ export function LocationSection({ location, address, mapUrl, kickerLabel, button
       >
         <div className="flex flex-col items-center gap-2">
           {location && (
-            <p className="heading-display invite-headline font-semibold" style={{ color: textDark }}>
+            <p className="heading-display invite-headline font-semibold" style={{ color: textDark, ...headingStyle }}>
               {location}
             </p>
           )}

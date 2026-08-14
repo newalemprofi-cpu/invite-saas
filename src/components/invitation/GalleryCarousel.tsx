@@ -12,6 +12,13 @@ interface Props {
   variant: GalleryVariant;
   labelPrev: string;
   labelNext: string;
+  /** Full Production Template Designer task (§9/§26) — admin-configured
+   * slide aspect ratio / object-fit override, already validated against
+   * the closed ASPECT_RATIOS/OBJECT_FITS enums (see lib/visual-config.ts).
+   * Absent keeps the original hardcoded 4/5 cover, byte-identical to
+   * before this feature. */
+  aspectRatio?: string;
+  fit?: "cover" | "contain";
 }
 
 /**
@@ -22,7 +29,7 @@ interface Props {
  * `galleryUrls` every other gallery consumer uses; this component never
  * reads storage/upload state itself.
  */
-export function GalleryCarousel({ urls, accent, variant, labelPrev, labelNext }: Props) {
+export function GalleryCarousel({ urls, accent, variant, labelPrev, labelNext, aspectRatio, fit }: Props) {
   if (urls.length === 0) return null;
 
   const frame = FRAME_BY_VARIANT[variant];
@@ -39,11 +46,11 @@ export function GalleryCarousel({ urls, accent, variant, labelPrev, labelNext }:
       {urls.map((url, i) => (
         <div
           key={url + i}
-          className={`relative aspect-[4/5] overflow-hidden ${frame.frameClassName}`}
-          style={frame.frameStyle}
+          className={`relative overflow-hidden ${aspectRatio ? "" : "aspect-[4/5]"} ${frame.frameClassName}`}
+          style={{ ...frame.frameStyle, ...(aspectRatio && { aspectRatio }) }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={url} alt="" className={`w-full h-full object-cover ${frame.imageClassName}`} draggable={false} />
+          <img src={url} alt="" className={`w-full h-full ${fit === "contain" ? "object-contain" : "object-cover"} ${frame.imageClassName}`} draggable={false} />
           {/* Kazakh Ethno signature — two small corner accents echoing the
               hero frame, restrained enough not to compete with the photo
               itself (§15 — "photos must remain the focus"). Every other

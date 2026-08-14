@@ -34,6 +34,14 @@ interface Props {
    * logic above (targetDate/targetTime/serverNow/tick cadence), only the
    * cell's own decorative styling below. Defaults false. */
   ornament?: boolean;
+  /** Full Production Template Designer task (§4) — admin-configured unit
+   * labels; each defaults to the original hardcoded Kazakh word so every
+   * existing template renders byte-identically. Values remain purely
+   * cosmetic — the actual countdown math above is never touched. */
+  dayLabel?: string;
+  hourLabel?: string;
+  minuteLabel?: string;
+  secondLabel?: string;
 }
 
 function computeRemaining(targetDate: string, targetTime: string | undefined, now: number) {
@@ -49,7 +57,10 @@ function computeRemaining(targetDate: string, targetTime: string | undefined, no
   };
 }
 
-export function Countdown({ targetDate, targetTime, accent, textMuted, serverNow, ornament = false }: Props) {
+export function Countdown({
+  targetDate, targetTime, accent, textMuted, serverNow, ornament = false,
+  dayLabel = "күн", hourLabel = "сағат", minuteLabel = "минут", secondLabel = "секунд",
+}: Props) {
   const [rem, setRem] = useState(() => computeRemaining(targetDate, targetTime, serverNow));
   useEffect(() => {
     const id = setInterval(() => setRem(computeRemaining(targetDate, targetTime, Date.now())), 1000);
@@ -57,10 +68,10 @@ export function Countdown({ targetDate, targetTime, accent, textMuted, serverNow
   });
 
   const units = [
-    { n: rem.days, l: "күн" },
-    { n: rem.hours, l: "сағат" },
-    { n: rem.minutes, l: "минут" },
-    { n: rem.seconds, l: "секунд" },
+    { n: rem.days, l: dayLabel },
+    { n: rem.hours, l: hourLabel },
+    { n: rem.minutes, l: minuteLabel },
+    { n: rem.seconds, l: secondLabel },
   ];
 
   return (

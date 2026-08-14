@@ -61,6 +61,43 @@ interface WeddingHeroProps {
    * visual identity, which must stay regardless of how much text is shown.
    */
   minimal?: boolean;
+  /** Full Production Template Designer task (§4/§6) — admin-configured
+   * kicker override, already resolved (placeholder substitution + KK/RU
+   * done by the caller). `undefined` keeps the original hardcoded
+   * "Сізді шақырамыз"; an explicit empty string hides the kicker entirely
+   * (§6 visibility control). InvitePreview.tsx (the constructor preview,
+   * out of scope for this change) never passes this, so it's unaffected. */
+  kickerOverride?: string;
+  /** Full Production Template Designer task (§4) — optional short line
+   * rendered directly under the kicker, above the couple's names. Absent/
+   * empty renders nothing extra, exactly as before this feature. */
+  subtitleOverride?: string;
+  /** Full Production Template Designer task (§6, `hero.content.visibility.
+   * showDivider`) — hides the decorative divider ornament between the
+   * names/subtitle block and the date/venue block. `undefined` (every
+   * caller before this feature, and every template with no override)
+   * keeps it visible — current behavior byte-identical. No reserved gap
+   * is left behind when hidden: the divider is a normal flex child inside
+   * a `gap`-based column, so omitting it collapses the space exactly like
+   * any other conditionally-rendered flex item. */
+  showDivider?: boolean;
+  /** Full Production Template Designer task (§9 Hero media) — admin-
+   * configured photo fit/position, already resolved by the caller
+   * (`resolveSectionMedia(config,"hero")`). See PhotoOrPlaceholder's own
+   * doc for why aspectRatio/radius are deliberately not included. */
+  photoFit?: "cover" | "contain";
+  photoPosition?: string;
+  /** Full Production Template Designer task (Hero background controls) —
+   * a resolved CSS `background` value (solid color or gradient) from
+   * `hero.background`, already computed by the caller. Each of the 5
+   * compositions below has its own carefully-tuned DEFAULT outer
+   * background (ivory for Classic Gold, dark gradient for Dark Luxury,
+   * etc.) that must survive untouched when no override is configured —
+   * so this only ever REPLACES that default, via `?? <original value>`,
+   * never merges with or derives from it. `undefined` (every template
+   * without this override, including all 5 flagship ones) keeps every
+   * composition byte-identical to before this feature. */
+  backgroundOverride?: string;
 }
 
 function fmtDate(s: string): string {
@@ -86,19 +123,30 @@ const PLACEHOLDER_TINT: Record<WeddingTemplateLayout["decorPreset"], string> = {
 /** Renders the customer's photo, or — when absent — a tasteful,
  * template-tinted placeholder. Never a broken-image icon. */
 function PhotoOrPlaceholder({
-  photoUrl, decorPreset, className, style, children,
+  photoUrl, decorPreset, className, style, children, fit = "cover", position = "center",
 }: {
   photoUrl?: string | null;
   decorPreset: WeddingTemplateLayout["decorPreset"];
   className?: string;
   style?: React.CSSProperties;
   children?: React.ReactNode;
+  /** Full Production Template Designer task — admin-configured photo
+   * fit/position override (`hero.media.fit`/`.position`), already
+   * resolved by the caller. Defaults to the original hardcoded
+   * cover/center, so every existing template renders byte-identically.
+   * Deliberately NOT extended to aspectRatio/radius here — each flagship
+   * composition's frame shape (circular/arched/rectangular) is intrinsic
+   * to its own container geometry, and overriding that would either do
+   * nothing or visually break the frame; fit/position only change how
+   * the photo sits WITHIN that already-fixed frame, which is safe. */
+  fit?: "cover" | "contain";
+  position?: string;
 }) {
   return (
     <div className={className} style={{ background: photoUrl ? undefined : PLACEHOLDER_TINT[decorPreset], ...style }}>
       {photoUrl && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={photoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        <img src={photoUrl} alt="" className="absolute inset-0 w-full h-full" style={{ objectFit: fit, objectPosition: position }} />
       )}
       {children}
     </div>
@@ -147,13 +195,18 @@ function DarkGoldArc({ accent }: { accent: string }) {
 /* ── Shared hero-content block (names/hosts/date/venue/message/note) ───── */
 
 function HeroContent({
-  data, tokens, compact, kickerLabel, divider, overPhoto, minimal,
+  data, tokens, compact, kickerLabel, subtitle, divider, showDivider = true, overPhoto, minimal,
 }: {
   data: WeddingHeroData;
   tokens: WeddingHeroTokens;
   compact: boolean;
   kickerLabel: string;
+  /** See WeddingHeroProps.subtitleOverride. */
+  subtitle?: string;
   divider: React.ReactNode;
+  /** See WeddingHeroProps.showDivider. Defaults true (current behavior
+   * unchanged for every template that doesn't set this). */
+  showDivider?: boolean;
   /** True when this text sits directly over the customer's photo (the
    * full-bleed Romantic composition) — adds a soft shadow so the kicker/
    * name stay readable regardless of how bright/busy the photo is,
@@ -174,13 +227,14 @@ function HeroContent({
 
   return (
     <div className={`flex flex-col items-center text-center ${gap} w-full`}>
-      <p className={kickerClass} style={{ color: tokens.textMuted, ...shadow }}>{kickerLabel}</p>
+      {kickerLabel && <p className={kickerClass} style={{ color: tokens.textMuted, ...shadow }}>{kickerLabel}</p>}
       <h1 className={`heading-display font-semibold leading-tight break-words ${nameSize}`} style={{ color: tokens.textDark, ...shadow }}>
         {displayName || "—"}
       </h1>
+      {subtitle && <p className={bodySize} style={{ color: tokens.textMuted, ...shadow }}>{subtitle}</p>}
       {data.age && <p className={bodySize} style={{ color: tokens.textMuted, ...shadow }}>{data.age}</p>}
       {!minimal && data.hostsLine && <p className={bodySize} style={{ color: tokens.textMuted }}>{data.hostsLine}</p>}
-      {divider}
+      {showDivider && divider}
       {!minimal && data.date && (
         <div className="flex flex-col items-center gap-0.5">
           <p className={`font-serif font-semibold ${compact ? "text-sm" : "text-xl sm:text-2xl"}`} style={{ color: tokens.textDark }}>
@@ -205,17 +259,18 @@ function HeroContent({
   );
 }
 
-export function WeddingHero({ data, tokens, layout, compact = false, minimal = false }: WeddingHeroProps) {
+export function WeddingHero({ data, tokens, layout, compact = false, minimal = false, kickerOverride, subtitleOverride, showDivider = true, photoFit = "cover", photoPosition = "center", backgroundOverride }: WeddingHeroProps) {
   const { photoMode, decorPreset } = layout;
   const pad = compact ? "px-4 py-4" : "px-6 py-10";
+  const kickerLabel = kickerOverride !== undefined ? kickerOverride : "Сізді шақырамыз";
 
   /* 1 ── ROMANTIC: full-bleed photo, text anchored at the bottom over a
      soft gradient so it reads naturally as the photo dissolving into
      content, not a caption bar. */
   if (photoMode === "full-bleed") {
     return (
-      <div className="relative w-full h-full flex-1 flex flex-col overflow-hidden" style={{ background: tokens.bg }}>
-        <PhotoOrPlaceholder photoUrl={data.photoUrl} decorPreset={decorPreset} className="absolute inset-0" />
+      <div className="relative w-full h-full flex-1 flex flex-col overflow-hidden" style={{ background: backgroundOverride ?? tokens.bg }}>
+        <PhotoOrPlaceholder photoUrl={data.photoUrl} decorPreset={decorPreset} className="absolute inset-0" fit={photoFit} position={photoPosition} />
         {/* Slightly deeper than before (extra 55%/70% stops) for reliable
             text contrast against arbitrary customer photos, without ever
             darkening the photo's own upper two-thirds — the photo stays
@@ -230,7 +285,9 @@ export function WeddingHero({ data, tokens, layout, compact = false, minimal = f
             data={data}
             tokens={tokens}
             compact={compact}
-            kickerLabel="Сізді шақырамыз"
+            kickerLabel={kickerLabel}
+            subtitle={subtitleOverride}
+            showDivider={showDivider}
             divider={<RomanticFlourish accent={tokens.accent} />}
             overPhoto
           />
@@ -243,12 +300,14 @@ export function WeddingHero({ data, tokens, layout, compact = false, minimal = f
      panel below with thin gold framing — deliberately NOT full-bleed. */
   if (photoMode === "top-band") {
     return (
-      <div className="w-full h-full flex-1 flex flex-col overflow-hidden" style={{ background: tokens.isDark ? "#1C1917" : "#FFFDF8" }}>
+      <div className="w-full h-full flex-1 flex flex-col overflow-hidden" style={{ background: backgroundOverride ?? (tokens.isDark ? "#1C1917" : "#FFFDF8") }}>
         <PhotoOrPlaceholder
           photoUrl={data.photoUrl}
           decorPreset={decorPreset}
           className="relative w-full"
           style={{ flex: "36 0 0px", minHeight: 0 }}
+          fit={photoFit}
+          position={photoPosition}
         >
           <div className="absolute inset-x-0 bottom-0 h-1" style={{ background: tokens.accent, opacity: 0.6 }} />
         </PhotoOrPlaceholder>
@@ -260,7 +319,9 @@ export function WeddingHero({ data, tokens, layout, compact = false, minimal = f
             data={data}
             tokens={tokens}
             compact={compact}
-            kickerLabel="Сізді шақырамыз"
+            kickerLabel={kickerLabel}
+            subtitle={subtitleOverride}
+            showDivider={showDivider}
             divider={
               <div className="flex items-center gap-2 w-full max-w-[200px]">
                 <div className="flex-1 h-px" style={{ background: tokens.accent, opacity: 0.35 }} />
@@ -278,7 +339,7 @@ export function WeddingHero({ data, tokens, layout, compact = false, minimal = f
      sprigs, never full-screen. */
   if (photoMode === "framed-oval") {
     return (
-      <div className="w-full h-full flex-1 flex flex-col items-center overflow-y-auto overflow-x-hidden" style={{ background: "linear-gradient(180deg,#F7FAF3,#F0F5EA)" }}>
+      <div className="w-full h-full flex-1 flex flex-col items-center overflow-y-auto overflow-x-hidden" style={{ background: backgroundOverride ?? "linear-gradient(180deg,#F7FAF3,#F0F5EA)" }}>
         <div className={`relative shrink-0 ${compact ? "mt-5" : "mt-10"} aspect-square`} style={{ width: compact ? "min(62%, 190px)" : "min(38%, 300px)" }}>
           <div className="absolute -inset-3 opacity-70 pointer-events-none">
             <div className="absolute -top-2 -left-2"><FloralSprig accent={tokens.accent} /></div>
@@ -288,6 +349,8 @@ export function WeddingHero({ data, tokens, layout, compact = false, minimal = f
             photoUrl={data.photoUrl}
             decorPreset={decorPreset}
             className="relative w-full h-full rounded-full overflow-hidden"
+            fit={photoFit}
+            position={photoPosition}
           />
           <div className="absolute inset-0 rounded-full pointer-events-none" style={{ boxShadow: `0 0 0 3px ${tokens.bg}, 0 0 0 4px ${tokens.accent}55` }} />
         </div>
@@ -297,7 +360,9 @@ export function WeddingHero({ data, tokens, layout, compact = false, minimal = f
             data={data}
             tokens={tokens}
             compact={compact}
-            kickerLabel="Сізді шақырамыз"
+            kickerLabel={kickerLabel}
+            subtitle={subtitleOverride}
+            showDivider={showDivider}
             divider={
               <div className="flex items-center gap-2">
                 <div className="w-8 h-px" style={{ background: "#8CA378", opacity: 0.4 }} />
@@ -315,12 +380,14 @@ export function WeddingHero({ data, tokens, layout, compact = false, minimal = f
      mask so it never looks like a rectangle pasted on a black card. */
   if (photoMode === "fade-dark") {
     return (
-      <div className="relative w-full h-full flex-1 flex flex-col overflow-hidden" style={{ background: "linear-gradient(180deg,#211D19,#151210)" }}>
+      <div className="relative w-full h-full flex-1 flex flex-col overflow-hidden" style={{ background: backgroundOverride ?? "linear-gradient(180deg,#211D19,#151210)" }}>
         <PhotoOrPlaceholder
           photoUrl={data.photoUrl}
           decorPreset={decorPreset}
           className="relative w-full"
           style={{ flex: compact ? "58 0 0px" : "56 0 0px", minHeight: 0 }}
+          fit={photoFit}
+          position={photoPosition}
         >
           <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(21,18,16,0) 0%, rgba(21,18,16,0.55) 55%, #151210 100%)" }} />
         </PhotoOrPlaceholder>
@@ -335,7 +402,9 @@ export function WeddingHero({ data, tokens, layout, compact = false, minimal = f
             data={data}
             tokens={{ ...tokens, textDark: tokens.accent, textMuted: "rgba(240,230,211,0.65)" }}
             compact={compact}
-            kickerLabel="Сізді шақырамыз"
+            kickerLabel={kickerLabel}
+            subtitle={subtitleOverride}
+            showDivider={showDivider}
             divider={<div className="w-10 h-px" style={{ background: tokens.accent, opacity: 0.45 }} />}
             overPhoto
           />
@@ -355,7 +424,7 @@ export function WeddingHero({ data, tokens, layout, compact = false, minimal = f
   return (
     <div
       className="relative w-full h-full flex-1 flex flex-col items-center overflow-y-auto overflow-x-hidden"
-      style={{ background: `linear-gradient(180deg,${KAZAKH_ETHNO_SURFACE.ivory},${KAZAKH_ETHNO_SURFACE.cream})` }}
+      style={{ background: backgroundOverride ?? `linear-gradient(180deg,${KAZAKH_ETHNO_SURFACE.ivory},${KAZAKH_ETHNO_SURFACE.cream})` }}
     >
       <div className="absolute inset-x-0 top-0 flex justify-center pointer-events-none" aria-hidden="true">
         <KazakhWatermark accent={tokens.accent} className={compact ? "w-[260px] h-[260px] -mt-4" : "w-[440px] h-[440px] -mt-6"} />
@@ -383,6 +452,8 @@ export function WeddingHero({ data, tokens, layout, compact = false, minimal = f
           decorPreset={decorPreset}
           className="relative w-full h-full overflow-hidden"
           style={{ borderRadius: "50% 50% 4px 4px" }}
+          fit={photoFit}
+          position={photoPosition}
         />
         <div className="absolute inset-0 pointer-events-none" style={{ borderRadius: "50% 50% 4px 4px", boxShadow: `inset 0 0 0 2px ${tokens.bg}` }} />
       </div>
@@ -392,7 +463,9 @@ export function WeddingHero({ data, tokens, layout, compact = false, minimal = f
           data={data}
           tokens={tokens}
           compact={compact}
-          kickerLabel="Сізді шақырамыз"
+          kickerLabel={kickerLabel}
+          subtitle={subtitleOverride}
+          showDivider={showDivider}
           divider={<KazakhDivider accent={tokens.accent} className={compact ? "w-16 h-2.5" : undefined} />}
         />
       </div>

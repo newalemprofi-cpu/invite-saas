@@ -62,6 +62,7 @@ function SuccessState({
   lang,
   accent,
   ornament,
+  demoExplanationOverride,
 }: {
   status: RSVPStatus;
   count: number;
@@ -69,6 +70,7 @@ function SuccessState({
   lang: Lang;
   accent?: string;
   ornament?: boolean;
+  demoExplanationOverride?: string;
 }) {
   const opt = STATUS_OPTIONS.find((s) => s.value === status)!;
   return (
@@ -89,7 +91,7 @@ function SuccessState({
           <span className="text-zinc-400"> · {count} адам</span>
         )}
       </p>
-      {demo && <p className="text-xs text-zinc-400 mt-1">{DEMO_SUCCESS_HINT[lang]}</p>}
+      {demo && <p className="text-xs text-zinc-400 mt-1">{demoExplanationOverride || DEMO_SUCCESS_HINT[lang]}</p>}
     </div>
   );
 }
@@ -129,9 +131,16 @@ interface RSVPFormProps {
    * and a gold primary button instead of the plain white/zinc + near-black
    * button every other template keeps unchanged. Defaults false. */
   ornament?: boolean;
+  /** Full Production Template Designer task (§4) — admin-configured
+   * template-static content overrides, already resolved by the caller. An
+   * empty/absent value keeps the original hardcoded string, so a template
+   * with no overrides configured renders byte-identically. */
+  submitButtonOverride?: string;
+  /** Overrides DEMO_SUCCESS_HINT (demo mode only — see SuccessState). */
+  demoExplanationOverride?: string;
 }
 
-export function RSVPForm({ inviteId, accent, demo = false, lang = "kk", ornament = false }: RSVPFormProps) {
+export function RSVPForm({ inviteId, accent, demo = false, lang = "kk", ornament = false, submitButtonOverride, demoExplanationOverride }: RSVPFormProps) {
   const [isPending, startTransition] = useTransition();
   const [outcome, setOutcome] = useState<
     "success" | "duplicate" | null
@@ -167,7 +176,7 @@ export function RSVPForm({ inviteId, accent, demo = false, lang = "kk", ornament
     });
   });
 
-  if (outcome === "success") return <SuccessState status={selectedStatus} count={count} demo={demo} lang={lang} accent={accent} ornament={ornament} />;
+  if (outcome === "success") return <SuccessState status={selectedStatus} count={count} demo={demo} lang={lang} accent={accent} ornament={ornament} demoExplanationOverride={demoExplanationOverride} />;
   if (outcome === "duplicate") return <DuplicateState />;
 
   return (
@@ -291,7 +300,7 @@ export function RSVPForm({ inviteId, accent, demo = false, lang = "kk", ornament
           ...(ornament && accent && { background: accent, color: KAZAKH_ETHNO_SURFACE.ivory }),
         }}
       >
-        Жауап жіберу
+        {submitButtonOverride || "Жауап жіберу"}
       </Button>
     </form>
   );
